@@ -78,6 +78,7 @@ function ProfileCard({ date }: { date: string }) {
           <DashboardProfilePhotoCard
             variant="hero"
             avatarUrl={avatarUrl}
+            avatarCrop={profile ?? undefined}
             displayName={displayName}
             initials={initials}
             role={role}

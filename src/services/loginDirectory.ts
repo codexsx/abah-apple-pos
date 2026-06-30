@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 import type { AppRole } from '@/services/permissionsCore';
 
-export interface LoginAccount {
+export interface LoginAccount extends AvatarCrop {
   id: string;
   name: string;
   role: AppRole;
@@ -37,13 +38,14 @@ function normalizeLoginAccount(row: Partial<LoginAccount>): LoginAccount | null 
       : initialsFromName(name, username),
     username,
     avatar_url: row.avatar_url || null,
+    ...normalizeAvatarCrop(row),
   };
 }
 
 export async function getLoginAccounts(): Promise<LoginAccount[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, role, initials, username, avatar_url')
+    .select('id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom')
     .not('username', 'is', null);
 
   if (error) throw error;

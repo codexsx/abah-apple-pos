@@ -43,6 +43,7 @@ import {
   getLoginAccounts,
   type LoginAccount,
 } from '@/services/loginDirectory';
+import { avatarImageStyle } from '@/services/avatarCrop';
 
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -164,6 +165,7 @@ function AccountAvatar({ account, size = 'lg' }: { account: LoginAccount; size?:
         src={account.avatar_url}
         alt={account.name}
         className={`${dimension} shrink-0 rounded-[16px] object-cover shadow-sm ring-1 ring-white/70 sm:rounded-[18px]`}
+        style={avatarImageStyle(account)}
         onError={() => setImageFailed(true)}
       />
     );

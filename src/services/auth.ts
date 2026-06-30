@@ -2,8 +2,9 @@
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { resolveLoginEmail, type PermissionOverrides } from '@/services/permissionsCore';
+import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 
-export interface AuthProfile {
+export interface AuthProfile extends AvatarCrop {
   id: string;
   name: string;
   role: 'MANAJER' | 'KASIR' | 'TEKNISI';
@@ -42,7 +43,7 @@ export async function getCurrentSession() {
 export async function getProfile(userId: string): Promise<AuthProfile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, role, initials, username, permissions, avatar_url')
+    .select('id, name, role, initials, username, permissions, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom')
     .eq('id', userId)
     .single();
 
@@ -51,7 +52,11 @@ export async function getProfile(userId: string): Promise<AuthProfile | null> {
     return null;
   }
 
-  return { ...data, permissions: data.permissions ?? {} } as AuthProfile;
+  return {
+    ...data,
+    ...normalizeAvatarCrop(data),
+    permissions: data.permissions ?? {},
+  } as AuthProfile;
 }
 
 export async function changeOwnPassword(newPassword: string): Promise<void> {

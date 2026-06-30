@@ -36,6 +36,9 @@ describe('loginDirectory service', () => {
           initials: 'TE',
           username: 'teknisi',
           avatar_url: null,
+          avatar_crop_x: null,
+          avatar_crop_y: null,
+          avatar_zoom: null,
         },
         {
           id: 'manager-id',
@@ -44,6 +47,9 @@ describe('loginDirectory service', () => {
           initials: 'MA',
           username: 'manager',
           avatar_url: 'https://cdn.test/m.png',
+          avatar_crop_x: 44,
+          avatar_crop_y: 31,
+          avatar_zoom: 1.4,
         },
         {
           id: 'missing-username',
@@ -52,6 +58,9 @@ describe('loginDirectory service', () => {
           initials: 'HI',
           username: null,
           avatar_url: null,
+          avatar_crop_x: 50,
+          avatar_crop_y: 50,
+          avatar_zoom: 1,
         },
       ],
       error: null,
@@ -60,7 +69,9 @@ describe('loginDirectory service', () => {
     const accounts = await getLoginAccounts();
 
     expect(chain.from).toHaveBeenCalledWith('profiles');
-    expect(chain.select).toHaveBeenCalledWith('id, name, role, initials, username, avatar_url');
+    expect(chain.select).toHaveBeenCalledWith(
+      'id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom',
+    );
     expect(chain.not).toHaveBeenCalledWith('username', 'is', null);
     expect(accounts).toEqual([
       {
@@ -70,6 +81,9 @@ describe('loginDirectory service', () => {
         initials: 'MA',
         username: 'manager',
         avatar_url: 'https://cdn.test/m.png',
+        avatar_crop_x: 44,
+        avatar_crop_y: 31,
+        avatar_zoom: 1.4,
       },
       {
         id: 'tech-id',
@@ -78,6 +92,9 @@ describe('loginDirectory service', () => {
         initials: 'TE',
         username: 'teknisi',
         avatar_url: null,
+        avatar_crop_x: 50,
+        avatar_crop_y: 50,
+        avatar_zoom: 1,
       },
     ]);
   });

@@ -1,7 +1,9 @@
 import { Camera } from 'lucide-react';
+import { avatarImageStyle, type AvatarCrop } from '@/services/avatarCrop';
 
 interface DashboardProfilePhotoCardProps {
   avatarUrl: string;
+  avatarCrop?: Partial<AvatarCrop>;
   displayName: string;
   initials: string;
   role: string;
@@ -12,6 +14,7 @@ interface DashboardProfilePhotoCardProps {
 
 export default function DashboardProfilePhotoCard({
   avatarUrl,
+  avatarCrop,
   displayName,
   initials,
   role,
@@ -47,6 +50,7 @@ export default function DashboardProfilePhotoCard({
           src={avatarUrl}
           alt={displayName}
           className="absolute inset-0 h-full w-full object-cover"
+          style={avatarImageStyle(avatarCrop)}
         />
       ) : null}
 

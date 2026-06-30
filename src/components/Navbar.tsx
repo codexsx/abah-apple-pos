@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ElementType } from 'react';
 import { Link, useLocation } from 'react-router';
 import { motion } from 'framer-motion';
 import {
@@ -42,19 +42,27 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanyProfile } from '@/contexts/useCompanyProfile';
+import { avatarImageStyle } from '@/services/avatarCrop';
 import { effectivePermission } from '@/services/permissionsCore';
 import { canAccessPath } from '@/services/routePermissions';
 import ProfilePhotoDialog from '@/components/ProfilePhotoDialog';
 import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import NotificationsMenu from '@/components/NotificationsMenu';
 
-const navLinks = [
+interface NavLink {
+  path: string;
+  label: string;
+  shortLabel?: string;
+  icon: ElementType;
+}
+
+const navLinks: NavLink[] = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/penjualan', label: 'Penjualan', icon: ShoppingCart },
-  { path: '/pembelian', label: 'Pembelian', icon: ShoppingBag },
+  { path: '/penjualan', label: 'Penjualan', shortLabel: 'Jual', icon: ShoppingCart },
+  { path: '/pembelian', label: 'Pembelian', shortLabel: 'Beli', icon: ShoppingBag },
   { path: '/servis', label: 'Servis', icon: Wrench },
-  { path: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
-  { path: '/tukar-tambah', label: 'Tukar Tambah', icon: ArrowLeftRight },
+  { path: '/pengeluaran', label: 'Pengeluaran', shortLabel: 'Keluar', icon: Receipt },
+  { path: '/tukar-tambah', label: 'Tukar Tambah', shortLabel: 'Tukar', icon: ArrowLeftRight },
   { path: '/stok', label: 'Stok', icon: Package },
   { path: '/agen', label: 'Agen', icon: Users },
 ];
@@ -166,7 +174,7 @@ export default function Navbar() {
           (scrolled ? 'bg-white/90 shadow-sm' : 'bg-slate-50/70')
         }
       />
-      <div className="relative mx-auto grid h-full max-w-[1380px] grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 sm:px-6 lg:grid-cols-[190px_minmax(0,1fr)_auto]">
+      <div className="relative mx-auto grid h-full max-w-[1560px] grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 sm:px-6 lg:grid-cols-[190px_minmax(0,1fr)_auto] xl:px-8">
         {/* Logo */}
         <Link to="/" className="flex min-w-0 items-center gap-2.5 select-none lg:w-[190px]">
           {companyProfile.logo_url ? (
@@ -191,7 +199,7 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop Nav Links — Pill Style */}
-        <div className="hidden min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-full border border-slate-200/60 bg-slate-100/80 p-1 justify-self-center lg:flex">
+        <div className="hidden min-w-0 max-w-full items-center justify-self-center gap-1 overflow-x-auto overflow-y-hidden rounded-full border border-slate-200/60 bg-slate-100/80 p-1 [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden">
           {visibleNavLinks.map((link) => {
             const isActive = location.pathname === link.path;
             return (
@@ -199,7 +207,7 @@ export default function Navbar() {
                 key={link.path}
                 to={link.path}
                 className={
-                  'relative flex shrink-0 items-center gap-1 rounded-full px-2 py-2 text-[12px] font-medium transition-all duration-200 2xl:gap-1.5 2xl:px-4 2xl:text-[13px] ' +
+                  'relative flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-[12px] font-medium transition-all duration-200 ' +
                   (isActive
                     ? 'text-white'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50')
@@ -213,7 +221,7 @@ export default function Navbar() {
                   />
                 )}
                 <link.icon size={14} strokeWidth={2} className="relative z-10" />
-                <span className="relative z-10 whitespace-nowrap">{link.label}</span>
+                <span className="relative z-10 whitespace-nowrap">{link.shortLabel ?? link.label}</span>
               </Link>
             );
           })}
@@ -325,6 +333,7 @@ export default function Navbar() {
                 src={profile.avatar_url}
                 alt={profile.name || 'User'}
                 className="h-8 w-8 rounded-full object-cover"
+                style={avatarImageStyle(profile)}
               />
             ) : (
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold font-body">

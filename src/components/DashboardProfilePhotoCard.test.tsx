@@ -9,6 +9,7 @@ describe('DashboardProfilePhotoCard', () => {
     render(
       <DashboardProfilePhotoCard
         avatarUrl="https://example.test/avatar.png"
+        avatarCrop={{ avatar_crop_x: 45, avatar_crop_y: 35, avatar_zoom: 1.25 }}
         displayName="Alex Chen"
         initials="AC"
         role="UI/UX Designer"
@@ -20,6 +21,10 @@ describe('DashboardProfilePhotoCard', () => {
       'src',
       'https://example.test/avatar.png',
     );
+    expect(screen.getByRole('img', { name: 'Alex Chen' })).toHaveStyle({
+      objectPosition: '45% 35%',
+      transform: 'scale(1.25)',
+    });
     expect(screen.getByText('Alex Chen')).toBeVisible();
     expect(screen.getByText('UI/UX Designer')).toBeVisible();
     expect(screen.getByTestId('profile-photo-overlay')).toHaveClass('backdrop-blur-md');

@@ -45,6 +45,18 @@ describe('Navbar — Operasi section (Requirements 4.1, 4.2)', () => {
     expect(screen.getByRole('link', { name: /Sixcode Smart OS/i })).toHaveClass('lg:w-[190px]');
   });
 
+  it('keeps Stok and Agen present in the desktop pill navigation', () => {
+    renderNavbar();
+
+    const stokLink = screen.getByRole('link', { name: 'Stok' });
+    const agenLink = screen.getByRole('link', { name: 'Agen' });
+
+    expect(screen.getByRole('link', { name: 'Tukar' })).toBeTruthy();
+    expect(stokLink).toBeTruthy();
+    expect(agenLink).toBeTruthy();
+    expect(stokLink.parentElement).toHaveClass('overflow-x-auto');
+  });
+
   it('still renders the Operasi section and its remaining links when the menu is opened', async () => {
     const user = userEvent.setup();
     renderNavbar();
