@@ -22,6 +22,7 @@ vi.mock('@/services/agents', async (importActual) => {
     ...actual,
     getAgents: vi.fn(),
     getAgentTransactions: vi.fn(),
+    createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),
     formatAgentPhone: vi.fn((phone: string | null) => phone ?? '-'),
@@ -29,7 +30,13 @@ vi.mock('@/services/agents', async (importActual) => {
   };
 });
 
-import { deleteAgent, getAgents, getAgentTransactions, updateAgent } from '@/services/agents';
+import {
+  createAgent,
+  deleteAgent,
+  getAgents,
+  getAgentTransactions,
+  updateAgent,
+} from '@/services/agents';
 
 const OWING_AGENT: Agent = {
   id: 'agent-owing',
@@ -183,6 +190,46 @@ describe('Agen_Page balance label (Requirement 2.5)', () => {
       expect(updateAgent).toHaveBeenCalledWith(
         OWING_AGENT.id,
         expect.objectContaining({ name: 'Agen Baru' }),
+      );
+    });
+  });
+
+  it('creates a new agent from the header action', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAgents).mockResolvedValue([OWING_AGENT]);
+    vi.mocked(getAgentTransactions).mockResolvedValue(OWING_TRANSACTIONS);
+    vi.mocked(createAgent).mockResolvedValue({
+      id: 'agent-new',
+      code: 'AGN-002',
+      name: 'Agen Baru',
+      phone: '081299988877',
+      note: 'supplier baru',
+      created_at: '2024-02-04T10:00:00.000Z',
+      updated_at: '2024-02-04T10:00:00.000Z',
+    });
+
+    renderAgen();
+
+    await screen.findByText(OWING_AGENT.name);
+    await user.click(screen.getByRole('button', { name: /Tambah Agen/i }));
+
+    expect(screen.getByLabelText(/Kode Agen/i)).toHaveValue('AGN-001');
+    const codeInput = screen.getByLabelText(/Kode Agen/i);
+    await user.clear(codeInput);
+    await user.type(codeInput, 'AGN-002');
+    await user.type(screen.getByLabelText(/Nama Agen/i), 'Agen Baru');
+    await user.type(screen.getByLabelText(/No\. HP/i), '081299988877');
+    await user.type(screen.getByLabelText(/Catatan/i), 'supplier baru');
+    await user.click(screen.getByRole('button', { name: /^Tambah Agen$/i }));
+
+    await waitFor(() => {
+      expect(createAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'AGN-002',
+          name: 'Agen Baru',
+          phone: '081299988877',
+          note: 'supplier baru',
+        }),
       );
     });
   });

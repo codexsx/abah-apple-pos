@@ -18,8 +18,10 @@ import {
   AlertCircle,
   Pencil,
   Trash2,
+  Plus,
 } from 'lucide-react';
 import {
+  createAgent,
   getAgents,
   getAgentTransactions,
   getAgentBalance,
@@ -27,6 +29,7 @@ import {
   updateAgent,
   deleteAgent,
   type Agent,
+  type AgentInsert,
   type AgentUpdate,
   type AgentTransaction,
 } from '@/services/agents';
@@ -66,6 +69,16 @@ function formatDateTime(iso: string | null) {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+function getNextAgentCode(agents: Agent[]) {
+  const maxNumber = agents.reduce((max, agent) => {
+    const match = agent.code.match(/^AGN-(\d+)$/i);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]) || 0);
+  }, 0);
+
+  return `AGN-${String(maxNumber + 1).padStart(3, '0')}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,6 +170,141 @@ interface AgentEditDialogProps {
   agent: Agent | null;
   onClose: () => void;
   onSaved: (agent: Agent, payload: AgentUpdate) => Promise<void>;
+}
+
+interface AgentCreateDialogProps {
+  open: boolean;
+  defaultCode: string;
+  onClose: () => void;
+  onSaved: (payload: AgentInsert) => Promise<void>;
+}
+
+function AgentCreateDialog({ open, defaultCode, onClose, onSaved }: AgentCreateDialogProps) {
+  const [form, setForm] = useState({ code: defaultCode, name: '', phone: '', note: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({ code: defaultCode, name: '', phone: '', note: '' });
+    setError('');
+  }, [defaultCode, open]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    const now = new Date().toISOString();
+    const payload: AgentInsert = {
+      code: form.code.trim(),
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      note: form.note.trim(),
+      created_at: now,
+      updated_at: now,
+    };
+    if (!payload.code || !payload.name) {
+      setError('Kode dan nama agen wajib diisi.');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      await onSaved(payload);
+      onClose();
+    } catch (err: any) {
+      console.error('[Agen] create error:', err);
+      setError(err?.message || 'Gagal menambahkan agen.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="border-slate-200 bg-white sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Tambah Agen</DialogTitle>
+          <DialogDescription>
+            Daftarkan supplier/agen baru agar bisa dipilih saat pembelian.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="new-agent-code" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+              Kode Agen
+            </label>
+            <Input
+              id="new-agent-code"
+              value={form.code}
+              onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value }))}
+              className="h-11 rounded-xl border-slate-300"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="new-agent-name" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+              Nama Agen
+            </label>
+            <Input
+              id="new-agent-name"
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              className="h-11 rounded-xl border-slate-300"
+              placeholder="Contoh: DOPON"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="new-agent-phone" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+              No. HP
+            </label>
+            <Input
+              id="new-agent-phone"
+              value={form.phone}
+              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              className="h-11 rounded-xl border-slate-300"
+              placeholder="Opsional"
+            />
+          </div>
+          <div>
+            <label htmlFor="new-agent-note" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+              Catatan
+            </label>
+            <textarea
+              id="new-agent-note"
+              value={form.note}
+              onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+              rows={3}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-[14px] outline-none transition-colors focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
+              placeholder="Opsional"
+            />
+          </div>
+          {error && (
+            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-teal-500 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-teal-600 disabled:opacity-60"
+            >
+              {saving ? 'Menyimpan...' : 'Tambah Agen'}
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function AgentEditDialog({ agent, onClose, onSaved }: AgentEditDialogProps) {
@@ -540,6 +688,7 @@ export default function Agen() {
   const [transactions, setTransactions] = useState<AgentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
 
@@ -571,6 +720,12 @@ export default function Agen() {
   async function handleSaveAgent(agent: Agent, payload: AgentUpdate) {
     await updateAgent(agent.id, payload);
     await loadData();
+  }
+
+  async function handleCreateAgent(payload: AgentInsert) {
+    await createAgent(payload);
+    await loadData();
+    setActiveTab('daftar');
   }
 
   async function handleDeleteAgent(agent: Agent) {
@@ -649,15 +804,26 @@ export default function Agen() {
               </span>
             </div>
           </div>
-          <motion.button
-            whileHover={{ rotate: 180 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={loadData}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw size={16} />
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setCreatingAgent(true)}
+              className="flex h-9 items-center gap-2 rounded-full bg-teal-500 px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-teal-600 transition-colors"
+            >
+              <Plus size={15} />
+              Tambah Agen
+            </motion.button>
+            <motion.button
+              whileHover={{ rotate: 180 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={loadData}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={16} />
+            </motion.button>
+          </div>
         </div>
         <div className="ml-12 h-[3px] rounded-full bg-slate-200 overflow-hidden max-w-[200px]">
           <motion.div
@@ -768,6 +934,12 @@ export default function Agen() {
           </motion.div>
         )}
       </AnimatePresence>
+      <AgentCreateDialog
+        open={creatingAgent}
+        defaultCode={getNextAgentCode(agents)}
+        onClose={() => setCreatingAgent(false)}
+        onSaved={handleCreateAgent}
+      />
       <AgentEditDialog
         agent={editingAgent}
         onClose={() => setEditingAgent(null)}
