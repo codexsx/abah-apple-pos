@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import AccountPicker from '@/components/AccountPicker';
 import AgentDefectImportDialog from '@/components/AgentDefectImportDialog';
+import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
 import {
   getAccountPickerData,
   type AccountWithBalance,
@@ -69,25 +70,37 @@ interface ColorStockEntry {
 
 const phoneModels = [
   'iPhone 8 Plus',
+  'iPhone SE Gen 2',
+  'iPhone SE Gen 3',
+  'iPhone X',
+  'iPhone XS',
+  'iPhone XS Max',
+  'iPhone XR',
   'iPhone 11',
   'iPhone 11 Pro',
+  'iPhone 11 Pro Max',
+  'iPhone 12 Mini',
   'iPhone 12',
   'iPhone 12 Pro',
   'iPhone 12 Pro Max',
   'iPhone 13',
   'iPhone 13 Pro',
+  'iPhone 13 Pro Max',
   'iPhone 14',
   'iPhone 14 Pro',
   'iPhone 14 Pro Max',
   'iPhone 15',
   'iPhone 15 Pro',
   'iPhone 15 Pro Max',
-  'iPhone SE 2022',
-  'iPhone X',
-  'iPhone XR',
+  'iPhone 16',
+  'iPhone 16 Pro',
+  'iPhone 16 Pro Max',
+  'iPhone 17',
+  'iPhone 17 Pro',
+  'iPhone 17 Pro Max',
 ];
 
-const capacities = ['64GB', '128GB', '256GB', '512GB', '1TB'];
+const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
 const conditions = [
   'Second iBox',
@@ -101,11 +114,14 @@ const conditions = [
 const colorMap: Record<string, string[]> = {
   'iPhone 11': ['Black', 'White', 'Red', 'Green', 'Yellow', 'Purple'],
   'iPhone 11 Pro': ['Space Gray', 'Silver', 'Gold', 'Midnight Green'],
+  'iPhone 11 Pro Max': ['Space Gray', 'Silver', 'Gold', 'Midnight Green'],
+  'iPhone 12 Mini': ['Black', 'White', 'Red', 'Green', 'Blue', 'Purple'],
   'iPhone 12': ['Black', 'White', 'Red', 'Green', 'Blue', 'Purple'],
   'iPhone 12 Pro': ['Graphite', 'Silver', 'Gold', 'Pacific Blue'],
   'iPhone 12 Pro Max': ['Graphite', 'Silver', 'Gold', 'Pacific Blue'],
   'iPhone 13': ['Midnight', 'Starlight', 'Blue', 'Pink', 'Green', 'Red'],
   'iPhone 13 Pro': ['Sierra Blue', 'Silver', 'Gold', 'Graphite', 'Alpine Green'],
+  'iPhone 13 Pro Max': ['Sierra Blue', 'Silver', 'Gold', 'Graphite', 'Alpine Green'],
   'iPhone 14': ['Midnight', 'Starlight', 'Blue', 'Purple', 'Yellow', 'Red', 'Green'],
   'iPhone 14 Pro': ['Space Black', 'Silver', 'Gold', 'Deep Purple'],
   'iPhone 14 Pro Max': ['Space Black', 'Silver', 'Gold', 'Deep Purple'],
@@ -113,9 +129,12 @@ const colorMap: Record<string, string[]> = {
   'iPhone 15 Pro': ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium'],
   'iPhone 15 Pro Max': ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium'],
   'iPhone X': ['Space Gray', 'Silver'],
+  'iPhone XS': ['Space Gray', 'Silver', 'Gold'],
+  'iPhone XS Max': ['Space Gray', 'Silver', 'Gold'],
   'iPhone XR': ['Black', 'White', 'Red', 'Blue', 'Coral', 'Yellow'],
   'iPhone 8 Plus': ['Space Gray', 'Silver', 'Gold', 'Red'],
-  'iPhone SE 2022': ['Midnight', 'Starlight', 'Red'],
+  'iPhone SE Gen 2': ['Black', 'White', 'Red'],
+  'iPhone SE Gen 3': ['Midnight', 'Starlight', 'Red'],
 };
 
 const supplierPlaceholders: Record<SupplierType, string> = {
@@ -1189,9 +1208,8 @@ export default function Pembelian() {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <CustomSelect
-              fieldId="tipe"
-              label="Tipe HP *"
+            <PresetOrCustomSelect
+              label="Tipe HP"
               value={selectedModel}
               options={phoneModels}
               onChange={(v) => {
@@ -1200,14 +1218,21 @@ export default function Pembelian() {
                 setColorStockEntries((prev) => prev.map((entry) => ({ ...entry, color: '' })));
               }}
               placeholder="Pilih tipe HP"
+              customLabel="Tipe custom / seri baru"
+              customPlaceholder="Contoh: iPhone 17 Pro, Samsung S24 Ultra"
+              inputAriaLabel="Tipe HP custom"
+              required
             />
-            <CustomSelect
-              fieldId="kapasitas"
-              label="Kapasitas *"
+            <PresetOrCustomSelect
+              label="Kapasitas"
               value={selectedCapacity}
               options={capacities}
               onChange={setSelectedCapacity}
               placeholder="Pilih kapasitas"
+              customLabel="Kapasitas custom"
+              customPlaceholder="Contoh: 32GB, 2TB, WiFi Only"
+              inputAriaLabel="Kapasitas custom"
+              required
             />
             <CustomSelect
               fieldId="kondisi"
@@ -1218,14 +1243,17 @@ export default function Pembelian() {
               placeholder="Pilih kondisi"
             />
             {usesFullUnitData ? (
-              <CustomSelect
-                fieldId="warna"
-                label="Warna *"
+              <PresetOrCustomSelect
+                label="Warna"
                 value={selectedColor}
                 options={availableColors}
                 onChange={setSelectedColor}
                 placeholder={selectedModel ? 'Pilih warna' : 'Pilih tipe HP dulu...'}
+                customLabel="Warna custom"
+                customPlaceholder="Contoh: Desert Titanium, Navy, Black"
+                inputAriaLabel="Warna custom"
                 disabled={!selectedModel}
+                required
               />
             ) : (
               <div>
@@ -1242,7 +1270,7 @@ export default function Pembelian() {
           <div className="mt-3 flex items-start gap-2">
             <Info size={14} className="text-slate-400 mt-0.5 flex-shrink-0" />
             <p className="text-[12px] text-slate-400 italic">
-              Warna resmi Apple mengikuti tipe HP yang dipilih.
+              Pilih dari preset untuk model umum, atau ketik custom untuk seri baru / Android.
             </p>
           </div>
 

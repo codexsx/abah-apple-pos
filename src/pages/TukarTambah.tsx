@@ -32,6 +32,7 @@ import {
 import { Loader2 } from 'lucide-react';
 import { getStockItems, type StockItem } from '@/services/stock';
 import AccountPicker from '@/components/AccountPicker';
+import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
 import {
   getAccountPickerData,
   type AccountWithBalance,
@@ -95,14 +96,19 @@ interface AccessoryItem {
 
 /* ──────────────────────────────── constants */
 const TIPE_OPTIONS = [
+  'iPhone 8 Plus', 'iPhone SE Gen 2', 'iPhone SE Gen 3',
+  'iPhone X', 'iPhone XS', 'iPhone XS Max', 'iPhone XR',
   'iPhone 11', 'iPhone 11 Pro', 'iPhone 11 Pro Max',
+  'iPhone 12 Mini',
   'iPhone 12', 'iPhone 12 Pro', 'iPhone 12 Pro Max',
   'iPhone 13', 'iPhone 13 Pro', 'iPhone 13 Pro Max',
   'iPhone 14', 'iPhone 14 Pro', 'iPhone 14 Pro Max',
   'iPhone 15', 'iPhone 15 Pro', 'iPhone 15 Pro Max',
+  'iPhone 16', 'iPhone 16 Pro', 'iPhone 16 Pro Max',
+  'iPhone 17', 'iPhone 17 Pro', 'iPhone 17 Pro Max',
 ];
 
-const KAPASITAS_OPTIONS = ['64GB', '128GB', '256GB', '512GB', '1TB'];
+const KAPASITAS_OPTIONS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
 const KONDISI_OPTIONS = ['Second iBox', 'Second Inter', 'Second Ex-Inter', 'Second Bid', 'Baru iBox', 'Baru Inter'];
 
@@ -110,6 +116,7 @@ const WARNA_MAP: Record<string, string[]> = {
   'iPhone 11': ['Black', 'White', 'Green', 'Yellow', 'Purple', 'Red'],
   'iPhone 11 Pro': ['Space Gray', 'Silver', 'Gold', 'Midnight Green'],
   'iPhone 11 Pro Max': ['Space Gray', 'Silver', 'Gold', 'Midnight Green'],
+  'iPhone 12 Mini': ['Black', 'White', 'Blue', 'Green', 'Purple', 'Red'],
   'iPhone 12': ['Black', 'White', 'Blue', 'Green', 'Purple', 'Red'],
   'iPhone 12 Pro': ['Graphite', 'Silver', 'Gold', 'Pacific Blue'],
   'iPhone 12 Pro Max': ['Graphite', 'Silver', 'Gold', 'Pacific Blue'],
@@ -122,6 +129,13 @@ const WARNA_MAP: Record<string, string[]> = {
   'iPhone 15': ['Black', 'Blue', 'Green', 'Yellow', 'Pink'],
   'iPhone 15 Pro': ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium'],
   'iPhone 15 Pro Max': ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium'],
+  'iPhone X': ['Space Gray', 'Silver'],
+  'iPhone XS': ['Space Gray', 'Silver', 'Gold'],
+  'iPhone XS Max': ['Space Gray', 'Silver', 'Gold'],
+  'iPhone XR': ['Black', 'White', 'Red', 'Blue', 'Coral', 'Yellow'],
+  'iPhone 8 Plus': ['Space Gray', 'Silver', 'Gold', 'Red'],
+  'iPhone SE Gen 2': ['Black', 'White', 'Red'],
+  'iPhone SE Gen 3': ['Midnight', 'Starlight', 'Red'],
 };
 
 const GARANSI_OPTIONS = [
@@ -848,23 +862,31 @@ export default function TukarTambah() {
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           <motion.div variants={fieldVariants}>
-            <FormSelect
+            <PresetOrCustomSelect
               label="Tipe HP"
               icon={Smartphone}
               value={hpMasuk.tipe}
               onChange={(v) => setHpMasuk((p) => ({ ...p, tipe: v, warna: '' }))}
               options={TIPE_OPTIONS}
+              placeholder="Pilih tipe HP"
+              customLabel="Tipe custom / seri baru"
+              customPlaceholder="Contoh: iPhone 17 Pro, Samsung S24 Ultra"
+              inputAriaLabel="Tipe HP masuk custom"
               required
             />
           </motion.div>
 
           <motion.div variants={fieldVariants}>
-            <FormSelect
+            <PresetOrCustomSelect
               label="Kapasitas"
               icon={HardDrive}
               value={hpMasuk.kapasitas}
               onChange={(v) => setHpMasuk((p) => ({ ...p, kapasitas: v }))}
               options={KAPASITAS_OPTIONS}
+              placeholder="Pilih kapasitas"
+              customLabel="Kapasitas custom"
+              customPlaceholder="Contoh: 32GB, 2TB, WiFi Only"
+              inputAriaLabel="Kapasitas HP masuk custom"
               required
             />
           </motion.div>
@@ -881,7 +903,7 @@ export default function TukarTambah() {
           </motion.div>
 
           <motion.div variants={fieldVariants}>
-            <FormSelect
+            <PresetOrCustomSelect
               label="Warna"
               icon={Palette}
               value={hpMasuk.warna}
@@ -889,6 +911,10 @@ export default function TukarTambah() {
               options={warnaOptions}
               required
               placeholder={hpMasuk.tipe ? 'Pilih warna...' : 'Pilih tipe HP dulu'}
+              customLabel="Warna custom"
+              customPlaceholder="Contoh: Desert Titanium, Navy, Black"
+              inputAriaLabel="Warna HP masuk custom"
+              disabled={!hpMasuk.tipe}
             />
           </motion.div>
 

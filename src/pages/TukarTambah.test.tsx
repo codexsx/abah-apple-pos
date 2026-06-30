@@ -128,7 +128,10 @@ function getSaveButton(): HTMLButtonElement {
 
 /** Set a <select> identified by its FormSelect label text. */
 function setSelectByLabel(labelText: string, value: string) {
-  const label = screen.getByText(labelText);
+  const label = screen.getByText((content, element) => {
+    if (element?.tagName.toLowerCase() !== 'label') return false;
+    return content.replace(/\s+\*$/, '') === labelText;
+  });
   const select = label.parentElement!.querySelector('select');
   expect(select).not.toBeNull();
   fireEvent.change(select!, { target: { value } });

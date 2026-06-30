@@ -51,6 +51,7 @@ import {
   updateStockStatus,
 } from '@/services/stock';
 import AccountPicker from '@/components/AccountPicker';
+import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
 import {
   getAccountPickerData,
   type AccountWithBalance,
@@ -161,8 +162,18 @@ function formatPrice(n: number) {
 const DEFAULT_TECHNICIANS: Technician[] = ['Zaidan', 'Rendi', 'Fabio', 'Toko Lain'];
 const SERVICE_TYPES: ServiceType[] = ['Customer', 'Toko Sendiri', 'Klaim Garansi'];
 
-const phoneModels = ['iPhone 15 Pro Max', 'iPhone 15 Pro', 'iPhone 15', 'iPhone 14 Pro Max', 'iPhone 14 Pro', 'iPhone 14', 'iPhone 13 Pro Max', 'iPhone 13 Pro', 'iPhone 13', 'iPhone 12 Pro Max', 'iPhone 12 Pro', 'iPhone 12', 'iPhone 11 Pro Max', 'iPhone 11 Pro', 'iPhone 11', 'iPhone XR', 'iPhone X', 'iPhone SE 2022'];
-const capacities = ['64GB', '128GB', '256GB', '512GB', '1TB'];
+const phoneModels = [
+  'iPhone 17 Pro Max', 'iPhone 17 Pro', 'iPhone 17',
+  'iPhone 16 Pro Max', 'iPhone 16 Pro', 'iPhone 16',
+  'iPhone 15 Pro Max', 'iPhone 15 Pro', 'iPhone 15',
+  'iPhone 14 Pro Max', 'iPhone 14 Pro', 'iPhone 14',
+  'iPhone 13 Pro Max', 'iPhone 13 Pro', 'iPhone 13',
+  'iPhone 12 Pro Max', 'iPhone 12 Pro', 'iPhone 12', 'iPhone 12 Mini',
+  'iPhone 11 Pro Max', 'iPhone 11 Pro', 'iPhone 11',
+  'iPhone XS Max', 'iPhone XS', 'iPhone XR', 'iPhone X',
+  'iPhone SE Gen 3', 'iPhone SE Gen 2',
+];
+const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 const conditions = ['Second iBox', 'Second Inter', 'Second Ex-Inter', 'Second Bid', 'Baru iBox', 'Baru Inter'];
 const colors = ['Deep Purple', 'Space Black', 'Silver', 'Gold', 'Midnight', 'Starlight', 'Blue', 'Green', 'Red', 'Pink', 'Natural Titanium'];
 
@@ -1745,31 +1756,33 @@ function ServisCustomerForm({
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Detail HP</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">TIPE HP *</label>
-                <select
+                <PresetOrCustomSelect
+                  label="TIPE HP"
                   value={formData.model}
-                  onChange={(e) => handleChange('model', e.target.value)}
-                  className={`w-full h-11 rounded-xl border px-4 text-[14px] outline-none transition-all duration-200 font-body bg-white ${
-                    errors.model ? 'border-rose-400 ring-2 ring-rose-100' : 'border-slate-300 focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10'
-                  }`}
-                >
-                  <option value="">Pilih model</option>
-                  {phoneModels.map((m) => (<option key={m} value={m}>{m}</option>))}
-                </select>
+                  onChange={(value) => handleChange('model', value)}
+                  options={phoneModels}
+                  placeholder="Pilih model"
+                  customLabel="Tipe custom / seri baru"
+                  customPlaceholder="Contoh: iPhone 17 Pro, Samsung S24 Ultra"
+                  inputAriaLabel="Tipe HP service custom"
+                  error={errors.model}
+                  required
+                />
                 {errors.model && <p className="mt-1 text-[12px] text-rose-500">Pilih tipe HP</p>}
               </div>
               <div>
-                <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">KAPASITAS *</label>
-                <select
+                <PresetOrCustomSelect
+                  label="KAPASITAS"
                   value={formData.capacity}
-                  onChange={(e) => handleChange('capacity', e.target.value)}
-                  className={`w-full h-11 rounded-xl border px-4 text-[14px] outline-none transition-all duration-200 font-body bg-white ${
-                    errors.capacity ? 'border-rose-400 ring-2 ring-rose-100' : 'border-slate-300 focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10'
-                  }`}
-                >
-                  <option value="">Pilih kapasitas</option>
-                  {capacities.map((c) => (<option key={c} value={c}>{c}</option>))}
-                </select>
+                  onChange={(value) => handleChange('capacity', value)}
+                  options={capacities}
+                  placeholder="Pilih kapasitas"
+                  customLabel="Kapasitas custom"
+                  customPlaceholder="Contoh: 32GB, 2TB, WiFi Only"
+                  inputAriaLabel="Kapasitas service custom"
+                  error={errors.capacity}
+                  required
+                />
                 {errors.capacity && <p className="mt-1 text-[12px] text-rose-500">Pilih kapasitas</p>}
               </div>
               <div>
@@ -1787,17 +1800,18 @@ function ServisCustomerForm({
                 {errors.condition && <p className="mt-1 text-[12px] text-rose-500">Pilih kondisi</p>}
               </div>
               <div>
-                <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">WARNA *</label>
-                <select
+                <PresetOrCustomSelect
+                  label="WARNA"
                   value={formData.color}
-                  onChange={(e) => handleChange('color', e.target.value)}
-                  className={`w-full h-11 rounded-xl border px-4 text-[14px] outline-none transition-all duration-200 font-body bg-white ${
-                    errors.color ? 'border-rose-400 ring-2 ring-rose-100' : 'border-slate-300 focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10'
-                  }`}
-                >
-                  <option value="">Pilih warna</option>
-                  {colors.map((c) => (<option key={c} value={c}>{c}</option>))}
-                </select>
+                  onChange={(value) => handleChange('color', value)}
+                  options={colors}
+                  placeholder="Pilih warna"
+                  customLabel="Warna custom"
+                  customPlaceholder="Contoh: Desert Titanium, Navy, Black"
+                  inputAriaLabel="Warna service custom"
+                  error={errors.color}
+                  required
+                />
                 {errors.color && <p className="mt-1 text-[12px] text-rose-500">Pilih warna</p>}
               </div>
               <div>

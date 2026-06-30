@@ -100,8 +100,17 @@ function renderPage() {
 function pickFromDropdown(triggerName: string, optionName: string) {
   // Exact-string name avoids matching the disabled Warna trigger placeholder
   // ("Pilih tipe HP dulu..."), which would otherwise collide with "Pilih tipe HP".
-  fireEvent.click(screen.getByRole('button', { name: triggerName }));
-  fireEvent.click(screen.getByRole('button', { name: optionName }));
+  const buttonTrigger = screen.queryByRole('button', { name: triggerName });
+  if (buttonTrigger) {
+    fireEvent.click(buttonTrigger);
+    fireEvent.click(screen.getByRole('button', { name: optionName }));
+    return;
+  }
+
+  const option = screen.getByRole('option', { name: optionName });
+  const select = option.closest('select');
+  if (!select) throw new Error(`No select found for option "${optionName}"`);
+  fireEvent.change(select, { target: { value: optionName } });
 }
 
 /**
