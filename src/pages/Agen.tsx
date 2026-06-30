@@ -19,6 +19,7 @@ import {
   Pencil,
   Trash2,
   Plus,
+  Upload,
 } from 'lucide-react';
 import {
   createAgent,
@@ -42,6 +43,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import AgentDefectImportDialog from '@/components/AgentDefectImportDialog';
 
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
@@ -691,6 +693,7 @@ export default function Agen() {
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>();
@@ -805,6 +808,15 @@ export default function Agen() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setImportDialogOpen(true)}
+              className="flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            >
+              <Upload size={15} />
+              Import Excel
+            </motion.button>
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
@@ -949,6 +961,15 @@ export default function Agen() {
         agent={deletingAgent}
         onClose={() => setDeletingAgent(null)}
         onConfirm={handleDeleteAgent}
+      />
+      <AgentDefectImportDialog
+        open={importDialogOpen}
+        agents={agents}
+        onClose={() => setImportDialogOpen(false)}
+        onImported={async () => {
+          await loadData();
+          setImportDialogOpen(false);
+        }}
       />
     </div>
   );

@@ -14,6 +14,13 @@ export interface StockItem {
   count: number;
   price: number;
   cost_price: number;
+  battery_health?: number | null;
+  carrier?: string;
+  defect_description?: string;
+  source_agent_id?: string | null;
+  import_batch_id?: string | null;
+  source_row_number?: number | null;
+  import_note?: string;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +36,13 @@ export interface StockItemInsert {
   count?: number;
   price?: number;
   cost_price?: number;
+  battery_health?: number | null;
+  carrier?: string;
+  defect_description?: string;
+  source_agent_id?: string | null;
+  import_batch_id?: string | null;
+  source_row_number?: number | null;
+  import_note?: string;
 }
 
 export interface StockItemUpdate {
@@ -42,6 +56,13 @@ export interface StockItemUpdate {
   count?: number;
   price?: number;
   cost_price?: number;
+  battery_health?: number | null;
+  carrier?: string;
+  defect_description?: string;
+  source_agent_id?: string | null;
+  import_batch_id?: string | null;
+  source_row_number?: number | null;
+  import_note?: string;
 }
 
 export interface AccessoryItem {
