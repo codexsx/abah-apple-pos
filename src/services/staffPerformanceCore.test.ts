@@ -6,10 +6,12 @@ import {
 } from './staffPerformanceCore';
 
 describe('staff performance core', () => {
-  it('divides the 500 unit store target by active sales staff', () => {
+  it('uses a 5-staff benchmark for the 500 unit store target', () => {
     expect(getPerStaffMonthlyTarget(5)).toBe(100);
-    expect(getPerStaffMonthlyTarget(4)).toBe(125);
-    expect(getPerStaffMonthlyTarget(0)).toBe(500);
+    expect(getPerStaffMonthlyTarget(4)).toBe(100);
+    expect(getPerStaffMonthlyTarget(1)).toBe(100);
+    expect(getPerStaffMonthlyTarget(0)).toBe(100);
+    expect(getPerStaffMonthlyTarget(10)).toBe(50);
   });
 
   it('assigns dynamic batch labels from previous month unit sales', () => {

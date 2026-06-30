@@ -17,6 +17,7 @@ export interface StaffLevelResult {
 }
 
 const STORE_MONTHLY_UNIT_TARGET = 500;
+const MINIMUM_TARGET_STAFF = 5;
 
 const BATCHES: Array<{
   batch: StaffBatch;
@@ -33,7 +34,7 @@ export function getPerStaffMonthlyTarget(
   activeSalesStaff: number,
   storeTarget = STORE_MONTHLY_UNIT_TARGET,
 ): number {
-  const staffCount = Math.max(1, Math.floor(activeSalesStaff));
+  const staffCount = Math.max(MINIMUM_TARGET_STAFF, Math.floor(activeSalesStaff));
   return Math.ceil(storeTarget / staffCount);
 }
 
