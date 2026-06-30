@@ -27,6 +27,20 @@ describe('getCanonicalRedirectUrl', () => {
     ).toBe('https://www.abahapplepontianak.my.id/stok');
   });
 
+  it('redirects renamed project and deployment Vercel aliases to the custom www domain', () => {
+    expect(
+      getCanonicalRedirectUrl(
+        makeLocation('abah-apple-pontianak-system-git-main-abah-apple-pos.vercel.app', '/agen'),
+      ),
+    ).toBe('https://www.abahapplepontianak.my.id/agen');
+
+    expect(
+      getCanonicalRedirectUrl(
+        makeLocation('abah-apple-pontianak-system-mtin3tm0n-abah-apple-pos.vercel.app', '/login'),
+      ),
+    ).toBe('https://www.abahapplepontianak.my.id/login');
+  });
+
   it('does not redirect the canonical domain or local development', () => {
     expect(getCanonicalRedirectUrl(makeLocation('www.abahapplepontianak.my.id'))).toBeNull();
     expect(getCanonicalRedirectUrl(makeLocation('localhost'))).toBeNull();
