@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CompanyProfileProvider } from '@/contexts/CompanyProfileContext';
 import FinanceRoute from '@/components/FinanceRoute';
@@ -292,10 +293,16 @@ function AppRoutes() {
   );
 }
 
+function AppSpeedInsights() {
+  const location = useLocation();
+  return <SpeedInsights route={location.pathname} />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <AppRoutes />
+      <AppSpeedInsights />
     </AuthProvider>
   );
 }
