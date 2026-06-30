@@ -3,6 +3,7 @@ import { Outlet } from 'react-router';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import ScrollProgress from './ScrollProgress';
+import DocumentBrand from './DocumentBrand';
 
 const footerPaths = ['/', '/penjualan', '/pembelian', '/pengeluaran', '/tukar-tambah'];
 
@@ -12,6 +13,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-[100dvh] relative">
+      <DocumentBrand />
       <ScrollProgress />
       <Navbar />
       <main

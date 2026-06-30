@@ -44,6 +44,7 @@ import {
   type LoginAccount,
 } from '@/services/loginDirectory';
 import { avatarImageStyle } from '@/services/avatarCrop';
+import { applyDocumentBrand } from '@/services/documentBrand';
 
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
@@ -324,6 +325,10 @@ export default function Login() {
     const params = new URLSearchParams(location.search);
     return params.get('manual') === '1';
   }, [location.search]);
+
+  useEffect(() => {
+    applyDocumentBrand(companyProfile);
+  }, [companyProfile]);
   const shouldUseManualLogin = manualLoginUnlocked || (!isDirectoryLoading && accounts.length === 0);
   const activeAccount = shouldUseManualLogin ? null : selectedAccount;
   const featureCards = useMemo(
