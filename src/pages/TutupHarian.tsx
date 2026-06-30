@@ -10,6 +10,7 @@ import {
   Receipt,
   Wallet,
   Coins,
+  Banknote,
   Hash,
   Pencil,
   Save,
@@ -85,6 +86,7 @@ interface TodayFigures {
   expenses: number;
   netProfit: number;
   cashBankTotal: number;
+  cashStoreTotal: number;
   txCount: number;
   salesCount: number;
   salesTotal: number;
@@ -110,6 +112,7 @@ interface ClosingSummary {
   expenses: number;
   netProfit: number;
   cashBankTotal: number;
+  cashStoreTotal: number;
   txCount: number;
   [key: string]: number;
 }
@@ -163,6 +166,7 @@ function countStockByStatus(items: StockItem[], status: StockItem['status']): nu
 function computeTodayFigures(
   transactions: Transaction[],
   cashBankTotal: number,
+  cashStoreTotal: number,
   saleTransactions: TransactionWithStockDetails[],
   stockItems: StockItem[],
 ): TodayFigures {
@@ -195,6 +199,7 @@ function computeTodayFigures(
     expenses,
     netProfit,
     cashBankTotal,
+    cashStoreTotal,
     txCount: todayTx.length,
     salesCount: countToday(todayTx, 'Penjualan'),
     salesTotal: sumToday(todayTx, 'Penjualan'),
@@ -233,6 +238,7 @@ const summaryCards: SummaryCard[] = [
   { label: 'HPP Unit Terjual', value: (f) => f.cogs, format: 'money', icon: ShoppingBag, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
   { label: 'Pengeluaran', value: (f) => f.expenses, format: 'money', icon: Receipt, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100' },
   { label: 'Laba Bersih', value: (f) => f.netProfit, format: 'money', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', signed: true },
+  { label: 'Cash Toko', value: (f) => f.cashStoreTotal, format: 'money', icon: Banknote, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
   { label: 'Total Kas & Bank', value: (f) => f.cashBankTotal, format: 'money', icon: Coins, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100' },
   { label: 'Jumlah Transaksi', value: (f) => f.txCount, format: 'count', icon: Hash, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-100' },
 ];
@@ -247,6 +253,7 @@ export default function TutupHarian() {
   const [saleTransactions, setSaleTransactions] = useState<TransactionWithStockDetails[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [cashBankTotal, setCashBankTotal] = useState(0);
+  const [cashStoreTotal, setCashStoreTotal] = useState(0);
   const [history, setHistory] = useState<DailyClosing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -268,10 +275,14 @@ export default function TutupHarian() {
         getDailyClosings(),
       ]);
       const total = accounts.reduce((sum, a) => sum + a.current_balance, 0);
+      const cashTotal = accounts
+        .filter((a) => a.type === 'Cash')
+        .reduce((sum, a) => sum + a.current_balance, 0);
       setTransactions(txs);
       setSaleTransactions(sales);
       setStockItems(stock);
       setCashBankTotal(total);
+      setCashStoreTotal(cashTotal);
       setHistory(closings);
     } catch (e) {
       setError(
@@ -288,8 +299,8 @@ export default function TutupHarian() {
 
   const figures = useMemo<TodayFigures | null>(() => {
     if (loading || error) return null;
-    return computeTodayFigures(transactions, cashBankTotal, saleTransactions, stockItems);
-  }, [loading, error, transactions, cashBankTotal, saleTransactions, stockItems]);
+    return computeTodayFigures(transactions, cashBankTotal, cashStoreTotal, saleTransactions, stockItems);
+  }, [loading, error, transactions, cashBankTotal, cashStoreTotal, saleTransactions, stockItems]);
 
   /** Today's existing closing (if any) — keeps the button idempotent. */
   const todayClosing = useMemo<DailyClosing | null>(() => {
@@ -311,6 +322,7 @@ export default function TutupHarian() {
         expenses: figures.expenses,
         netProfit: figures.netProfit,
         cashBankTotal: figures.cashBankTotal,
+        cashStoreTotal: figures.cashStoreTotal,
         txCount: figures.txCount,
         salesCount: figures.salesCount,
         salesTotal: figures.salesTotal,
@@ -574,6 +586,7 @@ export default function TutupHarian() {
                 {history.map((closing, i) => {
                   const net = readNumber(closing.summary, 'netProfit');
                   const cashBank = readNumber(closing.summary, 'cashBankTotal');
+                  const cashStore = readNumber(closing.summary, 'cashStoreTotal');
                   return (
                     <motion.div
                       key={closing.id}
@@ -601,6 +614,12 @@ export default function TutupHarian() {
                               }
                             >
                               {formatRupiah(net)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Cash Toko</p>
+                            <p className="font-mono text-[14px] font-semibold text-amber-600">
+                              {formatRupiah(cashStore)}
                             </p>
                           </div>
                           <div>
@@ -656,6 +675,12 @@ export default function TutupHarian() {
                       }
                     >
                       {formatRupiah(figures.netProfit)}
+                    </span>
+                  </p>
+                  <p>
+                    Cash Toko:{' '}
+                    <span className="font-mono font-medium text-slate-700">
+                      {formatRupiah(figures.cashStoreTotal)}
                     </span>
                   </p>
                   <p>

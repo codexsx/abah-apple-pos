@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -236,25 +236,42 @@ export default function Pengeluaran() {
 
   /* Account selection state (expense tab only) */
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
   const [cashAccount, setCashAccount] = useState<AccountWithBalance | null>(null);
   const [transferAccount, setTransferAccount] = useState<AccountWithBalance | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
+  const loadAccounts = useCallback(() => {
     let active = true;
+    setAccountsLoading(true);
+    setAccountLoadError(null);
     getAccountPickerData()
       .then((data) => {
-        if (active) setAccounts(data);
+        if (!active) return;
+        setAccounts(data);
       })
-      .catch(() => {
-        if (active) setAccounts([]);
+      .catch((err: unknown) => {
+        if (!active) return;
+        console.error('[Pengeluaran] account load error:', err);
+        setAccounts([]);
+        setAccountLoadError(
+          err instanceof Error
+            ? err.message
+            : 'Akun kas/bank tidak dapat dimuat. Cek koneksi akun keuangan.',
+        );
+      })
+      .finally(() => {
+        if (active) setAccountsLoading(false);
       });
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => loadAccounts(), [loadAccounts]);
 
   /* Transfer form state */
   const [transferFromAccount, setTransferFromAccount] = useState<AccountWithBalance | null>(null);
@@ -672,45 +689,69 @@ export default function Pengeluaran() {
               </motion.div>
 
               {/* Card 4: Akun Pengeluaran */}
-              {(cashPortion >= 1 || transferPortion >= 1) && (
-                <motion.div
-                  variants={sectionItem}
-                  animate={shaking ? { x: [0, -8, 8, -8, 8, 0] } : {}}
-                  transition={{ duration: 0.4 }}
-                  className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[18px] font-semibold text-slate-900">Akun Sumber Dana</h3>
-                    <span className="text-[12px] text-slate-400">Pilih akun untuk tiap porsi</span>
+              <motion.div
+                variants={sectionItem}
+                animate={shaking ? { x: [0, -8, 8, -8, 8, 0] } : {}}
+                transition={{ duration: 0.4 }}
+                className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card"
+              >
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-4">
+                  <h3 className="text-[18px] font-semibold text-slate-900">Akun Sumber Dana</h3>
+                  <span className="text-[12px] text-slate-400">Cash memakai akun Cash, transfer memakai akun Bank</span>
+                </div>
+
+                {accountsLoading ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-[13px] font-medium text-slate-500">
+                    Memuat akun kas dan bank...
                   </div>
+                ) : accountLoadError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-4">
+                    <div className="flex items-start gap-2 text-[13px] font-medium text-rose-700">
+                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      <span>{accountLoadError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={loadAccounts}
+                      className="mt-3 text-[12px] font-semibold text-rose-700 underline-offset-4 hover:underline"
+                    >
+                      Muat ulang akun
+                    </button>
+                  </div>
+                ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {cashPortion >= 1 && (
-                      <AccountPicker
-                        label={`Akun Cash · Rp ${cashPortion.toLocaleString('id-ID')}`}
-                        filterType="Cash"
-                        accounts={accounts}
-                        value={cashAccount?.id ?? null}
-                        onChange={(_, account) => {
-                          setCashAccount(account);
-                          setSaveError(null);
-                        }}
-                      />
-                    )}
-                    {transferPortion >= 1 && (
-                      <AccountPicker
-                        label={`Akun Transfer · Rp ${transferPortion.toLocaleString('id-ID')}`}
-                        filterType="Bank"
-                        accounts={accounts}
-                        value={transferAccount?.id ?? null}
-                        onChange={(_, account) => {
-                          setTransferAccount(account);
-                          setSaveError(null);
-                        }}
-                      />
-                    )}
+                    <AccountPicker
+                      label={
+                        cashPortion >= 1
+                          ? `Akun Cash - Rp ${cashPortion.toLocaleString('id-ID')}`
+                          : 'Akun Cash'
+                      }
+                      filterType="Cash"
+                      accounts={accounts}
+                      value={cashAccount?.id ?? null}
+                      onChange={(_, account) => {
+                        setCashAccount(account);
+                        setSaveError(null);
+                      }}
+                    />
+                    <AccountPicker
+                      label={
+                        transferPortion >= 1
+                          ? `Akun Bank - Rp ${transferPortion.toLocaleString('id-ID')}`
+                          : 'Akun Bank'
+                      }
+                      filterType="Bank"
+                      accounts={accounts}
+                      value={transferAccount?.id ?? null}
+                      onChange={(_, account) => {
+                        setTransferAccount(account);
+                        setSaveError(null);
+                      }}
+                    />
                   </div>
-                </motion.div>
-              )}
+                )}
+              </motion.div>
+
 
               {/* Save feedback */}
               <AnimatePresence>

@@ -86,6 +86,10 @@ function cashInput(): HTMLInputElement {
   return screen.getAllByPlaceholderText('0')[0] as HTMLInputElement;
 }
 
+function transferInput(): HTMLInputElement {
+  return screen.getAllByPlaceholderText('0')[1] as HTMLInputElement;
+}
+
 describe('Pengeluaran — expense tab persistence (Requirements 6.2, 6.7)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -127,6 +131,39 @@ describe('Pengeluaran — expense tab persistence (Requirements 6.2, 6.7)', () =
             account_id: 'cash-1',
             direction: 'money_out',
             amount: 50000,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('shows the bank account picker and records transfer expenses to the selected bank account', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(getAccountPickerDataMock).toHaveBeenCalled());
+    expect(await screen.findByText('Akun Bank')).toBeTruthy();
+
+    await selectKategori(user, 'Operasional Toko');
+    await user.type(transferInput(), '75000');
+
+    const bankOption = await screen.findByRole('radio', { name: /BCA Operasional/ });
+    await user.click(bankOption);
+
+    await user.click(screen.getByRole('button', { name: /Simpan Pengeluaran/ }));
+
+    await waitFor(() =>
+      expect(recordTransactionWithPostingsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(recordTransactionWithPostingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'Pengeluaran',
+        amount: 75000,
+        postings: expect.arrayContaining([
+          expect.objectContaining({
+            account_id: 'bank-1',
+            direction: 'money_out',
+            amount: 75000,
           }),
         ]),
       }),
