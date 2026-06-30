@@ -221,11 +221,11 @@ function ModeCard({
       whileTap={{ scale: 0.97, transition: { duration: 0.1 } }}
       onClick={onClick}
       className={
-        'relative text-left rounded-2xl border border-slate-200 p-6 shadow-card ' +
+        'relative text-left rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-card ' +
         'transition-shadow duration-300 hover:shadow-card-hover cursor-pointer ' +
-        (fullWidth ? 'col-span-2 sm:col-span-2' : 'col-span-1')
+        (fullWidth ? 'col-span-1 sm:col-span-2' : 'col-span-1')
       }
-      style={{ background: tintBg, minHeight: '180px' }}
+      style={{ background: tintBg, minHeight: '164px' }}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
@@ -235,8 +235,8 @@ function ModeCard({
           >
             <span style={{ color: accentColor }}>{icon}</span>
           </div>
-          <h3 className="font-body text-[18px] font-semibold text-slate-900">{title}</h3>
-          <p className="mt-1.5 text-[13px] leading-[1.5] text-slate-500 max-w-[280px]">{description}</p>
+          <h3 className="font-body text-[17px] sm:text-[18px] font-semibold text-slate-900">{title}</h3>
+          <p className="mt-1.5 text-[12px] sm:text-[13px] leading-[1.5] text-slate-500 max-w-[280px]">{description}</p>
           <div className="mt-4 flex items-center gap-1 text-[14px] font-medium" style={{ color: accentText }}>
             <span>{actionText}</span>
             <motion.span
@@ -559,7 +559,7 @@ function MonitorServisView({
       >
         <button
           onClick={() => toggleExpanded(record.id)}
-          className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-slate-50/50 transition-colors"
+          className="w-full flex items-start justify-between gap-3 p-4 sm:p-5 text-left hover:bg-slate-50/50 transition-colors"
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -575,13 +575,13 @@ function MonitorServisView({
                 </span>
               )}
             </div>
-            <p className="text-[14px] font-semibold text-slate-900">
+            <p className="break-words text-[14px] font-semibold text-slate-900">
               {record.phoneModel} {record.capacity && `\u00B7 ${record.capacity}`} {record.condition && `\u00B7 ${record.condition}`}
             </p>
             <div className="mt-1.5 flex items-center gap-3 text-[12px] text-slate-500 flex-wrap">
               <span className="flex items-center gap-1"><User size={12} /> {record.customerName}</span>
-              {record.stkId && <span className="font-mono text-[11px]">STK: {record.stkId}</span>}
-              {record.imei && <span className="font-mono text-[11px]">{record.imei}</span>}
+              {record.stkId && <span className="break-all font-mono text-[11px]">STK: {record.stkId}</span>}
+              {record.imei && <span className="break-all font-mono text-[11px]">{record.imei}</span>}
               {record.batteryHealth && <span>BH: {record.batteryHealth}%</span>}
             </div>
           </div>
@@ -603,7 +603,7 @@ function MonitorServisView({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <div className="rounded-lg bg-slate-50 p-3">
                     <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">ID Servis</p>
-                    <p className="mt-1 font-mono text-[13px] text-slate-700">{record.id}</p>
+                    <p className="mt-1 break-all font-mono text-[13px] text-slate-700">{record.id}</p>
                   </div>
                   {record.color && (
                     <div className="rounded-lg bg-slate-50 p-3">
@@ -663,7 +663,7 @@ function MonitorServisView({
                         {usages.map((usage) => (
                           <div
                             key={usage.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[12px] text-slate-600"
+                            className="flex flex-col items-start gap-1 rounded-lg bg-white px-3 py-2 text-[12px] text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:gap-2"
                           >
                             <span className="font-medium text-slate-800">
                               {usage.sparepart_name} x{usage.quantity}
@@ -718,7 +718,7 @@ function MonitorServisView({
                       </div>
                     </div>
                     {editError && <p className="mt-2 text-[12px] text-rose-500">{editError}</p>}
-                    <div className="mt-3 flex gap-2 justify-end">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <button
                         onClick={cancelEdit}
                         className="rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
@@ -737,17 +737,17 @@ function MonitorServisView({
                 ) : null}
 
                 {/* Action buttons */}
-                <div className="mt-4 flex gap-2 flex-wrap">
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
                     onClick={() => (editingId === record.id ? cancelEdit() : openEdit(record))}
-                    className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
                   >
                     <Edit3 size={14} /> Edit Biaya
                   </button>
                   {(record.status === 'ANTRIAN' || record.status === 'PROSES') && (
                     <button
                       onClick={() => openPartDialog(record)}
-                      className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-4 py-2 text-[13px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 px-4 py-2 text-[13px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
                     >
                       <Package size={14} /> Tambah Part
                     </button>
@@ -755,7 +755,7 @@ function MonitorServisView({
                   {record.status === 'ANTRIAN' && (
                     <button
                       onClick={() => handleStatusChange(record.id, 'PROSES')}
-                      className="flex items-center gap-1.5 rounded-lg bg-teal-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-teal-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors"
                     >
                       <Play size={14} /> Mulai
                     </button>
@@ -763,27 +763,27 @@ function MonitorServisView({
                   {record.status === 'PROSES' && (
                     <button
                       onClick={() => handleStatusChange(record.id, 'SELESAI')}
-                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-emerald-600 transition-colors"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-emerald-600 transition-colors"
                     >
                       <CheckCircle2 size={14} /> Selesai
                     </button>
                   )}
                   {record.status === 'SELESAI' && (
                     record.pickedUp ? (
-                      <span className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-4 py-2 text-[13px] font-medium text-emerald-700">
+                      <span className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-4 py-2 text-[13px] font-medium text-emerald-700">
                         <Check size={14} /> Sudah Diambil
                       </span>
                     ) : (
                       <button
                         onClick={() => handlePickup(record.id)}
-                        className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
                       >
                         <Package size={14} /> Ambil HP
                       </button>
                     )
                   )}
                   {record.status === 'GAGAL' && (
-                    <button className="flex items-center gap-1.5 rounded-lg bg-rose-50 px-4 py-2 text-[13px] font-medium text-rose-700 hover:bg-rose-100 transition-colors">
+                    <button className="flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-4 py-2 text-[13px] font-medium text-rose-700 hover:bg-rose-100 transition-colors">
                       <Banknote size={14} /> Refund DP
                     </button>
                   )}
@@ -802,22 +802,21 @@ function MonitorServisView({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px' }}
+      className="fixed inset-0 z-40 overflow-hidden bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[1200px] px-4 sm:px-6 h-full overflow-y-auto">
+      <div className="mx-auto h-full max-w-[1200px] overflow-y-auto px-4 pb-8 sm:px-6">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             <ArrowLeft size={18} />
           </motion.button>
-          <div>
-            <h2 className="font-display text-[32px] text-slate-900 leading-tight">Monitor Servis</h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Monitor Servis</h2>
             <p className="text-[14px] text-slate-500 mt-0.5">{filtered.length} servis ditemukan</p>
           </div>
         </div>
@@ -847,7 +846,7 @@ function MonitorServisView({
           <select
             value={activeTypeFilter}
             onChange={(e) => setActiveTypeFilter(e.target.value as ServiceType | 'SEMUA')}
-            className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-700 outline-none focus:border-teal-500"
+            className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-700 outline-none focus:border-teal-500 sm:w-auto"
           >
             <option value="SEMUA">Semua jenis</option>
             {SERVICE_TYPES.map((t) => (
@@ -1006,7 +1005,7 @@ function MonitorServisView({
         <AnimatePresence>
           {partTarget && (
             <motion.div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
+              className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center sm:p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1019,7 +1018,7 @@ function MonitorServisView({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 24, scale: 0.98 }}
                 transition={{ duration: 0.2 }}
-                className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-card-elevated"
+                className="max-h-[calc(100dvh-24px)] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-card-elevated"
               >
                 <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
                   <div>
@@ -1119,7 +1118,7 @@ function MonitorServisView({
                   )}
                 </div>
 
-                <div className="flex gap-3 border-t border-slate-200 px-5 py-4">
+                <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:gap-3">
                   <button
                     type="button"
                     onClick={closePartDialog}
@@ -1255,21 +1254,20 @@ function UtangUpahView({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px', overflowY: 'auto' }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="mx-auto max-w-[1200px] px-4 pb-8 sm:px-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             <ArrowLeft size={18} />
           </motion.button>
-          <div>
-            <h2 className="font-display text-[32px] text-slate-900 leading-tight">Utang Upah</h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Utang Upah</h2>
             <p className="text-[14px] text-slate-500 mt-0.5">Upah servis yang belum dibayar ke tukang</p>
           </div>
         </div>
@@ -1312,12 +1310,12 @@ function UtangUpahView({ onClose }: { onClose: () => void }) {
                 transition={{ duration: 0.4, delay: i * 0.1, ease: easeSmooth }}
                 className="rounded-xl bg-white border border-slate-200 shadow-card overflow-hidden"
               >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-100 text-teal-700">
                       <User size={16} />
                     </div>
-                    <span className="text-[15px] font-semibold text-slate-900">{tech}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-slate-900">{tech}</span>
                     <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">
                       {items.length} upah
                     </span>
@@ -1326,12 +1324,12 @@ function UtangUpahView({ onClose }: { onClose: () => void }) {
                 </div>
                 <div className="divide-y divide-slate-100">
                   {items.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between px-5 py-3 hover:bg-slate-50/50 transition-colors">
-                      <div>
+                    <div key={r.id} className="flex flex-col gap-2 px-4 py-3 hover:bg-slate-50/50 transition-colors sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                      <div className="min-w-0">
                         <p className="text-[13px] font-medium text-slate-700">
                           {r.phone_model} — {r.issue}
                         </p>
-                        <p className="text-[12px] text-slate-500 mt-0.5">
+                        <p className="mt-0.5 break-all text-[12px] text-slate-500">
                           {r.customer_name} · {r.id} · {formatDate(r.created_at)}
                         </p>
                       </div>
@@ -1374,7 +1372,7 @@ function UtangUpahView({ onClose }: { onClose: () => void }) {
                       }}
                       error={payError}
                     />
-                    <div className="mt-3 flex gap-2 justify-end">
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <button
                         onClick={cancelPay}
                         className="rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
@@ -1391,10 +1389,10 @@ function UtangUpahView({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
+                  <div className="flex border-t border-slate-100 px-5 py-3 sm:justify-end">
                     <button
                       onClick={() => openPay(tech)}
-                      className="rounded-lg bg-teal-500 px-5 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors active:scale-[0.98]"
+                      className="w-full rounded-lg bg-teal-500 px-5 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors active:scale-[0.98] sm:w-auto"
                     >
                       Bayar Upah
                     </button>
@@ -1434,7 +1432,7 @@ function TukangGrid({
   onSelect: (t: Technician) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
       {technicians.map((tech) => {
         const isSelected = selected === tech;
         return (
@@ -1444,7 +1442,7 @@ function TukangGrid({
             whileTap={{ scale: 0.98 }}
             onClick={() => onSelect(tech)}
             className={
-              'flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 ' +
+              'flex items-center gap-3 rounded-xl border-2 px-3 py-3 text-left transition-all duration-200 sm:px-4 ' +
               (isSelected
                 ? 'border-teal-500 bg-teal-50 text-teal-800'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50')
@@ -1685,20 +1683,19 @@ function ServisCustomerForm({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px', overflowY: 'auto' }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[720px] px-4 sm:px-6 pb-10">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="mx-auto max-w-[720px] px-4 pb-8 sm:px-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             <ArrowLeft size={18} />
           </motion.button>
-          <h2 className="font-display text-[32px] text-slate-900 leading-tight">Servis Customer</h2>
+          <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Servis Customer</h2>
         </div>
 
         <motion.div
@@ -1707,7 +1704,7 @@ function ServisCustomerForm({
           className="flex flex-col gap-4"
         >
           {/* Section 1: Data Pemilik HP */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Data Pemilik HP</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -1744,7 +1741,7 @@ function ServisCustomerForm({
           </div>
 
           {/* Section 2: Detail HP */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Detail HP</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -1832,7 +1829,7 @@ function ServisCustomerForm({
           </div>
 
           {/* Section 3: Keluhan & Diagnosa */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Keluhan &amp; Diagnosa</h3>
             <div className="flex flex-col gap-4">
               <div>
@@ -1867,7 +1864,7 @@ function ServisCustomerForm({
           </div>
 
           {/* Section 4: Tukang & Biaya */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Tukang &amp; Biaya</h3>
             <div className="flex flex-col gap-4">
               <div>
@@ -1959,7 +1956,7 @@ function ServisCustomerForm({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:gap-3">
             <button
               onClick={onClose}
               className="flex-1 rounded-xl bg-slate-100 py-3 text-[14px] font-semibold text-slate-700 hover:bg-slate-200 transition-colors active:scale-[0.98]"
@@ -2124,20 +2121,19 @@ function ServisTokoForm({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px', overflowY: 'auto' }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[720px] px-4 sm:px-6 pb-10">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="mx-auto max-w-[720px] px-4 pb-8 sm:px-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             <ArrowLeft size={18} />
           </motion.button>
-          <h2 className="font-display text-[32px] text-slate-900 leading-tight">Servis Toko Sendiri</h2>
+          <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Servis Toko Sendiri</h2>
         </div>
 
         <motion.div
@@ -2146,7 +2142,7 @@ function ServisTokoForm({
           className="flex flex-col gap-4"
         >
           {/* Section 1: Pilih Unit HP */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-1">Pilih Unit HP</h3>
             <p className="text-[13px] text-slate-500 mb-4">Pilih unit READY dari stok toko.</p>
 
@@ -2161,16 +2157,16 @@ function ServisTokoForm({
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-center justify-between"
+                  className="mb-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[14px] font-semibold text-slate-900">{selectedUnit.model} &middot; {selectedUnit.capacity}</p>
                     <p className="text-[12px] text-slate-500">{selectedUnit.condition} &middot; {selectedUnit.color || '—'} &middot; BH: {selectedUnit.batteryHealth}%</p>
-                    <p className="font-mono text-[11px] text-slate-400">{selectedUnit.imei} &middot; {selectedUnit.stkId}</p>
+                    <p className="break-all font-mono text-[11px] text-slate-400">{selectedUnit.imei} &middot; {selectedUnit.stkId}</p>
                   </div>
                   <button
                     onClick={() => setSelectedUnit(null)}
-                    className="h-7 w-7 rounded-full bg-amber-200/60 flex items-center justify-center text-amber-700 hover:bg-amber-200"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center self-end rounded-full bg-amber-200/60 text-amber-700 hover:bg-amber-200 sm:self-auto"
                   >
                     <X size={14} />
                   </button>
@@ -2202,13 +2198,13 @@ function ServisTokoForm({
 
             {browseTab === 'cari' ? (
               <div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
                     value={imeiSearch}
                     onChange={(e) => setImeiSearch(e.target.value.replace(/\D/g, '').slice(0, 20))}
                     placeholder="Masukkan IMEI..."
-                    className="flex-1 h-10 rounded-xl border border-slate-300 px-4 text-[14px] font-mono focus:outline-none focus:border-teal-500"
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[14px] font-mono focus:outline-none focus:border-teal-500"
                   />
                   <button
                     onClick={() => {
@@ -2259,7 +2255,7 @@ function ServisTokoForm({
                           : 'border-slate-200 bg-white hover:bg-slate-50'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-[13px] font-semibold text-slate-900">{unit.model} &middot; {unit.capacity}</p>
@@ -2270,14 +2266,14 @@ function ServisTokoForm({
                             ))}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
-                            <span className="font-mono">{unit.stkId}</span>
+                            <span className="break-all font-mono">{unit.stkId}</span>
                             <span>{unit.color || '—'}</span>
-                            <span className="font-mono">{unit.imei}</span>
+                            <span className="break-all font-mono">{unit.imei}</span>
                             <span>BH: {unit.batteryHealth}%</span>
                             <span>Masuk: {formatDate(unit.entryDate)}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 ml-2">
+                        <div className="flex flex-col gap-2 sm:ml-2 sm:flex-row sm:items-center">
                           {unit.warnings.length > 0 && (
                             <button
                               onClick={() => {
@@ -2285,14 +2281,14 @@ function ServisTokoForm({
                                 const enriched = { ...unit, warnings: [] as string[], color: unit.color || 'Black' };
                                 setSelectedUnit(enriched);
                               }}
-                              className="flex items-center gap-1 rounded-lg bg-purple-50 px-2.5 py-1.5 text-[11px] font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+                              className="flex items-center justify-center gap-1 rounded-lg bg-purple-50 px-2.5 py-1.5 text-[11px] font-medium text-purple-700 hover:bg-purple-100 transition-colors"
                             >
                               <Edit3 size={11} /> Enrich
                             </button>
                           )}
                           <button
                             onClick={() => setSelectedUnit(unit)}
-                            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                            className={`flex items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-all ${
                               selectedUnit?.stkId === unit.stkId
                                 ? 'bg-amber-500 text-white'
                                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -2315,7 +2311,7 @@ function ServisTokoForm({
           </div>
 
           {/* Section 2: Keluhan & Diagnosa */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Keluhan &amp; Diagnosa</h3>
             <div className="flex flex-col gap-4">
               <div>
@@ -2350,7 +2346,7 @@ function ServisTokoForm({
           </div>
 
           {/* Section 3: Tukang & Biaya */}
-          <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+          <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
             <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Tukang &amp; Biaya</h3>
             <div className="flex flex-col gap-4">
               <div>
@@ -2394,7 +2390,7 @@ function ServisTokoForm({
             {submitError && (
               <p className="text-[12px] text-rose-500">{submitError}</p>
             )}
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <button
               onClick={onClose}
               className="flex-1 rounded-xl bg-slate-100 py-3 text-[14px] font-semibold text-slate-700 hover:bg-slate-200 transition-colors active:scale-[0.98]"
@@ -2519,11 +2515,10 @@ function KlaimGaransiForm({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px', overflowY: 'auto' }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[720px] px-4 sm:px-6 pb-10">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="mx-auto max-w-[720px] px-4 pb-8 sm:px-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -2531,11 +2526,11 @@ function KlaimGaransiForm({
               if (step === 2) { setStep(1); setFoundRecord(null); setImeiInput(''); }
               else onClose();
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
           >
             <ArrowLeft size={18} />
           </motion.button>
-          <h2 className="font-display text-[32px] text-slate-900 leading-tight">Klaim Garansi</h2>
+          <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Klaim Garansi</h2>
         </div>
 
         {/* Step indicator */}
@@ -2556,14 +2551,14 @@ function KlaimGaransiForm({
         >
           {step === 1 ? (
             /* Step 1: Cek IMEI */
-            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
               <h3 className="text-[18px] font-semibold text-slate-900 mb-1">Cek IMEI</h3>
               <p className="text-[13px] text-slate-500 mb-4">Masukkan IMEI unit yang mau klaim garansi.</p>
 
               <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
                 IMEI (10-20 DIGIT) *
               </label>
-              <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="text"
                   value={imeiInput}
@@ -2572,7 +2567,7 @@ function KlaimGaransiForm({
                     setImeiError(false);
                   }}
                   placeholder="352345678901234"
-                  className={`flex-1 h-11 rounded-xl border px-4 text-[14px] font-mono outline-none transition-all duration-200 ${
+                  className={`h-11 min-w-0 flex-1 rounded-xl border px-4 text-[14px] font-mono outline-none transition-all duration-200 ${
                     imeiError ? 'border-rose-400 ring-2 ring-rose-100' : 'border-slate-300 focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10'
                   }`}
                 />
@@ -2611,7 +2606,7 @@ function KlaimGaransiForm({
             <>
               {/* Data Konsumen (auto-populated) */}
               {foundRecord && (
-                <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+                <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
                   <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Data Konsumen</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-lg bg-slate-50 p-3">
@@ -2636,7 +2631,7 @@ function KlaimGaransiForm({
 
               {/* Detail HP (auto-populated) */}
               {foundRecord && (
-                <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+                <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
                   <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Detail HP</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-lg bg-slate-50 p-3">
@@ -2668,7 +2663,7 @@ function KlaimGaransiForm({
               )}
 
               {/* Keluhan & Diagnosa */}
-              <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
                 <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Keluhan &amp; Diagnosa</h3>
                 <div className="flex flex-col gap-4">
                   <div>
@@ -2702,7 +2697,7 @@ function KlaimGaransiForm({
               </div>
 
               {/* Tukang & Biaya */}
-              <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-card">
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
                 <h3 className="text-[18px] font-semibold text-slate-900 mb-4">Tukang &amp; Biaya</h3>
                 <div className="flex flex-col gap-4">
                   <div>
@@ -2729,7 +2724,7 @@ function KlaimGaransiForm({
                 {submitError && (
                   <p className="text-[12px] text-rose-500">{submitError}</p>
                 )}
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                 <button
                   onClick={() => setStep(1)}
                   className="flex-1 rounded-xl bg-slate-100 py-3 text-[14px] font-semibold text-slate-700 hover:bg-slate-200 transition-colors active:scale-[0.98]"
@@ -2841,41 +2836,40 @@ function TechnicianManagerView({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="fixed inset-0 z-40 bg-off-white"
-      style={{ paddingTop: '88px', paddingBottom: '96px', overflowY: 'auto' }}
+      className="fixed inset-0 z-40 overflow-y-auto bg-off-white pb-20 pt-[76px] sm:pb-24 sm:pt-[88px]"
     >
-      <div className="mx-auto max-w-[720px] px-4 sm:px-6 pb-10">
-        <div className="flex items-center gap-4 mb-6">
+      <div className="mx-auto max-w-[720px] px-4 pb-8 sm:px-6">
+        <div className="mb-5 flex items-start gap-3 sm:mb-6 sm:items-center sm:gap-4">
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h2 className="font-display text-[32px] text-slate-900 leading-tight">Kelola Teknisi</h2>
+            <h2 className="font-display text-[28px] text-slate-900 leading-tight sm:text-[32px]">Kelola Teknisi</h2>
             <p className="text-[13px] text-slate-500">Tambah atau edit nama teknisi untuk form servis.</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
           <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
             Nama Teknisi Baru
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={draftName}
               onChange={(event) => {
                 setDraftName(event.target.value);
                 setError(null);
               }}
-              className="h-11 flex-1 rounded-xl border border-slate-300 px-4 text-[14px] outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[14px] outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
               placeholder="Nama teknisi"
             />
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="rounded-xl bg-teal-500 px-5 text-[14px] font-semibold text-white hover:bg-teal-600 disabled:opacity-60"
+              className="h-11 rounded-xl bg-teal-500 px-5 text-[14px] font-semibold text-white hover:bg-teal-600 disabled:opacity-60"
             >
               Tambah
             </button>
@@ -2902,17 +2896,17 @@ function TechnicianManagerView({
               return (
                 <div
                   key={row.id}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card"
+                  className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-card sm:flex-row sm:items-center"
                 >
-                  <User size={17} className="text-slate-400" />
+                  <User size={17} className="shrink-0 text-slate-400" />
                   {editing ? (
                     <input
                       value={editingName}
                       onChange={(event) => setEditingName(event.target.value)}
-                      className="h-10 flex-1 rounded-xl border border-slate-300 px-3 text-[14px] outline-none focus:border-teal-500"
+                      className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-[14px] outline-none focus:border-teal-500"
                     />
                   ) : (
-                    <span className="flex-1 text-[14px] font-semibold text-slate-800">{row.name}</span>
+                    <span className="min-w-0 flex-1 text-[14px] font-semibold text-slate-800">{row.name}</span>
                   )}
                   {editing ? (
                     <>
@@ -2940,7 +2934,7 @@ function TechnicianManagerView({
                         setEditingName(row.name);
                         setError(null);
                       }}
-                      className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-200"
+                      className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-200"
                     >
                       <Edit3 size={12} />
                       Edit
@@ -3007,20 +3001,20 @@ export default function Servis() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, ease: easeOutExpo }}
-              className="mb-8"
+              className="mb-6 sm:mb-8"
             >
-              <div className="flex items-center gap-3 mb-3">
+              <div className="mb-3 flex items-center gap-3">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/')}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
                 >
                   <ArrowLeft size={18} />
                 </motion.button>
-                <h1 className="font-display text-[40px] text-slate-900 leading-tight">Servis</h1>
+                <h1 className="font-display text-[34px] text-slate-900 leading-tight sm:text-[40px]">Servis</h1>
               </div>
-              <p className="text-[14px] text-slate-500 ml-12">Pilih mode untuk lanjut</p>
+              <p className="ml-12 text-[13px] text-slate-500 sm:text-[14px]">Pilih mode untuk lanjut</p>
             </motion.div>
 
             {/* Greeting */}
@@ -3028,12 +3022,12 @@ export default function Servis() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2, ease: easeOutExpo }}
-              className="mb-10"
+              className="mb-7 sm:mb-10"
             >
-              <h2 className="font-display text-[32px] text-slate-900 leading-tight italic">
+              <h2 className="font-display text-[27px] text-slate-900 leading-tight italic sm:text-[32px]">
                 Mau ngapain hari ini?
               </h2>
-              <p className="mt-2 text-[14px] text-slate-500 max-w-[560px] leading-relaxed">
+              <p className="mt-2 max-w-[560px] text-[13px] leading-relaxed text-slate-500 sm:text-[14px]">
                 Pilih salah satu mode di bawah. Servis dari toko sendiri otomatis bareng cascade stok, klaim garansi pakai lookup IMEI.
               </p>
             </motion.div>
