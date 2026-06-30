@@ -29,6 +29,7 @@ import { STOCK_STATUSES, type StockStatus } from '@/services/stockCore';
 interface AgentDefectImportDialogProps {
   open: boolean;
   agents: Agent[];
+  initialAgentId?: string;
   onClose: () => void;
   onImported: (batchId: string) => Promise<void> | void;
 }
@@ -89,6 +90,7 @@ function RowStatusBadges({ row }: { row: ParsedAgentDefectStockRow }) {
 export default function AgentDefectImportDialog({
   open,
   agents,
+  initialAgentId,
   onClose,
   onImported,
 }: AgentDefectImportDialogProps) {
@@ -105,13 +107,14 @@ export default function AgentDefectImportDialog({
 
   useEffect(() => {
     if (!open) return;
-    setSelectedAgentId((current) => current || agents[0]?.id || '');
+    const initialAgentExists = agents.some((agent) => agent.id === initialAgentId);
+    setSelectedAgentId(initialAgentExists ? initialAgentId ?? '' : agents[0]?.id || '');
     setDefaultStatus('READY');
     setFile(null);
     setPreview(null);
     setError('');
     setDoneBatchId('');
-  }, [agents, open]);
+  }, [agents, initialAgentId, open]);
 
   async function parseFile(nextFile: File, status: StockStatus) {
     setParsing(true);

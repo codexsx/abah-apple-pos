@@ -258,6 +258,44 @@ describe('getTransactionDisplayDetail', () => {
     expect(detail).not.toContain('"items"');
   });
 
+  it('formats legacy expense JSON detail without leaking raw keys', () => {
+    const detail = getTransactionDisplayDetail({
+      type: 'Pengeluaran',
+      detail: JSON.stringify({
+        kategori: 'Operasional Toko',
+        tanggal: '2026-06-30',
+        keterangan: 'Total Gaji Tanggal 1',
+        referensi: '',
+        cash: 0,
+        transfer: 3_000_000,
+      }),
+    });
+
+    expect(detail).toContain('Operasional Toko');
+    expect(detail).toContain('Total Gaji Tanggal 1');
+    expect(detail).toContain('Transfer Rp 3.000.000');
+    expect(detail).not.toContain('"kategori"');
+    expect(detail).not.toContain('"transfer"');
+  });
+
+  it('formats legacy other-income JSON detail without leaking raw keys', () => {
+    const detail = getTransactionDisplayDetail({
+      type: 'Pemasukan Lain',
+      detail: JSON.stringify({
+        jenis: 'Tambahan Modal',
+        keterangan: 'Setoran owner',
+        cashMasuk: 500_000,
+        transferMasuk: 1_000_000,
+      }),
+    });
+
+    expect(detail).toContain('Tambahan Modal');
+    expect(detail).toContain('Setoran owner');
+    expect(detail).toContain('Cash Rp 500.000');
+    expect(detail).toContain('Transfer Rp 1.000.000');
+    expect(detail).not.toContain('"jenis"');
+  });
+
   it('leaves legacy plain-text sale detail unchanged', () => {
     expect(
       getTransactionDisplayDetail(makeTx({ detail: 'iPhone 14 Pro 128GB Second iBox' })),

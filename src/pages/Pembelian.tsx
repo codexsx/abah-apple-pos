@@ -14,8 +14,10 @@ import {
   AlertTriangle,
   Check,
   X,
+  Upload,
 } from 'lucide-react';
 import AccountPicker from '@/components/AccountPicker';
+import AgentDefectImportDialog from '@/components/AgentDefectImportDialog';
 import {
   getAccountPickerData,
   type AccountWithBalance,
@@ -223,6 +225,7 @@ export default function Pembelian() {
   const [cashAmount, setCashAmount] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
   const [useAgentDebt, setUseAgentDebt] = useState(false);
+  const [showAgentImport, setShowAgentImport] = useState(false);
 
   /* -- Account selection (Phase 2 ledger wiring) -- */
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
@@ -251,6 +254,14 @@ export default function Pembelian() {
   /* -- Live stock IMEIs for the "sudah ada di stok" duplicate check -- */
   const [existingImeis, setExistingImeis] = useState<Set<string>>(new Set());
 
+  const refreshExistingImeis = useCallback(async () => {
+    const items = await getStockItems();
+    const imeis = items
+      .map((s) => s.imei)
+      .filter((i): i is string => !!i);
+    setExistingImeis(new Set(imeis));
+  }, []);
+
   useEffect(() => {
     let active = true;
     getStockItems()
@@ -262,9 +273,8 @@ export default function Pembelian() {
         setExistingImeis(new Set(imeis));
       })
       .catch(() => {
-        // Fallback: keep an empty set so the page still works if the
-        // stock fetch fails (no entered IMEI is wrongly flagged as existing).
-        if (active) setExistingImeis(new Set());
+        if (!active) return;
+        setExistingImeis(new Set());
       });
     return () => {
       active = false;
@@ -1110,6 +1120,15 @@ export default function Pembelian() {
                 {!agentsLoading && !agentsError && agents.length === 0 && (
                   <p className="mt-2 text-[12px] text-slate-500">Tambahkan agen dulu dari menu Agen.</p>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowAgentImport(true)}
+                  disabled={!selectedAgentId || agentsLoading || Boolean(agentsError)}
+                  className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 text-[13px] font-semibold text-teal-700 transition-colors hover:bg-teal-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <Upload size={15} />
+                  Import Excel Minus
+                </button>
               </>
             ) : (
               <>
@@ -2065,6 +2084,23 @@ export default function Pembelian() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AgentDefectImportDialog
+        open={showAgentImport}
+        agents={agents}
+        initialAgentId={selectedAgentId}
+        onClose={() => setShowAgentImport(false)}
+        onImported={async () => {
+          try {
+            await refreshExistingImeis();
+          } catch (err) {
+            console.error('[Pembelian] refresh stock after import error:', err);
+          }
+          setShowAgentImport(false);
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 4000);
+        }}
+      />
 
       {/* Dropdown click-outside handler */}
       {openDropdown && (

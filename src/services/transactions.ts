@@ -222,6 +222,60 @@ function formatJsonKindDisplayDetail(rawDetail: string): string | null {
   return null;
 }
 
+function formatLegacyTransactionJsonDetail(
+  type: TransactionType,
+  rawDetail: string,
+): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawDetail);
+  } catch {
+    return null;
+  }
+
+  const root = asRecord(parsed);
+  if (!root) return null;
+
+  if (type === 'Pengeluaran') {
+    const sections = compactParts([
+      asString(root.kategori) || asString(root.category),
+      asString(root.keterangan) || asString(root.note),
+      asString(root.referensi) || asString(root.reference),
+    ]);
+    const paymentParts: string[] = [];
+    const cash = asNumber(root.cash);
+    const transfer = asNumber(root.transfer);
+    if (cash > 0) paymentParts.push(`Cash ${formatIdr(cash)}`);
+    if (transfer > 0) paymentParts.push(`Transfer ${formatIdr(transfer)}`);
+    return compactParts([sections, paymentParts.join(' + ')]) || null;
+  }
+
+  if (type === 'Pemasukan Lain') {
+    const sections = compactParts([
+      asString(root.jenis) || asString(root.source),
+      asString(root.keterangan) || asString(root.note),
+      asString(root.referensi) || asString(root.reference),
+    ]);
+    const paymentParts: string[] = [];
+    const cash = asNumber(root.cashMasuk ?? root.cash);
+    const transfer = asNumber(root.transferMasuk ?? root.transfer);
+    if (cash > 0) paymentParts.push(`Cash ${formatIdr(cash)}`);
+    if (transfer > 0) paymentParts.push(`Transfer ${formatIdr(transfer)}`);
+    const itemLabels = (Array.isArray(root.items) ? root.items : [])
+      .map((item) => {
+        const row = asRecord(item);
+        if (!row) return '';
+        const name = asString(row.name);
+        const price = asNumber(row.price);
+        return compactParts([name, price > 0 ? formatIdr(price) : '']);
+      })
+      .filter(Boolean);
+    return compactParts([sections, itemLabels.join(', '), paymentParts.join(' + ')]) || null;
+  }
+
+  return null;
+}
+
 export function getTransactionDisplayDetail(
   tx: Pick<Transaction, 'type' | 'detail'>,
 ): string {
@@ -237,7 +291,9 @@ export function getTransactionDisplayDetail(
   }
 
   if (tx.type !== 'Penjualan') {
-    return formatJsonKindDisplayDetail(rawDetail) ?? rawDetail;
+    return formatJsonKindDisplayDetail(rawDetail)
+      ?? formatLegacyTransactionJsonDetail(tx.type, rawDetail)
+      ?? rawDetail;
   }
 
   try {
@@ -261,7 +317,9 @@ export function getTransactionDisplayDetail(
 
     return sections.length > 0 ? sections.join(' - ') : rawDetail;
   } catch {
-    return formatJsonKindDisplayDetail(rawDetail) ?? rawDetail;
+    return formatJsonKindDisplayDetail(rawDetail)
+      ?? formatLegacyTransactionJsonDetail(tx.type, rawDetail)
+      ?? rawDetail;
   }
 }
 
