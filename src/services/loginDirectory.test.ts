@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
     from: vi.fn(),
     select: vi.fn(),
     not: vi.fn(),
+    eq: vi.fn(),
   };
   return { chain };
 });
@@ -21,13 +22,14 @@ beforeEach(() => {
   const { chain } = mocks;
   chain.from.mockClear().mockReturnValue(chain);
   chain.select.mockClear().mockReturnValue(chain);
-  chain.not.mockReset();
+  chain.not.mockClear().mockReturnValue(chain);
+  chain.eq.mockReset();
 });
 
 describe('loginDirectory service', () => {
   it('loads only public login directory fields and sorts by role priority', async () => {
     const { chain } = mocks;
-    chain.not.mockResolvedValue({
+    chain.eq.mockResolvedValue({
       data: [
         {
           id: 'tech-id',
@@ -70,9 +72,10 @@ describe('loginDirectory service', () => {
 
     expect(chain.from).toHaveBeenCalledWith('profiles');
     expect(chain.select).toHaveBeenCalledWith(
-      'id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom',
+      'id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom, is_hidden_owner',
     );
     expect(chain.not).toHaveBeenCalledWith('username', 'is', null);
+    expect(chain.eq).toHaveBeenCalledWith('is_hidden_owner', false);
     expect(accounts).toEqual([
       {
         id: 'manager-id',
@@ -101,7 +104,7 @@ describe('loginDirectory service', () => {
 
   it('throws when Supabase returns an error', async () => {
     const { chain } = mocks;
-    chain.not.mockResolvedValue({ data: null, error: new Error('boom') });
+    chain.eq.mockResolvedValue({ data: null, error: new Error('boom') });
 
     await expect(getLoginAccounts()).rejects.toThrow(/boom/);
   });

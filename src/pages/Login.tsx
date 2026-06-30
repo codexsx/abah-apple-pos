@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
   motion,
   useMotionValue,
@@ -290,6 +290,7 @@ function AccountCard({
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(DEFAULT_COMPANY_PROFILE);
   const [accounts, setAccounts] = useState<LoginAccount[]>([]);
@@ -319,7 +320,12 @@ export default function Login() {
     () => accounts.find((account) => account.id === selectedAccountId) ?? accounts[0] ?? null,
     [accounts, selectedAccountId],
   );
-  const shouldUseManualLogin = !isDirectoryLoading && accounts.length === 0;
+  const manualLoginUnlocked = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('manual') === '1';
+  }, [location.search]);
+  const shouldUseManualLogin = manualLoginUnlocked || (!isDirectoryLoading && accounts.length === 0);
+  const activeAccount = shouldUseManualLogin ? null : selectedAccount;
   const featureCards = useMemo(
     () => [
       { label: companyProfile.login_feature_one_label, icon: <ShoppingBag size={15} /> },
@@ -447,7 +453,9 @@ export default function Login() {
     e.preventDefault();
     setError('');
 
-    const loginIdentifier = selectedAccount?.username || manualIdentifier.trim();
+    const loginIdentifier = shouldUseManualLogin
+      ? manualIdentifier.trim()
+      : selectedAccount?.username || manualIdentifier.trim();
     if (!loginIdentifier) {
       setError('Pilih akun terlebih dahulu.');
       return;
@@ -587,7 +595,7 @@ export default function Login() {
                   <AccountCard
                     key={account.id}
                     account={account}
-                    active={selectedAccount?.id === account.id}
+                    active={!shouldUseManualLogin && selectedAccount?.id === account.id}
                     onSelect={() => chooseAccount(account)}
                   />
                 ))}
@@ -606,15 +614,15 @@ export default function Login() {
             <div className="flex h-full flex-col">
               <div className="mb-5 rounded-[22px] border border-slate-100 bg-slate-50/80 p-4 sm:rounded-[24px]">
                 <p className="mb-3 text-[10px] font-semibold uppercase text-slate-500 sm:text-[11px]">Akun Aktif</p>
-                {selectedAccount ? (
+                {activeAccount ? (
                   <div className="flex items-center gap-3">
-                    <AccountAvatar account={selectedAccount} size="md" />
+                    <AccountAvatar account={activeAccount} size="md" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[17px] font-semibold text-slate-950 sm:text-[18px]">
-                        {selectedAccount.name}
+                        {activeAccount.name}
                       </div>
                       <div className="mt-1">
-                        <RoleBadge role={selectedAccount.role} />
+                        <RoleBadge role={activeAccount.role} />
                       </div>
                     </div>
                   </div>

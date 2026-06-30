@@ -45,8 +45,9 @@ function normalizeLoginAccount(row: Partial<LoginAccount>): LoginAccount | null 
 export async function getLoginAccounts(): Promise<LoginAccount[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom')
-    .not('username', 'is', null);
+    .select('id, name, role, initials, username, avatar_url, avatar_crop_x, avatar_crop_y, avatar_zoom, is_hidden_owner')
+    .not('username', 'is', null)
+    .eq('is_hidden_owner', false);
 
   if (error) throw error;
 

@@ -51,9 +51,9 @@ const loginAccounts = [
   },
 ];
 
-function renderLogin() {
+function renderLogin(initialEntries = ['/login']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <Login />
     </MemoryRouter>,
   );
@@ -149,6 +149,20 @@ describe('Login - account directory flow', () => {
 
     await waitFor(() => {
       expect(mocks.signIn).toHaveBeenCalledWith('manualstaff', 'secret-password');
+    });
+  });
+
+  it('allows hidden manual login from the manual query route even when the account directory loads', async () => {
+    const user = userEvent.setup();
+    renderLogin(['/login?manual=1']);
+
+    const identifier = await screen.findByPlaceholderText(/username atau nama@email\.com/i);
+    await user.type(identifier, 'exe14102000@gmail.com');
+    await user.type(screen.getByLabelText(/password/i), 'owner-password');
+    await user.click(screen.getByRole('button', { name: /^login/i }));
+
+    await waitFor(() => {
+      expect(mocks.signIn).toHaveBeenCalledWith('exe14102000@gmail.com', 'owner-password');
     });
   });
 });

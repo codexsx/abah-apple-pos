@@ -21,6 +21,7 @@ const PERMISSION_KEYS = [
 ] as const;
 
 const ROLES = ['MANAJER', 'KASIR', 'TEKNISI'] as const;
+const HIDDEN_OWNER_EMAIL = 'exe14102000@gmail.com';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://abah-apple-pos.vercel.app',
@@ -81,6 +82,10 @@ function resolveLoginEmail(identifier: string, domain = 'gmail.com'): string {
   return u === '' ? '' : `${u}@${domain}`;
 }
 
+function isHiddenOwnerEmail(email: string): boolean {
+  return email.trim().toLowerCase() === HIDDEN_OWNER_EMAIL;
+}
+
 function initials(name: string, username: string): string {
   const base = (name || username || 'U').trim();
   return base.slice(0, 2).toUpperCase() || 'U';
@@ -95,6 +100,17 @@ function sanitizePermissions(raw: unknown): Record<string, boolean> {
     }
   }
   return out;
+}
+
+async function isHiddenOwnerProfile(admin: ReturnType<typeof createClient>, id: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from('profiles')
+    .select('is_hidden_owner')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.is_hidden_owner === true;
 }
 
 Deno.serve(async (req: Request) => {
@@ -156,6 +172,7 @@ Deno.serve(async (req: Request) => {
         const { data: profiles, error } = await admin
           .from('profiles')
           .select('id, username, name, role, permissions, avatar_url')
+          .neq('is_hidden_owner', true)
           .order('role', { ascending: true });
         if (error) throw error;
         return respond({ users: profiles ?? [] });
@@ -176,6 +193,8 @@ Deno.serve(async (req: Request) => {
 
         const email = resolveLoginEmail(username);
         if (!email) return respond({ error: 'Username tidak valid.' }, 400);
+        if (isHiddenOwnerEmail(email))
+          return respond({ error: 'Akun owner utama dibuat langsung dari Supabase.' }, 403);
 
         const { data: created, error } = await admin.auth.admin.createUser({
           email,
@@ -201,6 +220,8 @@ Deno.serve(async (req: Request) => {
       case 'update': {
         const id = String(payload.id ?? '');
         if (!id) return respond({ error: 'ID user wajib.' }, 400);
+        if (await isHiddenOwnerProfile(admin, id))
+          return respond({ error: 'Akun owner utama tidak bisa diedit dari aplikasi.' }, 403);
         const patch: Record<string, unknown> = {};
         if (typeof payload.name === 'string') patch.name = payload.name.trim();
         if (typeof payload.role === 'string') {
@@ -232,6 +253,8 @@ Deno.serve(async (req: Request) => {
         const id = String(payload.id ?? '');
         const password = String(payload.password ?? '');
         if (!id) return respond({ error: 'ID user wajib.' }, 400);
+        if (await isHiddenOwnerProfile(admin, id))
+          return respond({ error: 'Akun owner utama tidak bisa direset dari aplikasi.' }, 403);
         if (password.length < 6)
           return respond({ error: 'Password minimal 6 karakter.' }, 400);
         const { error } = await admin.auth.admin.updateUserById(id, { password });
@@ -244,6 +267,8 @@ Deno.serve(async (req: Request) => {
         if (!id) return respond({ error: 'ID user wajib.' }, 400);
         if (id === callerId)
           return respond({ error: 'Tidak bisa menghapus akun sendiri.' }, 400);
+        if (await isHiddenOwnerProfile(admin, id))
+          return respond({ error: 'Akun owner utama tidak bisa dihapus dari aplikasi.' }, 403);
         const { error } = await admin.auth.admin.deleteUser(id);
         if (error) throw error;
         return respond({ ok: true });
