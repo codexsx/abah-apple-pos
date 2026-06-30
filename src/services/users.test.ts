@@ -78,6 +78,15 @@ describe('users service', () => {
     await expect(listUsers()).rejects.toThrow(/boom/);
   });
 
+  it('maps function fetch failures to an actionable admin function message', async () => {
+    invoke.mockResolvedValue({
+      data: null,
+      error: { message: 'Failed to send a request to the Edge Function' },
+    } as any);
+
+    await expect(listUsers()).rejects.toThrow(/fungsi admin/i);
+  });
+
   it('throws using data.error when the response payload carries an error', async () => {
     invoke.mockResolvedValue({ data: { error: 'denied' }, error: null } as any);
 

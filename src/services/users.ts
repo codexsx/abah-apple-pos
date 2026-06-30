@@ -42,6 +42,9 @@ async function callAdmin(action: string, payload?: Record<string, unknown>) {
     } catch {
       /* ignore body parse failures, keep msg */
     }
+    if (/failed to send a request|failed to fetch|network/i.test(msg)) {
+      msg = 'Gagal menghubungi fungsi admin. Cek koneksi atau konfigurasi domain aplikasi.';
+    }
     throw new Error(msg);
   }
   if (data && (data as any).error) throw new Error(String((data as any).error));

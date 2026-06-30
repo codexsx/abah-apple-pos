@@ -23,6 +23,7 @@ const PERMISSION_KEYS = [
 const ROLES = ['MANAJER', 'KASIR', 'TEKNISI'] as const;
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  'https://abah-apple-pos.vercel.app',
   'https://distributor-agent.vercel.app',
   'https://distributor-agent-muhammaddamiri01-9143s-projects.vercel.app',
   'http://localhost:5173',
