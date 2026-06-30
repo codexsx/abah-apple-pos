@@ -17,8 +17,11 @@ import {
   uploadCompanyLogo,
 } from '@/services/companySettings';
 import {
+  DEFAULT_LOGIN_PAGE_COPY,
   validateCompanyLogoFile,
+  validateLoginPageCopy,
   validateCompanyName,
+  type LoginPageCopy,
 } from '@/services/companySettingsCore';
 
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -63,6 +66,16 @@ export default function CompanySettings() {
   } = useCompanyProfile();
   const [name, setName] = useState(companyProfile.name);
   const [logoUrl, setLogoUrl] = useState<string | null>(companyProfile.logo_url);
+  const [loginCopy, setLoginCopy] = useState<LoginPageCopy>({
+    login_kicker: companyProfile.login_kicker,
+    login_badge_label: companyProfile.login_badge_label,
+    login_headline: companyProfile.login_headline,
+    login_accounts_title: companyProfile.login_accounts_title,
+    login_footer_label: companyProfile.login_footer_label,
+    login_feature_one_label: companyProfile.login_feature_one_label,
+    login_feature_two_label: companyProfile.login_feature_two_label,
+    login_feature_three_label: companyProfile.login_feature_three_label,
+  });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,7 +85,17 @@ export default function CompanySettings() {
   useEffect(() => {
     setName(companyProfile.name);
     setLogoUrl(companyProfile.logo_url);
-  }, [companyProfile.name, companyProfile.logo_url]);
+    setLoginCopy({
+      login_kicker: companyProfile.login_kicker,
+      login_badge_label: companyProfile.login_badge_label,
+      login_headline: companyProfile.login_headline,
+      login_accounts_title: companyProfile.login_accounts_title,
+      login_footer_label: companyProfile.login_footer_label,
+      login_feature_one_label: companyProfile.login_feature_one_label,
+      login_feature_two_label: companyProfile.login_feature_two_label,
+      login_feature_three_label: companyProfile.login_feature_three_label,
+    });
+  }, [companyProfile]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -86,7 +109,8 @@ export default function CompanySettings() {
 
   const shownLogo = previewUrl || logoUrl;
   const nameValidation = validateCompanyName(name);
-  const canSave = !saving && nameValidation.ok;
+  const loginCopyValidation = validateLoginPageCopy(loginCopy);
+  const canSave = !saving && nameValidation.ok && loginCopyValidation.ok;
 
   const fileLabel = useMemo(() => {
     if (selectedFile) return selectedFile.name;
@@ -112,6 +136,12 @@ export default function CompanySettings() {
     setSelectedFile(file);
   };
 
+  const updateLoginCopy = (key: keyof LoginPageCopy, value: string) => {
+    setLoginCopy((current) => ({ ...current, [key]: value }));
+    setError('');
+    setSuccess('');
+  };
+
   const handleRemoveLogo = () => {
     setSelectedFile(null);
     setLogoUrl(null);
@@ -125,6 +155,11 @@ export default function CompanySettings() {
       setError(validation.message);
       return;
     }
+    const copyValidation = validateLoginPageCopy(loginCopy);
+    if (!copyValidation.ok) {
+      setError(copyValidation.message);
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -134,6 +169,7 @@ export default function CompanySettings() {
       const saved = await saveCompanyProfile({
         name,
         logo_url: nextLogoUrl,
+        ...loginCopy,
       });
       setSelectedFile(null);
       setLogoUrl(saved.logo_url);
@@ -241,6 +277,111 @@ export default function CompanySettings() {
               </div>
             </div>
 
+            <div className="rounded-[28px] border border-slate-100 bg-slate-50/70 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-[15px] font-semibold text-slate-950">Teks Halaman Login</h3>
+                  <p className="text-[12px] text-slate-500">Teks ini muncul sebelum staff masuk aplikasi.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginCopy(DEFAULT_LOGIN_PAGE_COPY);
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Reset
+                </button>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                    Label Atas
+                  </span>
+                  <input
+                    value={loginCopy.login_kicker}
+                    onChange={(event) => updateLoginCopy('login_kicker', event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                    maxLength={40}
+                    placeholder="Smart POS"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                    Badge
+                  </span>
+                  <input
+                    value={loginCopy.login_badge_label}
+                    onChange={(event) => updateLoginCopy('login_badge_label', event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                    maxLength={40}
+                    placeholder="Staff Access"
+                  />
+                </label>
+
+                <label className="block sm:col-span-2">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                    Headline
+                  </span>
+                  <textarea
+                    value={loginCopy.login_headline}
+                    onChange={(event) => updateLoginCopy('login_headline', event.target.value)}
+                    className="min-h-24 w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                    maxLength={120}
+                    placeholder="Masuk cepat untuk operasional toko."
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                    Judul Daftar Akun
+                  </span>
+                  <input
+                    value={loginCopy.login_accounts_title}
+                    onChange={(event) => updateLoginCopy('login_accounts_title', event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                    maxLength={60}
+                    placeholder="Staff Terdaftar"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                    Footer Login
+                  </span>
+                  <input
+                    value={loginCopy.login_footer_label}
+                    onChange={(event) => updateLoginCopy('login_footer_label', event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                    maxLength={60}
+                    placeholder="Sixcode Smart OS"
+                  />
+                </label>
+
+                {[
+                  ['login_feature_one_label', 'Shortcut 1'],
+                  ['login_feature_two_label', 'Shortcut 2'],
+                  ['login_feature_three_label', 'Shortcut 3'],
+                ].map(([key, label]) => (
+                  <label className="block" key={key}>
+                    <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">
+                      {label}
+                    </span>
+                    <input
+                      value={loginCopy[key as keyof LoginPageCopy]}
+                      onChange={(event) => updateLoginCopy(key as keyof LoginPageCopy, event.target.value)}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      maxLength={24}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {error && (
               <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-[13px] font-medium text-rose-700">
                 {error}
@@ -292,14 +433,14 @@ export default function CompanySettings() {
                   <p className="truncate text-[18px] font-semibold tracking-tight text-slate-950">
                     {name || 'Sixcode Smart OS'}
                   </p>
-                  <p className="text-[12px] font-medium text-blue-900/60">Smart Retail OS</p>
+                  <p className="text-[12px] font-medium text-blue-900/60">{loginCopy.login_kicker}</p>
                 </div>
               </div>
               <div className="rounded-[28px] bg-gradient-to-br from-blue-500 via-blue-600 to-blue-800 p-4 text-white shadow-xl shadow-blue-700/20">
                 <div className="mb-8 flex items-start justify-between">
                   <div>
-                    <p className="text-[12px] text-blue-100">Company Profile</p>
-                    <p className="mt-1 text-[24px] font-semibold leading-tight">{name || 'Sixcode Smart OS'}</p>
+                    <p className="text-[12px] text-blue-100">{loginCopy.login_badge_label}</p>
+                    <p className="mt-1 text-[24px] font-semibold leading-tight">{loginCopy.login_headline}</p>
                   </div>
                   <LogoMark url={shownLogo} name={name} size="small" />
                 </div>

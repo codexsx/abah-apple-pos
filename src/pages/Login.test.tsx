@@ -69,6 +69,14 @@ beforeEach(() => {
     id: 'company_profile',
     name: 'Abah Apple POS',
     logo_url: 'https://cdn.test/logo.gif',
+    login_kicker: 'Retail OS',
+    login_badge_label: 'Team Login',
+    login_headline: 'Buka operasional.',
+    login_accounts_title: 'Pilih Staff',
+    login_footer_label: 'Abah Apple',
+    login_feature_one_label: 'Jual',
+    login_feature_two_label: 'Stok',
+    login_feature_three_label: 'Servis',
     updated_at: null,
   });
   mocks.getLoginAccounts.mockResolvedValue(loginAccounts);
@@ -100,7 +108,11 @@ describe('Login - account directory flow', () => {
   it('renders company branding and registered account cards', async () => {
     renderLogin();
 
-    expect(await screen.findAllByText('Abah Apple POS')).toHaveLength(2);
+    expect(await screen.findByText('Abah Apple POS')).toBeInTheDocument();
+    expect(screen.getByText('Retail OS')).toBeInTheDocument();
+    expect(screen.getByText('Buka operasional.')).toBeInTheDocument();
+    expect(screen.getByText('Pilih Staff')).toBeInTheDocument();
+    expect(screen.getByText('Abah Apple')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /abah apple pos logo/i })).toHaveAttribute(
       'src',
       'https://cdn.test/logo.gif',

@@ -1,15 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_LOGIN_PAGE_COPY,
   DEFAULT_COMPANY_PROFILE,
   isAllowedCompanyLogoMime,
   normalizeCompanyProfile,
+  normalizeLoginPageCopy,
   validateCompanyLogoFile,
+  validateLoginPageCopy,
 } from './companySettingsCore';
 
 describe('companySettingsCore', () => {
   it('uses Sixcode Smart OS as the default company profile', () => {
     expect(DEFAULT_COMPANY_PROFILE.name).toBe('Sixcode Smart OS');
     expect(normalizeCompanyProfile(null).name).toBe('Sixcode Smart OS');
+    expect(normalizeCompanyProfile(null).login_headline).toBe('Masuk cepat untuk operasional toko.');
+  });
+
+  it('normalizes login page copy with defaults for blank values', () => {
+    const copy = normalizeLoginPageCopy({
+      login_kicker: '',
+      login_headline: ' Halo toko ',
+    });
+
+    expect(copy.login_kicker).toBe(DEFAULT_LOGIN_PAGE_COPY.login_kicker);
+    expect(copy.login_headline).toBe('Halo toko');
+  });
+
+  it('rejects overly long login page copy', () => {
+    const result = validateLoginPageCopy({
+      login_headline: 'x'.repeat(121),
+    });
+
+    expect(result.ok).toBe(false);
   });
 
   it('allows animated gif and common raster image logo formats', () => {

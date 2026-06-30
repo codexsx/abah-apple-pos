@@ -60,13 +60,33 @@ describe('companySettings service', () => {
   it('upserts the company profile row', async () => {
     const { chain } = mocks;
     chain.single.mockResolvedValue({
-      data: { id: COMPANY_PROFILE_ID, name: 'Toko Adam', logo_url: 'https://logo.test/a.png' },
+      data: {
+        id: COMPANY_PROFILE_ID,
+        name: 'Toko Adam',
+        logo_url: 'https://logo.test/a.png',
+        login_kicker: 'POS Toko',
+        login_badge_label: 'Tim Abah',
+        login_headline: 'Masuk ke toko.',
+        login_accounts_title: 'Pilih Staff',
+        login_footer_label: 'Abah Apple',
+        login_feature_one_label: 'Jual',
+        login_feature_two_label: 'Stok',
+        login_feature_three_label: 'Servis',
+      },
       error: null,
     });
 
     const result = await saveCompanyProfile({
       name: 'Toko Adam',
       logo_url: 'https://logo.test/a.png',
+      login_kicker: 'POS Toko',
+      login_badge_label: 'Tim Abah',
+      login_headline: 'Masuk ke toko.',
+      login_accounts_title: 'Pilih Staff',
+      login_footer_label: 'Abah Apple',
+      login_feature_one_label: 'Jual',
+      login_feature_two_label: 'Stok',
+      login_feature_three_label: 'Servis',
     });
 
     expect(chain.upsert).toHaveBeenCalledWith(
@@ -74,10 +94,13 @@ describe('companySettings service', () => {
         id: COMPANY_PROFILE_ID,
         name: 'Toko Adam',
         logo_url: 'https://logo.test/a.png',
+        login_headline: 'Masuk ke toko.',
+        login_accounts_title: 'Pilih Staff',
       }),
       { onConflict: 'id' },
     );
     expect(result.name).toBe('Toko Adam');
+    expect(result.login_footer_label).toBe('Abah Apple');
   });
 
   it('uploads the logo with the original mime type so gif/png files are preserved', async () => {

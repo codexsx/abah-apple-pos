@@ -2,9 +2,12 @@ import { supabase } from '@/lib/supabase';
 import {
   COMPANY_PROFILE_ID,
   normalizeCompanyProfile,
+  normalizeLoginPageCopy,
   validateCompanyLogoFile,
+  validateLoginPageCopy,
   validateCompanyName,
   type CompanyProfile,
+  type LoginPageCopy,
 } from './companySettingsCore';
 
 const COMPANY_SETTINGS_TABLE = 'company_settings';
@@ -33,14 +36,19 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
 export async function saveCompanyProfile(input: {
   name: string;
   logo_url?: string | null;
-}): Promise<CompanyProfile> {
+} & Partial<LoginPageCopy>): Promise<CompanyProfile> {
   const validation = validateCompanyName(input.name);
   if (!validation.ok) throw new Error(validation.message);
+  const loginCopyValidation = validateLoginPageCopy(input);
+  if (!loginCopyValidation.ok) throw new Error(loginCopyValidation.message);
+
+  const loginCopy = normalizeLoginPageCopy(input);
 
   const payload = {
     id: COMPANY_PROFILE_ID,
     name: input.name.trim(),
     logo_url: input.logo_url ?? null,
+    ...loginCopy,
     updated_at: new Date().toISOString(),
   };
 
