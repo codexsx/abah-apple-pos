@@ -19,6 +19,8 @@ import {
   AlertCircle,
   RefreshCw,
   History,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,8 +29,9 @@ import {
   type Transaction,
   type TransactionWithStockDetails,
 } from '@/services/transactions';
-import { getAccounts } from '@/services/accounts';
+import { getAccounts, type AccountWithBalance } from '@/services/accounts';
 import { getStockItems, type StockItem } from '@/services/stock';
+import { recordTransactionWithPostings } from '@/services/postings';
 import {
   filterByPeriod,
   computeRevenue,
@@ -46,6 +49,15 @@ import {
 /* ------------------------------------------------------------------ */
 function formatRupiah(n: number): string {
   return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+}
+
+function digitsToNumber(value: string): number {
+  return Number(value.replace(/\D/g, '')) || 0;
+}
+
+function formatRupiahInput(value: string): string {
+  const n = digitsToNumber(value);
+  return n > 0 ? n.toLocaleString('id-ID') : '';
 }
 
 /** Zero-pad a number to two digits. */
@@ -116,6 +128,8 @@ interface ClosingSummary {
   txCount: number;
   [key: string]: number;
 }
+
+type ClosingAdjustmentType = 'plus' | 'minus';
 
 function isSameLocalDay(iso: string | null | undefined, ref: Date): boolean {
   if (!iso) return false;
@@ -254,6 +268,7 @@ export default function TutupHarian() {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [cashBankTotal, setCashBankTotal] = useState(0);
   const [cashStoreTotal, setCashStoreTotal] = useState(0);
+  const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
   const [history, setHistory] = useState<DailyClosing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -262,6 +277,13 @@ export default function TutupHarian() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [adjustmentType, setAdjustmentType] = useState<ClosingAdjustmentType>('plus');
+  const [adjustmentAccountId, setAdjustmentAccountId] = useState('');
+  const [adjustmentAmountRaw, setAdjustmentAmountRaw] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [adjustmentSaving, setAdjustmentSaving] = useState(false);
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
+  const [adjustmentSuccess, setAdjustmentSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -281,6 +303,13 @@ export default function TutupHarian() {
       setTransactions(txs);
       setSaleTransactions(sales);
       setStockItems(stock);
+      setAccounts(accounts);
+      setAdjustmentAccountId((current) => {
+        if (accounts.some((account) => !account.is_archived && account.id === current)) {
+          return current;
+        }
+        return accounts.find((account) => !account.is_archived)?.id ?? '';
+      });
       setCashBankTotal(total);
       setCashStoreTotal(cashTotal);
       setHistory(closings);
@@ -309,6 +338,121 @@ export default function TutupHarian() {
   }, [history, figures]);
 
   const alreadyClosed = todayClosing !== null;
+
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => !account.is_archived),
+    [accounts],
+  );
+
+  const selectedAdjustmentAccount = useMemo(
+    () =>
+      activeAccounts.find((account) => account.id === adjustmentAccountId) ?? null,
+    [activeAccounts, adjustmentAccountId],
+  );
+
+  const adjustmentAmount = useMemo(
+    () => digitsToNumber(adjustmentAmountRaw),
+    [adjustmentAmountRaw],
+  );
+
+  const handleAdjustmentAmountChange = useCallback(
+    (value: string) => {
+      setAdjustmentAmountRaw(formatRupiahInput(value));
+      setAdjustmentError(null);
+      setAdjustmentSuccess(null);
+    },
+    [],
+  );
+
+  const handleAdjustmentSave = useCallback(async () => {
+    if (!figures || adjustmentSaving) return;
+
+    if (alreadyClosed) {
+      setAdjustmentError('Tutup harian sudah disimpan. Penyesuaian hanya bisa dicatat sebelum penutupan.');
+      setAdjustmentSuccess(null);
+      return;
+    }
+
+    if (!selectedAdjustmentAccount) {
+      setAdjustmentError('Pilih akun kas atau bank untuk penyesuaian.');
+      setAdjustmentSuccess(null);
+      return;
+    }
+
+    if (adjustmentAmount < 1) {
+      setAdjustmentError('Nominal selisih harus lebih dari 0.');
+      setAdjustmentSuccess(null);
+      return;
+    }
+
+    const reason = adjustmentReason.trim();
+    if (!reason) {
+      setAdjustmentError('Alasan penyesuaian wajib diisi.');
+      setAdjustmentSuccess(null);
+      return;
+    }
+
+    const isPlus = adjustmentType === 'plus';
+    const detail = isPlus
+      ? {
+          kind: 'pemasukan_lain',
+          source: 'Penyesuaian Closing',
+          note: reason,
+          closingDate: figures.date,
+          accountId: selectedAdjustmentAccount.id,
+          accountName: selectedAdjustmentAccount.name,
+          accountType: selectedAdjustmentAccount.type,
+          adjustment: 'plus',
+        }
+      : {
+          kind: 'pengeluaran',
+          category: 'Penyesuaian Closing',
+          note: reason,
+          closingDate: figures.date,
+          accountId: selectedAdjustmentAccount.id,
+          accountName: selectedAdjustmentAccount.name,
+          accountType: selectedAdjustmentAccount.type,
+          adjustment: 'minus',
+        };
+
+    setAdjustmentSaving(true);
+    setAdjustmentError(null);
+    setAdjustmentSuccess(null);
+    try {
+      await recordTransactionWithPostings({
+        type: isPlus ? 'Pemasukan Lain' : 'Pengeluaran',
+        description: `Penyesuaian Closing - ${reason}`,
+        detail: JSON.stringify(detail),
+        amount: adjustmentAmount,
+        postings: [
+          {
+            account_id: selectedAdjustmentAccount.id,
+            direction: isPlus ? 'money_in' : 'money_out',
+            amount: adjustmentAmount,
+          },
+        ],
+      });
+      setAdjustmentAmountRaw('');
+      setAdjustmentReason('');
+      setAdjustmentSuccess(`Penyesuaian ${isPlus ? 'plus' : 'minus'} berhasil dicatat.`);
+      await load();
+    } catch (e) {
+      setAdjustmentError(
+        e instanceof Error ? e.message : 'Penyesuaian closing gagal dicatat.',
+      );
+    } finally {
+      setAdjustmentSaving(false);
+    }
+  }, [
+    figures,
+    adjustmentSaving,
+    alreadyClosed,
+    selectedAdjustmentAccount,
+    adjustmentAmount,
+    adjustmentReason,
+    adjustmentType,
+    load,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (!figures || saving || alreadyClosed) return;
@@ -542,6 +686,196 @@ export default function TutupHarian() {
               ))}
             </div>
           </motion.div>
+
+          {/* ====== Penyesuaian Closing ====== */}
+          <motion.section
+            aria-label="Penyesuaian Closing"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="bg-white rounded-2xl border border-slate-200 shadow-card p-5"
+          >
+            <div className="flex flex-col gap-1 mb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet size={16} className="text-teal-600" />
+                <h2 className="text-[16px] font-semibold text-slate-900">Penyesuaian Closing</h2>
+              </div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Plus / Minus Kas
+              </p>
+            </div>
+
+            <p className="text-[13px] leading-relaxed text-slate-500 mb-4">
+              Catat selisih kas atau bank sebelum tutup harian, misalnya biaya admin,
+              uang fisik lebih, atau koreksi kecil saat pencocokan saldo.
+            </p>
+
+            {alreadyClosed && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-700">
+                Penyesuaian dikunci karena tutup harian hari ini sudah disimpan.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="closing-adjustment-account"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"
+                >
+                  Akun Penyesuaian
+                </label>
+                <select
+                  id="closing-adjustment-account"
+                  value={adjustmentAccountId}
+                  onChange={(e) => {
+                    setAdjustmentAccountId(e.target.value);
+                    setAdjustmentError(null);
+                    setAdjustmentSuccess(null);
+                  }}
+                  disabled={alreadyClosed || adjustmentSaving || activeAccounts.length === 0}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-[14px] font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <option value="">Pilih akun</option>
+                  {activeAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name} - {account.type} - {formatRupiah(account.current_balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <p className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Jenis Selisih
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={adjustmentType === 'plus'}
+                    onClick={() => {
+                      setAdjustmentType('plus');
+                      setAdjustmentError(null);
+                      setAdjustmentSuccess(null);
+                    }}
+                    disabled={alreadyClosed || adjustmentSaving}
+                    className={
+                      'h-12 rounded-xl border px-4 text-[13px] font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-60 ' +
+                      (adjustmentType === 'plus'
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-emerald-200 hover:text-emerald-700')
+                    }
+                  >
+                    <ArrowUpRight size={16} />
+                    Selisih Plus
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={adjustmentType === 'minus'}
+                    onClick={() => {
+                      setAdjustmentType('minus');
+                      setAdjustmentError(null);
+                      setAdjustmentSuccess(null);
+                    }}
+                    disabled={alreadyClosed || adjustmentSaving}
+                    className={
+                      'h-12 rounded-xl border px-4 text-[13px] font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-60 ' +
+                      (adjustmentType === 'minus'
+                        ? 'border-rose-300 bg-rose-50 text-rose-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-rose-200 hover:text-rose-700')
+                    }
+                  >
+                    <ArrowDownLeft size={16} />
+                    Selisih Minus
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="closing-adjustment-amount"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"
+                >
+                  Nominal Selisih
+                </label>
+                <div className="flex h-12 items-center rounded-xl border border-slate-300 bg-white focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20">
+                  <span className="px-4 text-[13px] font-semibold text-slate-400">Rp</span>
+                  <input
+                    id="closing-adjustment-amount"
+                    inputMode="numeric"
+                    value={adjustmentAmountRaw}
+                    onChange={(e) => handleAdjustmentAmountChange(e.target.value)}
+                    disabled={alreadyClosed || adjustmentSaving}
+                    placeholder="0"
+                    className="min-w-0 flex-1 bg-transparent pr-4 font-mono text-[15px] font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none disabled:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="closing-adjustment-reason"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"
+                >
+                  Alasan Penyesuaian
+                </label>
+                <input
+                  id="closing-adjustment-reason"
+                  value={adjustmentReason}
+                  onChange={(e) => {
+                    setAdjustmentReason(e.target.value);
+                    setAdjustmentError(null);
+                    setAdjustmentSuccess(null);
+                  }}
+                  disabled={alreadyClosed || adjustmentSaving}
+                  placeholder="Contoh: biaya admin bank"
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-[14px] font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-h-[20px] text-[13px]">
+                {adjustmentError ? (
+                  <p className="flex items-center gap-1.5 font-medium text-rose-600">
+                    <AlertCircle size={15} />
+                    {adjustmentError}
+                  </p>
+                ) : adjustmentSuccess ? (
+                  <p className="flex items-center gap-1.5 font-semibold text-emerald-600">
+                    <Check size={15} />
+                    {adjustmentSuccess}
+                  </p>
+                ) : (
+                  <p className="text-slate-400">
+                    Plus menambah saldo dan pendapatan lain. Minus mengurangi saldo dan masuk pengeluaran.
+                  </p>
+                )}
+              </div>
+              <Button
+                onClick={() => void handleAdjustmentSave()}
+                disabled={
+                  alreadyClosed ||
+                  adjustmentSaving ||
+                  !selectedAdjustmentAccount ||
+                  adjustmentAmount < 1 ||
+                  adjustmentReason.trim().length === 0
+                }
+                className="h-12 rounded-xl bg-teal-500 px-6 text-[14px] font-semibold text-white hover:bg-teal-600 disabled:opacity-60 gap-2"
+              >
+                {adjustmentSaving ? (
+                  <>
+                    <Loader2 size={17} className="animate-spin" />
+                    Mencatat&hellip;
+                  </>
+                ) : (
+                  <>
+                    <Save size={17} />
+                    Catat Penyesuaian
+                  </>
+                )}
+              </Button>
+            </div>
+          </motion.section>
 
           {/* ====== Catatan Harian ====== */}
           <motion.div
