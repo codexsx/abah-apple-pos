@@ -25,10 +25,13 @@ import Servis from './Servis';
 import { recordTransactionWithPostings } from '@/services/postings';
 import { getAccountPickerData, type AccountWithBalance } from '@/services/accounts';
 import {
+  createServiceRecord,
   getServiceRecords,
   getServiceSparepartUsages,
+  recordServiceWithStockStatus,
   recordServiceSparepartUsage,
 } from '@/services/services';
+import { getTransactionsWithStockDetailsByType, type TransactionWithStockDetails } from '@/services/transactions';
 import { getSpareparts } from '@/services/spareparts';
 
 // ---------------------------------------------------------------------------
@@ -84,11 +87,24 @@ vi.mock('@/services/technicians', () => ({
   updateTechnician: vi.fn(),
 }));
 
+vi.mock('@/services/transactions', async () => {
+  const actual = await vi.importActual<typeof import('@/services/transactions')>(
+    '@/services/transactions',
+  );
+  return {
+    ...actual,
+    getTransactionsWithStockDetailsByType: vi.fn(),
+  };
+});
+
 const mockRecord = vi.mocked(recordTransactionWithPostings);
 const mockGetAccounts = vi.mocked(getAccountPickerData);
+const mockCreateServiceRecord = vi.mocked(createServiceRecord);
+const mockRecordServiceWithStockStatus = vi.mocked(recordServiceWithStockStatus);
 const mockGetServiceRecords = vi.mocked(getServiceRecords);
 const mockGetServiceSparepartUsages = vi.mocked(getServiceSparepartUsages);
 const mockRecordServiceSparepartUsage = vi.mocked(recordServiceSparepartUsage);
+const mockGetSalesWithStockDetails = vi.mocked(getTransactionsWithStockDetailsByType);
 const mockGetSpareparts = vi.mocked(getSpareparts);
 
 // ---------------------------------------------------------------------------
@@ -188,6 +204,12 @@ beforeEach(() => {
 
   mockRecord.mockReset();
   mockRecord.mockResolvedValue('srv-tx-1');
+  mockCreateServiceRecord.mockReset();
+  mockCreateServiceRecord.mockResolvedValue({ id: 'srv-1' } as Awaited<ReturnType<typeof createServiceRecord>>);
+  mockRecordServiceWithStockStatus.mockReset();
+  mockRecordServiceWithStockStatus.mockResolvedValue('srv-claim-1');
+  mockGetSalesWithStockDetails.mockReset();
+  mockGetSalesWithStockDetails.mockResolvedValue([]);
   mockGetServiceRecords.mockReset();
   mockGetServiceRecords.mockResolvedValue([]);
   mockGetServiceSparepartUsages.mockReset();
@@ -208,6 +230,162 @@ beforeEach(() => {
 
   // The form alerts + closes on success; silence the jsdom alert.
   vi.spyOn(window, 'alert').mockImplementation(() => {});
+});
+
+describe('Servis warranty claim from sold store unit', () => {
+  it('looks up a sold Penjualan unit by IMEI and sends that stock row to service', async () => {
+    const soldTx: TransactionWithStockDetails = {
+      id: 'sale-claim-tx',
+      type: 'Penjualan',
+      description: 'Penjualan iPhone 12',
+      amount: 3_970_000,
+      created_at: '2026-06-30T10:00:00.000Z',
+      detail: JSON.stringify({
+        units: [
+          {
+            imei: '359999999999999',
+            sellingPrice: 3_800_000,
+            model: 'iPhone 12',
+            capacity: '64GB',
+            condition: 'Unlock',
+            color: 'Purple',
+            batteryHealth: 85,
+          },
+        ],
+        warranty: '30 Hari',
+        payment: { cash: 0, transfer: 3_970_000 },
+        customer: { name: 'Adam Claim', phone: '081234567890' },
+        items: [],
+        bonuses: [],
+        discount: 0,
+      }),
+      stock_items: [
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          model: 'iPhone 12',
+          capacity: '64GB',
+          condition: 'Unlock',
+          color: 'Purple',
+          imei: '359999999999999',
+          has_imei: true,
+          status: 'TERJUAL',
+          count: 1,
+          price: 3_800_000,
+          cost_price: 3_171_739,
+          created_at: '2026-06-30T10:00:00.000Z',
+          updated_at: '2026-06-30T10:00:00.000Z',
+        },
+      ],
+    };
+    mockGetSalesWithStockDetails.mockResolvedValue([soldTx]);
+
+    renderPage();
+    fireEvent.click(screen.getByText('Klaim Garansi').closest('button')!);
+
+    const checkButton = await screen.findByRole('button', { name: 'Cek' });
+    fireEvent.change(screen.getByPlaceholderText('352345678901234'), {
+      target: { value: '359999999999999' },
+    });
+    fireEvent.click(checkButton);
+
+    expect(await screen.findByText('Adam Claim')).toBeInTheDocument();
+    expect(screen.getByText('081234567890')).toBeInTheDocument();
+    expect(screen.getByText('30 Hari')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Jelaskan masalah yang di klaim...'), {
+      target: { value: 'Speaker mati setelah pemakaian customer' },
+    });
+    fireEvent.click(screen.getByText('Zaidan').closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Klaim/i }));
+
+    await waitFor(() => expect(mockRecordServiceWithStockStatus).toHaveBeenCalledTimes(1));
+    expect(mockRecordServiceWithStockStatus).toHaveBeenCalledWith({
+      stockId: '22222222-2222-4222-8222-222222222222',
+      targetStatus: 'SERVIS',
+      record: expect.objectContaining({
+        customer_name: 'Adam Claim',
+        phone_model: 'iPhone 12',
+        capacity: '64GB',
+        condition: 'Unlock',
+        color: 'Purple',
+        imei: '359999999999999',
+        battery_health: 85,
+        issue: 'Speaker mati setelah pemakaian customer',
+        technician: 'Zaidan',
+        service_type: 'Klaim Garansi',
+        status: 'ANTRIAN',
+      }),
+    });
+    expect(mockRecordServiceWithStockStatus.mock.calls[0][0].record.additional_note).toContain(
+      'Penjualan: sale-claim-tx',
+    );
+    expect(mockRecordServiceWithStockStatus.mock.calls[0][0].record.additional_note).toContain(
+      'Garansi: 30 Hari',
+    );
+    expect(mockCreateServiceRecord).not.toHaveBeenCalled();
+  });
+
+  it('rejects sale-detail virtual stock rows because warranty claims need a real sold stock row', async () => {
+    const virtualTx: TransactionWithStockDetails = {
+      id: 'sale-virtual-tx',
+      type: 'Penjualan',
+      description: 'Penjualan iPhone 11',
+      amount: 3_400_000,
+      created_at: '2026-06-30T11:00:00.000Z',
+      detail: JSON.stringify({
+        units: [
+          {
+            imei: '359888888888888',
+            sellingPrice: 3_400_000,
+            model: 'iPhone 11',
+            capacity: '128GB',
+            condition: 'Unlock',
+            color: 'Tosca',
+            batteryHealth: 78,
+          },
+        ],
+        warranty: '30 Hari',
+        payment: { cash: 3_400_000, transfer: 0 },
+        customer: { name: 'Virtual Customer', phone: '081200000000' },
+        items: [],
+        bonuses: [],
+        discount: 0,
+      }),
+      stock_items: [
+        {
+          id: 'sale-virtual-tx:detail-unit:0',
+          model: 'iPhone 11',
+          capacity: '128GB',
+          condition: 'Unlock',
+          color: 'Tosca',
+          imei: '359888888888888',
+          has_imei: true,
+          status: 'TERJUAL',
+          count: 1,
+          price: 3_400_000,
+          cost_price: 0,
+          created_at: '2026-06-30T11:00:00.000Z',
+          updated_at: '2026-06-30T11:00:00.000Z',
+        },
+      ],
+    };
+    mockGetSalesWithStockDetails.mockResolvedValue([virtualTx]);
+
+    renderPage();
+    fireEvent.click(screen.getByText('Klaim Garansi').closest('button')!);
+
+    const checkButton = await screen.findByRole('button', { name: 'Cek' });
+    fireEvent.change(screen.getByPlaceholderText('352345678901234'), {
+      target: { value: '359888888888888' },
+    });
+    fireEvent.click(checkButton);
+
+    expect(
+      await screen.findByText('Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI ini.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Virtual Customer')).not.toBeInTheDocument();
+    expect(mockRecordServiceWithStockStatus).not.toHaveBeenCalled();
+  });
 });
 
 describe('Servis sparepart usage', () => {

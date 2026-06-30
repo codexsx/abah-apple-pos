@@ -23,7 +23,6 @@ import {
   Edit3,
 } from 'lucide-react';
 import {
-  purchaseHistory,
   type ServiceStatus,
   type ServiceType,
   type Technician,
@@ -49,6 +48,7 @@ import {
 import {
   getStockItems,
   updateStockStatus,
+  type StockItem,
 } from '@/services/stock';
 import AccountPicker from '@/components/AccountPicker';
 import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
@@ -65,6 +65,11 @@ import {
   recordTransactionWithPostings,
   recordWagePaymentWithPosting,
 } from '@/services/postings';
+import {
+  getTransactionsWithStockDetailsByType,
+  type TransactionWithStockDetails,
+} from '@/services/transactions';
+import { deserializeSaleDetail, type SaleDetail } from '@/services/finalization';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
 
 /* ------------------------------------------------------------------ */
@@ -192,6 +197,128 @@ interface ReadyUnit {
   batteryHealth: number;
   entryDate: string;
   warnings: string[];
+}
+
+interface WarrantyClaimLookupRecord {
+  transaction: TransactionWithStockDetails;
+  unit: StockItem;
+  customerName: string;
+  customerPhone: string;
+  purchaseDate: string;
+  warranty: string;
+  phoneModel: string;
+  capacity: string;
+  condition: string;
+  color: string;
+  imei: string;
+  batteryHealth: number | null;
+  salePrice: number;
+}
+
+function normalizeLookupText(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase();
+}
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isPersistedStockUnit(unit: StockItem) {
+  return uuidPattern.test(unit.id);
+}
+
+function findSaleDetailUnit(detail: SaleDetail, unit: StockItem, imei: string) {
+  const normalizedImei = normalizeLookupText(imei);
+  if (normalizedImei) {
+    const byImei = detail.units.find((row) => normalizeLookupText(row.imei) === normalizedImei);
+    if (byImei) return byImei;
+  }
+
+  return detail.units.find(
+    (row) =>
+      normalizeLookupText(row.model) === normalizeLookupText(unit.model) &&
+      normalizeLookupText(row.capacity) === normalizeLookupText(unit.capacity) &&
+      normalizeLookupText(row.condition) === normalizeLookupText(unit.condition) &&
+      normalizeLookupText(row.color) === normalizeLookupText(unit.color),
+  );
+}
+
+function buildWarrantyClaimLookupRecord(
+  transaction: TransactionWithStockDetails,
+  unit: StockItem,
+  imei: string,
+): WarrantyClaimLookupRecord {
+  let detailUnit: ReturnType<typeof findSaleDetailUnit> | undefined;
+  let customerName = '';
+  let customerPhone = '';
+  let warranty = '';
+
+  try {
+    const detail = deserializeSaleDetail(transaction.detail);
+    detailUnit = findSaleDetailUnit(detail, unit, imei);
+    customerName = detail.customer.name?.trim() || '';
+    customerPhone = detail.customer.phone?.trim() || '';
+    warranty = detail.warranty?.trim() || '';
+  } catch {
+    detailUnit = undefined;
+  }
+
+  return {
+    transaction,
+    unit,
+    customerName,
+    customerPhone,
+    purchaseDate: transaction.created_at,
+    warranty,
+    phoneModel: detailUnit?.model || unit.model,
+    capacity: detailUnit?.capacity || unit.capacity || '',
+    condition: detailUnit?.condition || unit.condition || '',
+    color: detailUnit?.color || unit.color || '',
+    imei: detailUnit?.imei || unit.imei || imei,
+    batteryHealth:
+      typeof detailUnit?.batteryHealth === 'number'
+        ? detailUnit.batteryHealth
+        : unit.battery_health ?? null,
+    salePrice: Number(detailUnit?.sellingPrice) || unit.price || Number(transaction.amount) || 0,
+  };
+}
+
+function findSoldWarrantyClaim(
+  transactions: TransactionWithStockDetails[],
+  imei: string,
+): WarrantyClaimLookupRecord | null {
+  const normalizedImei = normalizeLookupText(imei);
+  if (!normalizedImei) return null;
+
+  for (const transaction of transactions) {
+    const unit = transaction.stock_items.find(
+      (item) =>
+        isPersistedStockUnit(item) &&
+        item.status === 'TERJUAL' &&
+        normalizeLookupText(item.imei) === normalizedImei,
+    );
+    if (unit) return buildWarrantyClaimLookupRecord(transaction, unit, imei);
+  }
+
+  return null;
+}
+
+function getSoldWarrantyHints(transactions: TransactionWithStockDetails[]) {
+  return transactions
+    .flatMap((transaction) =>
+      transaction.stock_items
+        .filter(
+          (item) =>
+            isPersistedStockUnit(item) &&
+            item.status === 'TERJUAL' &&
+            Boolean(item.imei?.trim()),
+        )
+        .map((item) => ({
+          id: `${transaction.id}:${item.id}`,
+          imei: item.imei!.trim(),
+          label: `${item.model} ${item.capacity}`.trim(),
+        })),
+    )
+    .slice(0, 3);
 }
 
 /* ------------------------------------------------------------------ */
@@ -2441,8 +2568,11 @@ function KlaimGaransiForm({
 }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [imeiInput, setImeiInput] = useState('');
-  const [foundRecord, setFoundRecord] = useState<typeof purchaseHistory[0] | null>(null);
+  const [foundRecord, setFoundRecord] = useState<WarrantyClaimLookupRecord | null>(null);
   const [imeiError, setImeiError] = useState(false);
+  const [sales, setSales] = useState<TransactionWithStockDetails[]>([]);
+  const [lookupLoading, setLookupLoading] = useState(true);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     keluhan: '',
@@ -2454,13 +2584,43 @@ function KlaimGaransiForm({
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    getTransactionsWithStockDetailsByType('Penjualan')
+      .then((rows) => {
+        if (!active) return;
+        setSales(rows);
+        setLookupLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setLookupError('Gagal memuat riwayat penjualan. Silakan coba lagi.');
+        setLookupLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const soldHints = useMemo(() => getSoldWarrantyHints(sales), [sales]);
+
   const handleCheckImei = () => {
-    if (imeiInput.length < 10 || imeiInput.length > 20) {
+    const imei = imeiInput.trim();
+    if (imei.length < 10 || imei.length > 20) {
+      setImeiError(true);
+      return;
+    }
+    if (lookupLoading) {
+      setLookupError('Riwayat penjualan masih dimuat. Tunggu sebentar lalu cek lagi.');
+      return;
+    }
+    if (lookupError) {
       setImeiError(true);
       return;
     }
     setImeiError(false);
-    const found = purchaseHistory.find((p) => p.imei === imeiInput);
+    const found = findSoldWarrantyClaim(sales, imei);
     if (found) {
       setFoundRecord(found);
       setStep(2);
@@ -2492,27 +2652,38 @@ function KlaimGaransiForm({
     if (!validate() || !foundRecord) return;
     setSaving(true);
     try {
-      await createServiceRecord({
-        customer_name: foundRecord.customerName,
-        phone_model: foundRecord.phoneModel,
-        capacity: foundRecord.capacity || '',
-        condition: foundRecord.condition || '',
-        color: foundRecord.color || '',
-        imei: foundRecord.imei || '',
-        battery_health: foundRecord.batteryHealth ?? null,
-        issue: formData.keluhan,
-        additional_note: formData.catatan || '',
-        status: 'ANTRIAN',
-        estimated_cost: 0,
-        dp: 0,
-        completed_at: null,
-        technician: formData.tukang || '',
-        service_type: 'Klaim Garansi',
-        stk_id: '',
-        wage_amount: 0,
-        wage_paid: false,
-        picked_up: false,
-        picked_up_at: null,
+      const noteParts = [
+        `Penjualan: ${foundRecord.transaction.id}`,
+        foundRecord.warranty ? `Garansi: ${foundRecord.warranty}` : '',
+        foundRecord.customerPhone ? `WA customer: ${foundRecord.customerPhone}` : '',
+        formData.catatan.trim() ? `Catatan: ${formData.catatan.trim()}` : '',
+      ].filter(Boolean);
+
+      await recordServiceWithStockStatus({
+        stockId: foundRecord.unit.id,
+        targetStatus: 'SERVIS',
+        record: {
+          customer_name: foundRecord.customerName || 'Customer Garansi',
+          phone_model: foundRecord.phoneModel,
+          capacity: foundRecord.capacity || '',
+          condition: foundRecord.condition || '',
+          color: foundRecord.color || '',
+          imei: foundRecord.imei || '',
+          battery_health: foundRecord.batteryHealth ?? null,
+          issue: formData.keluhan,
+          additional_note: noteParts.join(' - '),
+          status: 'ANTRIAN',
+          estimated_cost: 0,
+          dp: 0,
+          completed_at: null,
+          technician: formData.tukang || '',
+          service_type: 'Klaim Garansi',
+          stk_id: '',
+          wage_amount: 0,
+          wage_paid: false,
+          picked_up: false,
+          picked_up_at: null,
+        },
       });
     } catch {
       setSaving(false);
@@ -2567,7 +2738,9 @@ function KlaimGaransiForm({
             /* Step 1: Cek IMEI */
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
               <h3 className="text-[18px] font-semibold text-slate-900 mb-1">Cek IMEI</h3>
-              <p className="text-[13px] text-slate-500 mb-4">Masukkan IMEI unit yang mau klaim garansi.</p>
+              <p className="text-[13px] text-slate-500 mb-4">
+                Masukkan IMEI unit toko yang sudah terjual.
+              </p>
 
               <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
                 IMEI (10-20 DIGIT) *
@@ -2587,32 +2760,44 @@ function KlaimGaransiForm({
                 />
                 <button
                   onClick={handleCheckImei}
-                  className="h-11 rounded-xl bg-purple-500 px-6 text-[14px] font-semibold text-white hover:bg-purple-600 transition-colors"
+                  disabled={lookupLoading}
+                  className="h-11 rounded-xl bg-purple-500 px-6 text-[14px] font-semibold text-white hover:bg-purple-600 transition-colors disabled:opacity-60"
                 >
-                  Cek
+                  {lookupLoading ? 'Memuat...' : 'Cek'}
                 </button>
               </div>
+              {lookupError && (
+                <p className="mt-1 text-[12px] text-rose-500">{lookupError}</p>
+              )}
               {imeiError && (
                 <p className="mt-1 text-[12px] text-rose-500">
-                  {imeiInput.length < 10 ? 'IMEI minimal 10 digit' : 'Data pembelian tidak ditemukan untuk IMEI ini.'}
+                  {imeiInput.length < 10
+                    ? 'IMEI minimal 10 digit'
+                    : 'Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI ini.'}
                 </p>
               )}
               <p className="text-[11px] text-slate-400 mt-2">IMEI bisa dilihat di belakang HP atau dial *#06#</p>
 
-              {/* Available purchase records hint */}
               <div className="mt-5 rounded-lg bg-slate-50 border border-slate-200 p-3">
-                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-2">Contoh IMEI tersedia:</p>
-                <div className="flex flex-wrap gap-2">
-                  {purchaseHistory.slice(0, 3).map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => { setImeiInput(p.imei); setImeiError(false); }}
-                      className="rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-mono text-slate-600 hover:border-purple-300 hover:text-purple-600 transition-colors"
-                    >
-                      {p.imei}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-2">Unit terjual ber-IMEI:</p>
+                {lookupLoading ? (
+                  <p className="text-[12px] text-slate-400">Memuat riwayat penjualan...</p>
+                ) : soldHints.length === 0 ? (
+                  <p className="text-[12px] text-slate-400">Belum ada unit TERJUAL ber-IMEI.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {soldHints.map((hint) => (
+                      <button
+                        key={hint.id}
+                        onClick={() => { setImeiInput(hint.imei); setImeiError(false); }}
+                        className="rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-left text-[11px] text-slate-600 hover:border-purple-300 hover:text-purple-600 transition-colors"
+                      >
+                        <span className="block font-mono">{hint.imei}</span>
+                        <span className="block text-[10px] text-slate-400">{hint.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -2666,7 +2851,9 @@ function KlaimGaransiForm({
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">
                       <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Battery Health</p>
-                      <p className="mt-1 text-[13px] text-slate-700">{foundRecord.batteryHealth}%</p>
+                      <p className="mt-1 text-[13px] text-slate-700">
+                        {foundRecord.batteryHealth !== null ? `${foundRecord.batteryHealth}%` : 'Tidak tercatat'}
+                      </p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">
                       <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Harga Beli</p>

@@ -552,7 +552,9 @@ export default function RiwayatPenjualan() {
                 <div className="space-y-2">
                   {group.items.map((item, ii) => {
                     const displayDetail = getTransactionDisplayDetail(item);
-                    const claimableUnits = item.stock_items.filter(isPersistedStockUnit);
+                    const claimableUnits = item.stock_items.filter(
+                      (unit) => isPersistedStockUnit(unit) && unit.status === 'TERJUAL',
+                    );
 
                     return (
                       <motion.div
