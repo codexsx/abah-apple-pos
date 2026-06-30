@@ -33,6 +33,7 @@ const AkunKas = lazy(() => import('./pages/AkunKas'));
 const Keuangan = lazy(() => import('./pages/Keuangan'));
 const ManajemenUser = lazy(() => import('./pages/ManajemenUser'));
 const CompanySettings = lazy(() => import('./pages/CompanySettings'));
+const StaffPerformance = lazy(() => import('./pages/StaffPerformance'));
 
 /* ── loading fallback ── */
 function PageLoader() {
@@ -262,6 +263,16 @@ function AppRoutes() {
             <PermissionRoute permission="manage_users">
               <Suspense fallback={<PageLoader />}>
                 <ManajemenUser />
+              </Suspense>
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="/staff-performance"
+          element={
+            <PermissionRoute permission="manage_users">
+              <Suspense fallback={<PageLoader />}>
+                <StaffPerformance />
               </Suspense>
             </PermissionRoute>
           }

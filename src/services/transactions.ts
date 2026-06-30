@@ -19,6 +19,7 @@ export interface Transaction {
   detail: string;
   amount: number | null;
   created_at: string;
+  staff_id?: string | null;
 }
 
 export interface TransactionWithStockDetails extends Transaction {

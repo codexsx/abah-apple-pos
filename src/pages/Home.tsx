@@ -29,6 +29,7 @@ import { useCompanyProfile } from '@/contexts/useCompanyProfile';
 import DashboardProfilePhotoCard from '@/components/DashboardProfilePhotoCard';
 import NominalGuard from '@/components/NominalGuard';
 import ProfilePhotoDialog from '@/components/ProfilePhotoDialog';
+import StaffPerformanceBadge from '@/components/StaffPerformanceBadge';
 import { type MiniStat, type DailyStat } from '@/data/mockData';
 import { getAgents, getAgentTransactions, getAgentBalance, type Agent, type AgentTransaction } from '@/services/agents';
 import { getAccessories, type Accessory } from '@/services/accessories';
@@ -39,6 +40,7 @@ import { getServiceRecords, type ServiceRecord } from '@/services/services';
 import { getTransactions, getTransactionDisplayDetail, type Transaction } from '@/services/transactions';
 import { getAccountPickerData, type AccountWithBalance } from '@/services/accounts';
 import { canAccessPath } from '@/services/routePermissions';
+import { getOwnStaffPerformance, type StaffPerformance } from '@/services/staffPerformance';
 
 /* ──────────────────────────────── easing tokens */
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -54,7 +56,15 @@ function formatCompact(n: number) {
 }
 
 /* ──────────────────────────────── Profile Card */
-function ProfileCard({ date }: { date: string }) {
+function ProfileCard({
+  date,
+  performance,
+  performanceLoading,
+}: {
+  date: string;
+  performance: StaffPerformance | null;
+  performanceLoading: boolean;
+}) {
   const { profile } = useAuth();
   const { companyProfile } = useCompanyProfile();
   const initials = profile?.initials || profile?.name?.slice(0, 2).toUpperCase() || 'US';
@@ -85,6 +95,7 @@ function ProfileCard({ date }: { date: string }) {
             metaLabel={`${companyName} - ${date}`}
             onEditPhoto={() => setPhotoOpen(true)}
           />
+          <StaffPerformanceBadge performance={performance} loading={performanceLoading} />
           <div className="hidden">
             <p className="text-[13px] font-medium text-blue-900/55">Welcome in,</p>
             <h2 className="text-[28px] font-semibold leading-tight tracking-tight font-body">{displayName}</h2>
@@ -879,13 +890,31 @@ export default function Home() {
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
   const [stock, setStock] = useState<StockItem[]>([]);
   const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [staffPerformance, setStaffPerformance] = useState<StaffPerformance | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [staffPerformanceLoading, setStaffPerformanceLoading] = useState(true);
 
   useEffect(() => {
     const now = new Date();
     const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     setCurrentDate(`${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    setStaffPerformanceLoading(true);
+    getOwnStaffPerformance()
+      .then((performance) => {
+        if (mounted) setStaffPerformance(performance);
+      })
+      .catch((err) => console.error('[Home] staff performance load error:', err))
+      .finally(() => {
+        if (mounted) setStaffPerformanceLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -975,7 +1004,11 @@ export default function Home() {
       {/* ── Top Section: Profile + Stats ── */}
       <section className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-1">
-          <ProfileCard date={currentDate} />
+          <ProfileCard
+            date={currentDate}
+            performance={staffPerformance}
+            performanceLoading={staffPerformanceLoading}
+          />
         </div>
         <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {miniStatsLive.map((stat, i) => (

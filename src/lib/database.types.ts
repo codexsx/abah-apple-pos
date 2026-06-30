@@ -193,6 +193,7 @@ export type Database = {
           detail: string;
           amount: number;
           created_at: string;
+          staff_id: string | null;
         };
         Insert: {
           id?: string;
@@ -201,6 +202,7 @@ export type Database = {
           detail?: string;
           amount?: number;
           created_at?: string;
+          staff_id?: string | null;
         };
         Update: {
           id?: string;
@@ -209,6 +211,7 @@ export type Database = {
           detail?: string;
           amount?: number;
           created_at?: string;
+          staff_id?: string | null;
         };
       };
       accessory_stock: {

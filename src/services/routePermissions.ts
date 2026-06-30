@@ -48,6 +48,7 @@ export function pathToPermission(path: string): PermissionKey | null {
       return 'finance';
     case '/pengaturan/perusahaan':
     case '/pengaturan/users':
+    case '/staff-performance':
       return 'manage_users';
     default:
       return null;

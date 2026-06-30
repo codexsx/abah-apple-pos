@@ -25,6 +25,7 @@ import {
   KeyRound,
   ShieldCheck,
   Store,
+  Trophy,
 } from 'lucide-react';
 import {
   Sheet,
@@ -120,6 +121,7 @@ const sheetSections = [
   {
     title: 'Pengaturan',
     items: [
+      { path: '/staff-performance', label: 'Staff Performance', icon: Trophy },
       { path: '/pengaturan/perusahaan', label: 'Profile Perusahaan', icon: Store },
       { path: '/pengaturan/users', label: 'Manajemen User', icon: ShieldCheck },
     ],
@@ -256,6 +258,12 @@ export default function Navbar() {
               </DropdownMenuItem>
               {canManageUsers && (
                 <>
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2 text-[13px] font-medium text-slate-700">
+                    <Link to="/staff-performance">
+                      <Trophy size={15} className="text-slate-400" />
+                      Staff Performance
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2 text-[13px] font-medium text-slate-700">
                     <Link to="/pengaturan/perusahaan">
                       <Store size={15} className="text-slate-400" />
