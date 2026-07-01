@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getTransactionStaffName,
+  getTransactionStaffRole,
   getTransactionDisplayDetail,
   hydrateTransactionStockDetails,
   type TransactionWithStockDetails,
@@ -300,5 +302,28 @@ describe('getTransactionDisplayDetail', () => {
     expect(
       getTransactionDisplayDetail(makeTx({ detail: 'iPhone 14 Pro 128GB Second iBox' })),
     ).toBe('iPhone 14 Pro 128GB Second iBox');
+  });
+});
+
+describe('transaction staff helpers', () => {
+  it('returns the profile name and role for transactions linked to a staff profile', () => {
+    const tx = makeTx({
+      staff_id: 'staff-1',
+      staff: {
+        id: 'staff-1',
+        name: 'Regga Prayuda',
+        role: 'KASIR',
+      },
+    });
+
+    expect(getTransactionStaffName(tx)).toBe('Regga Prayuda');
+    expect(getTransactionStaffRole(tx)).toBe('KASIR');
+  });
+
+  it('uses a clear fallback for old transactions without an input staff', () => {
+    const tx = makeTx({ staff_id: null, staff: null });
+
+    expect(getTransactionStaffName(tx)).toBe('Staff tidak tercatat');
+    expect(getTransactionStaffRole(tx)).toBeNull();
   });
 });

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { getAgents, getAgentTransactions, type Agent, type AgentTransaction } from '@/services/agents';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -103,6 +104,9 @@ function TransactionRow({ tx, agentMap }: { tx: AgentTransaction; agentMap: Map<
             </div>
             <p className="text-[13px] text-slate-500 mt-1">{tx.note}</p>
             <p className="text-[11px] text-slate-400 mt-1.5">{formatDateTime(tx.created_at)}</p>
+            <div className="mt-2">
+              <TransactionStaffBadge transaction={tx} />
+            </div>
           </div>
         </div>
         <div className="text-right">

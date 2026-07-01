@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { StockStatus } from '@/services/stockCore';
+import type { TransactionStaff } from '@/services/transactions';
 export {
   getTechnicians,
   createTechnician,
@@ -36,9 +37,11 @@ export interface ServiceRecord {
   /** True once the customer has collected the finished unit. */
   picked_up: boolean;
   picked_up_at: string | null;
+  created_by?: string | null;
+  created_by_staff?: TransactionStaff | null;
 }
 
-export type ServiceRecordInsert = Omit<ServiceRecord, 'id' | 'created_at'>;
+export type ServiceRecordInsert = Omit<ServiceRecord, 'id' | 'created_at' | 'created_by' | 'created_by_staff'>;
 export type ServiceRecordUpdate = Partial<ServiceRecordInsert>;
 
 export interface ServiceSparepartUsage {
@@ -52,14 +55,19 @@ export interface ServiceSparepartUsage {
   created_at: string;
 }
 
+const SERVICE_RECORD_SELECT = '*, created_by_staff:profiles!service_records_created_by_fkey(id, name, role, initials)';
+
 export async function getServiceRecords(): Promise<ServiceRecord[]> {
-  const { data, error } = await supabase.from('service_records').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('service_records')
+    .select(SERVICE_RECORD_SELECT)
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
 
 export async function getServiceRecordById(id: string): Promise<ServiceRecord | null> {
-  const { data, error } = await supabase.from('service_records').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from('service_records').select(SERVICE_RECORD_SELECT).eq('id', id).single();
   if (error) {
     if (error.code === 'PGRST116') return null;
     throw error;
@@ -68,7 +76,7 @@ export async function getServiceRecordById(id: string): Promise<ServiceRecord | 
 }
 
 export async function createServiceRecord(record: ServiceRecordInsert): Promise<ServiceRecord> {
-  const { data, error } = await supabase.from('service_records').insert(record).select().single();
+  const { data, error } = await supabase.from('service_records').insert(record).select(SERVICE_RECORD_SELECT).single();
   if (error) throw error;
   if (!data) throw new Error('Failed to create service record');
   return data;
@@ -128,7 +136,7 @@ export async function updateServiceCostFields(input: {
 }
 
 export async function updateServiceRecord(id: string, record: ServiceRecordUpdate): Promise<ServiceRecord> {
-  const { data, error } = await supabase.from('service_records').update(record).eq('id', id).select().single();
+  const { data, error } = await supabase.from('service_records').update(record).eq('id', id).select(SERVICE_RECORD_SELECT).single();
   if (error) throw error;
   if (!data) throw new Error('Failed to update service record');
   return data;

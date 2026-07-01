@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { deriveAgentBalanceBreakdown, type AgentBalanceBreakdown } from '@/services/depositCore';
+import type { TransactionStaff } from '@/services/transactions';
 
 export interface Agent {
   id: string;
@@ -37,6 +38,8 @@ export interface AgentTransaction {
   method: 'Cash' | 'Transfer' | 'Hutang';
   note: string;
   created_at: string;
+  staff_id?: string | null;
+  staff?: TransactionStaff | null;
 }
 
 export interface AgentTransactionInsert {
@@ -47,6 +50,8 @@ export interface AgentTransactionInsert {
   note?: string;
   created_at?: string;
 }
+
+const AGENT_TRANSACTION_SELECT = '*, staff:profiles!agent_transactions_staff_id_fkey(id, name, role, initials)';
 
 export async function getAgents(): Promise<Agent[]> {
   const { data, error } = await supabase.from('agents').select('*').order('code', { ascending: true });
@@ -83,7 +88,10 @@ export async function deleteAgent(id: string): Promise<void> {
 }
 
 export async function getAgentTransactions(agentId?: string): Promise<AgentTransaction[]> {
-  let query = supabase.from('agent_transactions').select('*').order('created_at', { ascending: false });
+  let query = supabase
+    .from('agent_transactions')
+    .select(AGENT_TRANSACTION_SELECT)
+    .order('created_at', { ascending: false });
   if (agentId) {
     query = query.eq('agent_id', agentId);
   }
@@ -93,7 +101,7 @@ export async function getAgentTransactions(agentId?: string): Promise<AgentTrans
 }
 
 export async function createAgentTransaction(tx: AgentTransactionInsert): Promise<AgentTransaction> {
-  const { data, error } = await supabase.from('agent_transactions').insert(tx).select().single();
+  const { data, error } = await supabase.from('agent_transactions').insert(tx).select(AGENT_TRANSACTION_SELECT).single();
   if (error) throw error;
   if (!data) throw new Error('Failed to create agent transaction');
   return data;

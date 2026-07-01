@@ -18,6 +18,7 @@ import {
 } from '@/services/transactions';
 import { getDateRange, isInDateRange, type QuickFilter } from '@/services/dateFilters';
 import { TransactionStockDetails } from '@/components/TransactionStockDetails';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -361,6 +362,9 @@ export default function RiwayatPengeluaran() {
                             )}
                             <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
                               <span>{formatTime(item.created_at)}</span>
+                            </div>
+                            <div className="mt-2">
+                              <TransactionStaffBadge transaction={item} />
                             </div>
                             <TransactionStockDetails items={item.stock_items} />
                           </div>

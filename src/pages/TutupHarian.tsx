@@ -43,6 +43,7 @@ import {
   createDailyClosing,
   type DailyClosing,
 } from '@/services/dailyClosings';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -937,6 +938,9 @@ export default function TutupHarian() {
                           <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                             {closing.closing_date}
                           </p>
+                          <div className="mt-2">
+                            <TransactionStaffBadge staff={closing.closed_by_staff ?? null} prefix="Tutup:" />
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-6">
                           <div>

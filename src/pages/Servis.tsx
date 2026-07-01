@@ -71,6 +71,7 @@ import {
 } from '@/services/transactions';
 import { deserializeSaleDetail, type SaleDetail } from '@/services/finalization';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 
 /* ------------------------------------------------------------------ */
 /*  DB -> UI service record mapper                                     */
@@ -87,6 +88,7 @@ type ServiceRecordUi = UiServiceRecord & {
   wagePaid: boolean;
   pickedUp: boolean;
   pickedUpAt?: string;
+  createdByStaff?: DbServiceRecord['created_by_staff'];
 };
 
 function dbToUiServiceRecord(r: DbServiceRecord): ServiceRecordUi {
@@ -114,6 +116,7 @@ function dbToUiServiceRecord(r: DbServiceRecord): ServiceRecordUi {
     wagePaid: r.wage_paid ?? false,
     pickedUp: r.picked_up ?? false,
     pickedUpAt: r.picked_up_at ?? undefined,
+    createdByStaff: r.created_by_staff ?? null,
   };
 }
 
@@ -729,6 +732,9 @@ function MonitorServisView({
               {record.stkId && <span className="break-all font-mono text-[11px]">STK: {record.stkId}</span>}
               {record.imei && <span className="break-all font-mono text-[11px]">{record.imei}</span>}
               {record.batteryHealth && <span>BH: {record.batteryHealth}%</span>}
+            </div>
+            <div className="mt-2">
+              <TransactionStaffBadge staff={record.createdByStaff ?? null} />
             </div>
           </div>
           <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.3 }} className="ml-3 text-slate-400">

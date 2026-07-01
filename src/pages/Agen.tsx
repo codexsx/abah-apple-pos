@@ -34,6 +34,7 @@ import {
   type AgentUpdate,
   type AgentTransaction,
 } from '@/services/agents';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 import {
   Dialog,
   DialogContent,
@@ -158,6 +159,9 @@ function TransactionItem({ tx, agentMap }: { tx: AgentTransaction; agentMap: Map
           </div>
           <p className="text-[12px] text-slate-500 mt-0.5">{tx.note}</p>
           <p className="text-[11px] text-slate-400 mt-1">{formatDateTime(tx.created_at)}</p>
+          <div className="mt-2">
+            <TransactionStaffBadge transaction={tx} />
+          </div>
         </div>
       </div>
       <div className="text-right">

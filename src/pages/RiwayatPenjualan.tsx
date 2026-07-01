@@ -22,6 +22,7 @@ import {
 } from '@/services/transactions';
 import { getDateRange, isInDateRange, type QuickFilter } from '@/services/dateFilters';
 import { TransactionStockDetails } from '@/components/TransactionStockDetails';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 import { ConfirmationView } from '@/components/sale/ConfirmationView';
 import type { ReceiptData } from '@/services/receipt';
 import { transactionToReceiptData, printReceipt } from '@/services/receipt';
@@ -583,6 +584,9 @@ export default function RiwayatPenjualan() {
                               )}
                               <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
                                 <span>{formatTime(item.created_at)}</span>
+                              </div>
+                              <div className="mt-2">
+                                <TransactionStaffBadge transaction={item} />
                               </div>
                               <TransactionStockDetails items={item.stock_items} />
                               {claimableUnits.length > 0 && (

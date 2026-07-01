@@ -20,13 +20,24 @@ export interface Transaction {
   amount: number | null;
   created_at: string;
   staff_id?: string | null;
+  staff?: TransactionStaff | null;
 }
 
 export interface TransactionWithStockDetails extends Transaction {
   stock_items: StockItem[];
 }
 
-export type TransactionInsert = Omit<Transaction, 'id' | 'created_at'>;
+export type TransactionInsert = Omit<Transaction, 'id' | 'created_at' | 'staff'>;
+
+export interface TransactionStaff {
+  id: string;
+  name: string | null;
+  role?: string | null;
+  initials?: string | null;
+}
+
+const TRANSACTION_SELECT = '*, staff:profiles!transactions_staff_id_fkey(id, name, role, initials)';
+const TRANSACTION_WITH_STOCK_SELECT = `${TRANSACTION_SELECT}, stock_items(*)`;
 
 function normalizeImei(imei: string | null | undefined): string | null {
   const trimmed = imei?.trim() ?? '';
@@ -370,10 +381,24 @@ export function hydrateTransactionStockDetails(
   return { ...tx, stock_items: [...linkedItems, ...virtualItems] };
 }
 
+export function getTransactionStaffName(
+  tx: Pick<Transaction, 'staff' | 'staff_id'>,
+): string {
+  const name = tx.staff?.name?.trim();
+  return name || 'Staff tidak tercatat';
+}
+
+export function getTransactionStaffRole(
+  tx: Pick<Transaction, 'staff'>,
+): string | null {
+  const role = tx.staff?.role?.trim();
+  return role || null;
+}
+
 export async function getTransactions(): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select(TRANSACTION_SELECT)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -382,7 +407,7 @@ export async function getTransactions(): Promise<Transaction[]> {
 export async function getTransactionsByType(type: TransactionType): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select(TRANSACTION_SELECT)
     .eq('type', type)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -392,7 +417,7 @@ export async function getTransactionsByType(type: TransactionType): Promise<Tran
 export async function getTransactionsByTypes(types: TransactionType[]): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select(TRANSACTION_SELECT)
     .in('type', types)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -404,7 +429,7 @@ export async function getTransactionsWithStockDetailsByType(
 ): Promise<TransactionWithStockDetails[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*, stock_items(*)')
+    .select(TRANSACTION_WITH_STOCK_SELECT)
     .eq('type', type)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -418,7 +443,7 @@ export async function getTransactionsWithStockDetailsByTypes(
 ): Promise<TransactionWithStockDetails[]> {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*, stock_items(*)')
+    .select(TRANSACTION_WITH_STOCK_SELECT)
     .in('type', types)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -428,7 +453,7 @@ export async function getTransactionsWithStockDetailsByTypes(
 }
 
 export async function createTransaction(tx: TransactionInsert): Promise<Transaction> {
-  const { data, error } = await supabase.from('transactions').insert(tx).select().single();
+  const { data, error } = await supabase.from('transactions').insert(tx).select(TRANSACTION_SELECT).single();
   if (error) throw error;
   if (!data) throw new Error('Failed to create transaction');
   return data;
