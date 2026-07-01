@@ -33,6 +33,7 @@ import {
   recordPurchaseWithPostings,
 } from '@/services/postings';
 import { getStockItems } from '@/services/stock';
+import { STOCK_STATUSES, type StockStatus } from '@/services/stockCore';
 import { getAgents, type Agent } from '@/services/agents';
 import {
   ACCESSORY_CATEGORIES,
@@ -153,6 +154,17 @@ const accessoryCategoryLabels: Record<AccessoryCategory, string> = {
   paperbag: 'Paperbag',
 };
 
+const purchasableStockStatuses = STOCK_STATUSES.filter(
+  (status): status is Exclude<StockStatus, 'TERJUAL'> => status !== 'TERJUAL',
+);
+
+const stockStatusLabels: Record<Exclude<StockStatus, 'TERJUAL'>, string> = {
+  READY: 'Ready',
+  SERVIS: 'Servis',
+  KANIBAL: 'Kanibal',
+  RUSAK: 'Rusak',
+};
+
 /* ------------------------------------------------------------------ */
 /*  Animation                                                          */
 /* ------------------------------------------------------------------ */
@@ -228,6 +240,8 @@ export default function Pembelian() {
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
   const [selectedColor, setSelectedColor] = useState('');
+  const [initialStockStatus, setInitialStockStatus] =
+    useState<Exclude<StockStatus, 'TERJUAL'>>('READY');
   const [quantity, setQuantity] = useState(1);
 
   /* -- Section 3: Unit Entries -- */
@@ -457,6 +471,7 @@ export default function Pembelian() {
       return false;
     }
     if (!selectedModel || !selectedCapacity || !selectedCondition) return false;
+    if (!purchasableStockStatuses.includes(initialStockStatus)) return false;
     if (usesFullUnitData) {
       if (!selectedColor) return false;
       if (unitEntries.length === 0) return false;
@@ -491,7 +506,7 @@ export default function Pembelian() {
     // Payment is OPTIONAL: a purchase may be saved unpaid (credit/hutang) — the
     // stock still enters inventory; cash/bank only moves when a payment is entered.
     return true;
-  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /**
    * First unmet requirement, in the same order as `canSubmit`, surfaced near the
@@ -509,6 +524,7 @@ export default function Pembelian() {
     }
     if (!selectedModel || !selectedCapacity || !selectedCondition)
       return 'Lengkapi spesifikasi (tipe, kapasitas, kondisi)';
+    if (!purchasableStockStatuses.includes(initialStockStatus)) return 'Pilih status masuk stok';
     if (usesFullUnitData) {
       if (!selectedColor) return 'Lengkapi warna unit';
       for (const u of unitEntries) {
@@ -540,7 +556,7 @@ export default function Pembelian() {
     if (supplierType === 'agen' && paymentTotal < totalCost && !useAgentDebt)
       return 'Centang Hutang ke Agen untuk sisa pembayaran';
     return null;
-  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /* -- callbacks -- */
   const handleQuantityChange = useCallback(
@@ -626,6 +642,7 @@ export default function Pembelian() {
     setSelectedCapacity('');
     setSelectedCondition('');
     setSelectedColor('');
+    setInitialStockStatus('READY');
     setQuantity(1);
     setUnitEntries([{ id: Date.now(), imei: '', price: '', sellPrice: '', defectDescription: '', batteryHealth: 85, chargerIncluded: false, boxIncluded: false }]);
     setPurchaseDataMode('full');
@@ -822,6 +839,7 @@ export default function Pembelian() {
         capacity: selectedCapacity,
         condition: selectedCondition,
         color: usesFullUnitData ? selectedColor : usesQuantityOnlyData ? 'Random' : 'Per warna',
+        status: initialStockStatus,
         quantity: displayQuantity,
       },
       units: usesFullUnitData
@@ -873,6 +891,7 @@ export default function Pembelian() {
             color: selectedColor,
             imei: u.imei,
             defect_description: minusBatch ? u.defectDescription.trim() : '',
+            status: initialStockStatus,
             cost_price: costPrice,
             price: sellPrice > 0 ? sellPrice : costPrice,
             count: 1,
@@ -884,6 +903,7 @@ export default function Pembelian() {
           condition: selectedCondition,
           color: group.color,
           imei: null,
+          status: initialStockStatus,
           cost_price: group.costPrice,
           price: group.sellPrice,
           count: group.quantity,
@@ -923,7 +943,7 @@ export default function Pembelian() {
     } finally {
       setSaving(false);
     }
-  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, selectedModel, selectedCapacity, selectedCondition, selectedColor, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, minusBatch, handleReset]);
+  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, selectedModel, selectedCapacity, selectedCondition, selectedColor, initialStockStatus, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, minusBatch, handleReset]);
 
   /* -- Custom Select component -- */
   const CustomSelect = ({
@@ -1249,6 +1269,23 @@ export default function Pembelian() {
               onChange={setSelectedCondition}
               placeholder="Pilih kondisi"
             />
+            <div>
+              <label htmlFor="initial-stock-status" className="block text-[12px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1.5">
+                Status Masuk <span className="text-rose-500">*</span>
+              </label>
+              <select
+                id="initial-stock-status"
+                value={initialStockStatus}
+                onChange={(e) => setInitialStockStatus(e.target.value as Exclude<StockStatus, 'TERJUAL'>)}
+                className="w-full h-11 rounded-xl border border-slate-300 bg-white px-4 text-[14px] text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10 transition-all"
+              >
+                {purchasableStockStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {stockStatusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </div>
             {usesFullUnitData ? (
               <PresetOrCustomSelect
                 label="Warna"

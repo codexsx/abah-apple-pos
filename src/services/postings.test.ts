@@ -151,6 +151,7 @@ describe('recordPurchaseWithPostings', () => {
           color: 'Midnight',
           imei: '999999999999999',
           defect_description: '',
+          status: 'READY',
           price: 6500000,
           cost_price: 5000000,
           count: 1,
@@ -179,6 +180,7 @@ describe('recordPurchaseWithPostings', () => {
           color: 'Midnight',
           imei: '999999999999999',
           defect_description: '',
+          status: 'READY',
           price: 6500000,
           cost_price: 5000000,
           count: 1,
@@ -213,6 +215,7 @@ describe('recordPurchaseWithPostings', () => {
           cost_price: 5000000,
           count: 1,
           defect_description: 'LCD ganti, Face ID off',
+          status: 'KANIBAL',
         },
       ],
     });
@@ -224,6 +227,7 @@ describe('recordPurchaseWithPostings', () => {
           expect.objectContaining({
             condition: 'Second Inter Unlock Minus',
             defect_description: 'LCD ganti, Face ID off',
+            status: 'KANIBAL',
           }),
         ],
       }),

@@ -256,6 +256,7 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
         condition: 'Second iBox',
         color: 'Midnight',
         imei: FRESH_IMEI,
+        status: 'READY',
         cost_price: Number(UNIT_PRICE),
         price: Number(SELL_PRICE),
       }),
@@ -273,6 +274,9 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
     pickFromDropdown('Pilih kapasitas', '128GB');
     pickFromDropdown('Pilih kondisi', 'Second Inter Unlock Minus');
     pickFromDropdown('Pilih warna', 'Midnight');
+    fireEvent.change(screen.getByLabelText(/Status Masuk/i), {
+      target: { value: 'KANIBAL' },
+    });
 
     fireEvent.change(screen.getByPlaceholderText('352461789012345'), {
       target: { value: FRESH_IMEI },
@@ -308,9 +312,12 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
       expect.objectContaining({
         condition: 'Second Inter Unlock Minus',
         defect_description: 'LCD ganti, Face ID off',
+        status: 'KANIBAL',
       }),
     ]);
-    expect(JSON.parse(arg.detail).units).toEqual([
+    const detail = JSON.parse(arg.detail);
+    expect(detail.specs.status).toBe('KANIBAL');
+    expect(detail.units).toEqual([
       expect.objectContaining({
         defectDescription: 'LCD ganti, Face ID off',
       }),

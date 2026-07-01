@@ -9,6 +9,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Posting } from '@/services/paymentPosting';
+import type { StockStatus } from '@/services/stockCore';
 
 export interface RecordTransactionInput {
   type: string; // 'Penjualan' | ... | 'Pemasukan Lain'
@@ -85,7 +86,7 @@ export async function recordSaleWithPostings(
   return data as string;
 }
 
-/** A single purchased unit to be inserted as a new READY stock row. */
+/** A single purchased unit to be inserted as a new stock row. */
 export interface PurchaseItemInput {
   model: string;
   capacity: string;
@@ -93,6 +94,7 @@ export interface PurchaseItemInput {
   color: string;
   imei?: string | null;
   defect_description?: string;
+  status?: Exclude<StockStatus, 'TERJUAL'>;
   /** Harga jual (selling price). */
   price: number;
   /** Harga modal/beli (cost). Defaults to price when omitted. */
@@ -118,7 +120,7 @@ export interface AccessoryPurchaseItemInput {
 
 /**
  * Calls record_purchase_with_postings: records the Pembelian transaction +
- * postings AND inserts each bought unit as a new READY stock_items row, all
+ * postings AND inserts each bought unit as a new stock_items row, all
  * atomically. Returns the new transaction id; throws on RPC error (e.g. a
  * duplicate IMEI rolls back the whole unit — nothing persisted).
  */
@@ -146,6 +148,7 @@ export async function recordPurchaseWithPostings(
       color: it.color,
       imei: it.imei ?? null,
       defect_description: it.defect_description ?? '',
+      status: it.status ?? 'READY',
       price: it.price,
       cost_price: it.cost_price ?? it.price,
       count: it.count ?? 1,
