@@ -262,6 +262,61 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
     ]);
   });
 
+  it('requires and persists a defect description for minus full-data stock', async () => {
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('Pak Tono'), {
+      target: { value: 'Pak Tono' },
+    });
+
+    pickFromDropdown('Pilih tipe HP', 'iPhone 13');
+    pickFromDropdown('Pilih kapasitas', '128GB');
+    pickFromDropdown('Pilih kondisi', 'Second Inter Unlock Minus');
+    pickFromDropdown('Pilih warna', 'Midnight');
+
+    fireEvent.change(screen.getByPlaceholderText('352461789012345'), {
+      target: { value: FRESH_IMEI },
+    });
+
+    const moneyInputs = screen.getAllByPlaceholderText('Rp 0');
+    fireEvent.change(moneyInputs[0], { target: { value: UNIT_PRICE } });
+    fireEvent.change(moneyInputs[1], { target: { value: SELL_PRICE } });
+    fireEvent.change(moneyInputs[2], { target: { value: UNIT_PRICE } });
+
+    const cashOption = await screen.findByRole('radio', { name: /Kas Toko/ });
+    fireEvent.click(cashOption);
+
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pembelian/ }));
+
+    expect(
+      (await screen.findAllByText(/Isi keterangan minus tiap unit/i)).length,
+    ).toBeGreaterThan(0);
+    expect(recordPurchaseWithPostings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/Keterangan Minus/i), {
+      target: { value: 'LCD ganti, Face ID off' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pembelian/ }));
+
+    await waitFor(() =>
+      expect(recordPurchaseWithPostings).toHaveBeenCalledTimes(1),
+    );
+
+    const arg = recordPurchaseWithPostings.mock.calls[0][0];
+    expect(arg.items).toEqual([
+      expect.objectContaining({
+        condition: 'Second Inter Unlock Minus',
+        defect_description: 'LCD ganti, Face ID off',
+      }),
+    ]);
+    expect(JSON.parse(arg.detail).units).toEqual([
+      expect.objectContaining({
+        defectDescription: 'LCD ganti, Face ID off',
+      }),
+    ]);
+  });
+
   it('blocks submission and persists nothing when a non-zero cash portion has no account selected (Req 4.1, 6.7)', async () => {
     renderPage();
 

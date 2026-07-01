@@ -42,6 +42,7 @@ function toVirtualStockItem(
     capacity?: string;
     condition?: string;
     color?: string;
+    defectDescription?: string;
   },
   index: number,
 ): StockItem {
@@ -58,6 +59,7 @@ function toVirtualStockItem(
     count: 1,
     price: Number(unit.sellingPrice) || 0,
     cost_price: 0,
+    defect_description: unit.defectDescription ?? '',
     created_at: tx.created_at,
     updated_at: tx.created_at,
   };

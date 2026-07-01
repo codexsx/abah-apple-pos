@@ -51,6 +51,7 @@ interface UnitEntry {
   imei: string;
   price: string;
   sellPrice: string;
+  defectDescription: string;
   batteryHealth: number;
   chargerIncluded: boolean;
   boxIncluded: boolean;
@@ -232,7 +233,7 @@ export default function Pembelian() {
   /* -- Section 3: Unit Entries -- */
   const [purchaseDataMode, setPurchaseDataMode] = useState<PurchaseDataMode>('full');
   const [unitEntries, setUnitEntries] = useState<UnitEntry[]>([
-    { id: 1, imei: '', price: '', sellPrice: '', batteryHealth: 85, chargerIncluded: false, boxIncluded: false },
+    { id: 1, imei: '', price: '', sellPrice: '', defectDescription: '', batteryHealth: 85, chargerIncluded: false, boxIncluded: false },
   ]);
   const [bulkQuantity, setBulkQuantity] = useState('1');
   const [bulkTotalCost, setBulkTotalCost] = useState('');
@@ -464,6 +465,7 @@ export default function Pembelian() {
         if (!u.price || parseMoney(u.price) <= 0) return false;
         // Harga jual is optional, but if entered it must be a positive amount.
         if (u.sellPrice && parseMoney(u.sellPrice) <= 0) return false;
+        if (minusBatch && !u.defectDescription.trim()) return false;
         if (allImeis.duplicates.has(u.imei)) return false;
         if (existingImeis.has(u.imei)) return false;
       }
@@ -513,6 +515,7 @@ export default function Pembelian() {
         if (u.imei.length !== 15) return 'IMEI tiap unit harus 15 digit';
         if (!u.price || parseMoney(u.price) <= 0) return 'Isi Harga Modal tiap unit';
         if (u.sellPrice && parseMoney(u.sellPrice) <= 0) return 'Harga Jual tidak boleh 0';
+        if (minusBatch && !u.defectDescription.trim()) return 'Isi keterangan minus tiap unit';
         if (allImeis.duplicates.has(u.imei)) return 'Ada IMEI duplikat antar unit';
         if (existingImeis.has(u.imei)) return 'Ada IMEI yang sudah ada di stok';
       }
@@ -551,6 +554,7 @@ export default function Pembelian() {
               imei: '',
               price: '',
               sellPrice: '',
+              defectDescription: '',
               batteryHealth: 85,
               chargerIncluded: false,
               boxIncluded: false,
@@ -623,7 +627,7 @@ export default function Pembelian() {
     setSelectedCondition('');
     setSelectedColor('');
     setQuantity(1);
-    setUnitEntries([{ id: Date.now(), imei: '', price: '', sellPrice: '', batteryHealth: 85, chargerIncluded: false, boxIncluded: false }]);
+    setUnitEntries([{ id: Date.now(), imei: '', price: '', sellPrice: '', defectDescription: '', batteryHealth: 85, chargerIncluded: false, boxIncluded: false }]);
     setPurchaseDataMode('full');
     setBulkQuantity('1');
     setBulkTotalCost('');
@@ -825,6 +829,7 @@ export default function Pembelian() {
             imei: u.imei,
             price: parseMoney(u.price),
             sellPrice: parseMoney(u.sellPrice),
+            defectDescription: minusBatch ? u.defectDescription.trim() : '',
             batteryHealth: u.batteryHealth,
             chargerIncluded: u.chargerIncluded,
             boxIncluded: u.boxIncluded,
@@ -867,6 +872,7 @@ export default function Pembelian() {
             condition: selectedCondition,
             color: selectedColor,
             imei: u.imei,
+            defect_description: minusBatch ? u.defectDescription.trim() : '',
             cost_price: costPrice,
             price: sellPrice > 0 ? sellPrice : costPrice,
             count: 1,
@@ -917,7 +923,7 @@ export default function Pembelian() {
     } finally {
       setSaving(false);
     }
-  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, selectedModel, selectedCapacity, selectedCondition, selectedColor, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, handleReset]);
+  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, selectedModel, selectedCapacity, selectedCondition, selectedColor, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, minusBatch, handleReset]);
 
   /* -- Custom Select component -- */
   const CustomSelect = ({
@@ -1438,6 +1444,25 @@ export default function Pembelian() {
                           </span>
                         </div>
                       </div>
+
+                      {minusBatch && (
+                        <div className="sm:col-span-2">
+                          <label
+                            htmlFor={`unit-defect-${unit.id}`}
+                            className="block text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1"
+                          >
+                            Keterangan Minus <span className="text-rose-500">*</span>
+                          </label>
+                          <textarea
+                            id={`unit-defect-${unit.id}`}
+                            value={unit.defectDescription}
+                            onChange={(e) => updateUnit(unit.id, { defectDescription: e.target.value })}
+                            placeholder="Contoh: LCD ganti, Face ID off, backdoor ganti"
+                            rows={2}
+                            className="w-full rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 focus:ring-[3px] focus:ring-amber-400/10 transition-all"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Checkboxes */}

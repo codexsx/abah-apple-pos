@@ -56,6 +56,7 @@ interface UnitDetail {
   stockId: string;
   imei: string;
   color: string;
+  defectDescription: string;
   batteryHealth: number;
   suggestedPrice: number;
   hasImei: boolean;
@@ -78,6 +79,7 @@ interface SelectedUnit {
   capacity: string;
   condition: string;
   color: string;
+  defectDescription: string;
   batteryHealth: number;
   sellingPrice: number;
   stockHasImei: boolean;
@@ -141,6 +143,7 @@ function buildStockGroups(rows: StockItem[]): StockGroup[] {
       stockId: row.id,
       imei: row.imei ?? '',
       color: row.color,
+      defectDescription: row.defect_description ?? '',
       batteryHealth: 0,
       suggestedPrice: row.price,
       hasImei: row.has_imei,
@@ -562,6 +565,7 @@ export default function Penjualan() {
         capacity: u.capacity,
         condition: u.condition,
         color: u.color,
+        ...(u.defectDescription ? { defectDescription: u.defectDescription } : {}),
         ...(u.batteryHealth > 0 ? { batteryHealth: u.batteryHealth } : {}),
         sellingPrice: u.sellingPrice,
       })),
@@ -632,6 +636,7 @@ export default function Penjualan() {
             capacity: group.capacity,
             condition: group.condition,
             color: unit.color,
+            defectDescription: unit.defectDescription,
             batteryHealth: unit.batteryHealth,
             sellingPrice: unit.suggestedPrice,
             stockHasImei: unit.hasImei,
@@ -868,6 +873,7 @@ export default function Penjualan() {
       suggestedPrice: imeiResult.suggestedPrice,
       hasImei: imeiResult.hasImei,
       stockCount: imeiResult.stockCount,
+      defectDescription: imeiResult.defectDescription,
     });
     setImeiResult(null);
     setImeiSearch('');
@@ -1176,6 +1182,12 @@ export default function Penjualan() {
                                           <span className="text-[12px] text-slate-500">{unit.color}</span>
                                           <span className="text-slate-300">&middot;</span>
                                           <span className="text-[12px] text-slate-500">{formatPrice(unit.suggestedPrice)}</span>
+                                          {unit.defectDescription && (
+                                            <>
+                                              <span className="text-slate-300">&middot;</span>
+                                              <span className="text-[12px] font-medium text-amber-700">{unit.defectDescription}</span>
+                                            </>
+                                          )}
                                           {!unit.hasImei && unit.stockCount > 1 && (
                                             <>
                                               <span className="text-slate-300">&middot;</span>
@@ -1389,6 +1401,11 @@ export default function Penjualan() {
                     <div className="flex-1 min-w-0">
                       <p className="text-[14px] font-semibold text-slate-900">{unit.model}</p>
                       <p className="text-[12px] text-slate-500">{unit.capacity} &middot; {unit.condition} &middot; {unit.color}</p>
+                      {unit.defectDescription && (
+                        <p className="mt-0.5 text-[12px] font-medium text-amber-700">
+                          Minus: {unit.defectDescription}
+                        </p>
+                      )}
                       <p className="font-mono text-[12px] text-slate-400 mt-0.5">{unit.imei || 'Tanpa IMEI'}</p>
                     </div>
                     <div className="flex-shrink-0">

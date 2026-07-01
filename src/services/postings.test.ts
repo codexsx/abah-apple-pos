@@ -150,6 +150,7 @@ describe('recordPurchaseWithPostings', () => {
           condition: 'Second iBox',
           color: 'Midnight',
           imei: '999999999999999',
+          defect_description: '',
           price: 6500000,
           cost_price: 5000000,
           count: 1,
@@ -177,6 +178,7 @@ describe('recordPurchaseWithPostings', () => {
           condition: 'Second iBox',
           color: 'Midnight',
           imei: '999999999999999',
+          defect_description: '',
           price: 6500000,
           cost_price: 5000000,
           count: 1,
@@ -189,6 +191,43 @@ describe('recordPurchaseWithPostings', () => {
         note: 'Pembelian 1 unit iPhone 13',
       },
     });
+  });
+
+  it('passes defect descriptions for minus stock items to the purchase RPC', async () => {
+    rpcMock.mockResolvedValue({ data: 'tx-purchase', error: null });
+
+    await recordPurchaseWithPostings({
+      type: 'Pembelian',
+      description: 'Agen - 1 unit iPhone 13',
+      detail: '{}',
+      amount: 5000000,
+      postings: [],
+      items: [
+        {
+          model: 'iPhone 13',
+          capacity: '128GB',
+          condition: 'Second Inter Unlock Minus',
+          color: 'Midnight',
+          imei: '999999999999999',
+          price: 6500000,
+          cost_price: 5000000,
+          count: 1,
+          defect_description: 'LCD ganti, Face ID off',
+        },
+      ],
+    });
+
+    expect(rpcMock).toHaveBeenCalledWith(
+      'record_purchase_with_postings',
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            condition: 'Second Inter Unlock Minus',
+            defect_description: 'LCD ganti, Face ID off',
+          }),
+        ],
+      }),
+    );
   });
 });
 

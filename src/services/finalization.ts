@@ -20,6 +20,7 @@ export interface FinalizedUnit {
   capacity: string;
   condition: string;
   color: string;
+  defectDescription?: string;
   batteryHealth?: number;
   sellingPrice: number; // integer IDR
 }
@@ -62,6 +63,7 @@ export interface SaleDetail {
     capacity: string;
     condition: string;
     color: string;
+    defectDescription?: string;
     batteryHealth?: number;
   }>;
   manualSalePrice: number;
@@ -253,6 +255,7 @@ export function toSaleDetail(sale: AssembledSale): SaleDetail {
       capacity: unit.capacity,
       condition: unit.condition,
       color: unit.color,
+      ...(unit.defectDescription ? { defectDescription: unit.defectDescription } : {}),
       ...(unit.batteryHealth !== undefined ? { batteryHealth: unit.batteryHealth } : {}),
     })),
     manualSalePrice: sale.manualSalePrice,
@@ -291,6 +294,7 @@ export function deserializeSaleDetail(serialized: string): SaleDetail {
         capacity: unit.capacity,
         condition: unit.condition,
         color: unit.color,
+        ...(unit.defectDescription ? { defectDescription: unit.defectDescription } : {}),
         ...(unit.batteryHealth !== undefined
           ? { batteryHealth: Number(unit.batteryHealth) || 0 }
           : {}),

@@ -92,6 +92,7 @@ export interface PurchaseItemInput {
   condition: string;
   color: string;
   imei?: string | null;
+  defect_description?: string;
   /** Harga jual (selling price). */
   price: number;
   /** Harga modal/beli (cost). Defaults to price when omitted. */
@@ -144,6 +145,7 @@ export async function recordPurchaseWithPostings(
       condition: it.condition,
       color: it.color,
       imei: it.imei ?? null,
+      defect_description: it.defect_description ?? '',
       price: it.price,
       cost_price: it.cost_price ?? it.price,
       count: it.count ?? 1,

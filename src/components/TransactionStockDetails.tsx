@@ -30,6 +30,9 @@ export function TransactionStockDetails({ items }: { items: StockItem[] }) {
           {unit.has_imei && unit.imei && (
             <span className="font-mono text-[11px] text-slate-400">{unit.imei}</span>
           )}
+          {unit.defect_description && (
+            <span className="font-medium text-amber-700">Minus: {unit.defect_description}</span>
+          )}
           <span className="ml-auto font-mono font-medium text-slate-700">
             {formatRupiah(unit.price)}
           </span>

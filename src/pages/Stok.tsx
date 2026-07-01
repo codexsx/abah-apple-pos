@@ -406,6 +406,11 @@ function StatusSection({
                           </>
                         )}
                       </div>
+                      {item.defect_description && (
+                        <p className="mt-0.5 text-[11px] font-medium text-amber-700">
+                          Minus: {item.defect_description}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -989,6 +994,11 @@ function TabIntegritas() {
                         <p className="text-[11px] text-slate-500">
                           {item.color} • {item.condition} • {item.imei ?? 'Tanpa IMEI'}
                         </p>
+                        {item.defect_description && (
+                          <p className="text-[11px] font-medium text-amber-700 mt-0.5">
+                            Minus: {item.defect_description}
+                          </p>
+                        )}
                         <p className="text-[11px] text-rose-600 font-medium mt-0.5">{label}</p>
                       </div>
                       <span className="text-[11px] px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200 font-mono">
