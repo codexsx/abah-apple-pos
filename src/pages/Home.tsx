@@ -30,6 +30,7 @@ import DashboardProfilePhotoCard from '@/components/DashboardProfilePhotoCard';
 import NominalGuard from '@/components/NominalGuard';
 import ProfilePhotoDialog from '@/components/ProfilePhotoDialog';
 import StaffPerformanceBadge from '@/components/StaffPerformanceBadge';
+import StoreStories from '@/components/StoreStories';
 import { type MiniStat, type DailyStat } from '@/data/mockData';
 import { getAgents, getAgentTransactions, getAgentBalance, type Agent, type AgentTransaction } from '@/services/agents';
 import { getAccessories, type Accessory } from '@/services/accessories';
@@ -1016,6 +1017,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <StoreStories />
 
       {/* ── Quick Actions ── */}
       <section className="relative z-10 mb-6">

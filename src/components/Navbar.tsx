@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   Store,
   Trophy,
+  CalendarCheck,
 } from 'lucide-react';
 import {
   Sheet,
@@ -59,6 +60,7 @@ interface NavLink {
 
 const navLinks: NavLink[] = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/absensi', label: 'Absensi', shortLabel: 'Absen', icon: CalendarCheck },
   { path: '/penjualan', label: 'Penjualan', shortLabel: 'Jual', icon: ShoppingCart },
   { path: '/pembelian', label: 'Pembelian', shortLabel: 'Beli', icon: ShoppingBag },
   { path: '/servis', label: 'Servis', icon: Wrench },
@@ -97,6 +99,7 @@ const sheetSections = [
   {
     title: 'Operasi',
     items: [
+      { path: '/absensi', label: 'Absensi Staff', icon: CalendarCheck },
       { path: '/ambil-pelengkap', label: 'Ambil Pelengkap', icon: PanelLeft },
       { path: '/pemasukan-lain', label: 'Pemasukan Lain & Transfer Kas', icon: HandCoins },
     ],

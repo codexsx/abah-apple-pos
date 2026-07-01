@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, type ComponentType } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -17,24 +17,52 @@ import Pengeluaran from './pages/Pengeluaran';
 import TukarTambah from './pages/TukarTambah';
 import Stok from './pages/Stok';
 
+const CHUNK_RELOAD_KEY = 'abah-pos:chunk-reload-attempted';
+
+function isChunkLoadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed/i.test(message);
+}
+
+function lazyRoute<T extends ComponentType<unknown>>(loader: () => Promise<{ default: T }>) {
+  return lazy(async () => {
+    try {
+      const module = await loader();
+      window.sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      return module;
+    } catch (error) {
+      if (
+        isChunkLoadError(error) &&
+        window.sessionStorage.getItem(CHUNK_RELOAD_KEY) !== '1'
+      ) {
+        window.sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+        window.location.reload();
+        return new Promise<never>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
 /* ── lazily loaded new pages ── */
-const PemasukanLain = lazy(() => import('./pages/PemasukanLain'));
-const StokPelengkap = lazy(() => import('./pages/StokPelengkap'));
-const StokSparepart = lazy(() => import('./pages/StokSparepart'));
-const AmbilPelengkap = lazy(() => import('./pages/AmbilPelengkap'));
-const RiwayatPembelian = lazy(() => import('./pages/RiwayatPembelian'));
-const RiwayatPenjualan = lazy(() => import('./pages/RiwayatPenjualan'));
-const RiwayatPengeluaran = lazy(() => import('./pages/RiwayatPengeluaran'));
-const RiwayatTukarTambah = lazy(() => import('./pages/RiwayatTukarTambah'));
-const TutupHarian = lazy(() => import('./pages/TutupHarian'));
-const Agen = lazy(() => import('./pages/Agen'));
-const AgenDetail = lazy(() => import('./pages/AgenDetail'));
-const AgenRiwayat = lazy(() => import('./pages/AgenRiwayat'));
-const AkunKas = lazy(() => import('./pages/AkunKas'));
-const Keuangan = lazy(() => import('./pages/Keuangan'));
-const ManajemenUser = lazy(() => import('./pages/ManajemenUser'));
-const CompanySettings = lazy(() => import('./pages/CompanySettings'));
-const StaffPerformance = lazy(() => import('./pages/StaffPerformance'));
+const PemasukanLain = lazyRoute(() => import('./pages/PemasukanLain'));
+const StokPelengkap = lazyRoute(() => import('./pages/StokPelengkap'));
+const StokSparepart = lazyRoute(() => import('./pages/StokSparepart'));
+const AmbilPelengkap = lazyRoute(() => import('./pages/AmbilPelengkap'));
+const RiwayatPembelian = lazyRoute(() => import('./pages/RiwayatPembelian'));
+const RiwayatPenjualan = lazyRoute(() => import('./pages/RiwayatPenjualan'));
+const RiwayatPengeluaran = lazyRoute(() => import('./pages/RiwayatPengeluaran'));
+const RiwayatTukarTambah = lazyRoute(() => import('./pages/RiwayatTukarTambah'));
+const TutupHarian = lazyRoute(() => import('./pages/TutupHarian'));
+const Agen = lazyRoute(() => import('./pages/Agen'));
+const AgenDetail = lazyRoute(() => import('./pages/AgenDetail'));
+const AgenRiwayat = lazyRoute(() => import('./pages/AgenRiwayat'));
+const AkunKas = lazyRoute(() => import('./pages/AkunKas'));
+const Keuangan = lazyRoute(() => import('./pages/Keuangan'));
+const ManajemenUser = lazyRoute(() => import('./pages/ManajemenUser'));
+const CompanySettings = lazyRoute(() => import('./pages/CompanySettings'));
+const StaffPerformance = lazyRoute(() => import('./pages/StaffPerformance'));
+const Absensi = lazyRoute(() => import('./pages/Absensi'));
 
 /* ── loading fallback ── */
 function PageLoader() {
@@ -116,6 +144,14 @@ function AppRoutes() {
         <Route path="/pengeluaran" element={<PermissionRoute permission="pengeluaran"><Pengeluaran /></PermissionRoute>} />
         <Route path="/tukar-tambah" element={<PermissionRoute permission="tukar_tambah"><TukarTambah /></PermissionRoute>} />
         <Route path="/stok" element={<PermissionRoute permission="stok"><Stok /></PermissionRoute>} />
+        <Route
+          path="/absensi"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Absensi />
+            </Suspense>
+          }
+        />
 
         {/* Lazy-loaded pages */}
         <Route
