@@ -14,6 +14,7 @@
 // in the UI.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsHeadersForOrigin, isOriginAllowed } from './cors.ts';
 
 const PERMISSION_KEYS = [
   'finance', 'manage_users', 'penjualan', 'pembelian', 'servis',
@@ -23,43 +24,18 @@ const PERMISSION_KEYS = [
 const ROLES = ['MANAJER', 'KASIR', 'TEKNISI'] as const;
 const HIDDEN_OWNER_EMAIL = 'exe14102000@gmail.com';
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://abah-apple-pos.vercel.app',
-  'https://distributor-agent.vercel.app',
-  'https://distributor-agent-muhammaddamiri01-9143s-projects.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:4173',
-];
-
-const baseCorsHeaders = {
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Vary': 'Origin',
-};
-
-function allowedOrigins(): Set<string> {
-  const configured = Deno.env.get('ADMIN_ALLOWED_ORIGINS') ?? '';
-  const extra = configured.split(',').map((origin) => origin.trim()).filter(Boolean);
-  return new Set([...DEFAULT_ALLOWED_ORIGINS, ...extra]);
-}
-
 function corsHeadersFor(req: Request): Record<string, string> {
-  const origin = req.headers.get('Origin') ?? '';
-  if (!origin) return baseCorsHeaders;
-
-  const headers: Record<string, string> = { ...baseCorsHeaders };
-  if (allowedOrigins().has(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin;
-  }
-  return headers;
+  return corsHeadersForOrigin(
+    req.headers.get('Origin'),
+    Deno.env.get('ADMIN_ALLOWED_ORIGINS') ?? '',
+  );
 }
 
-function isOriginAllowed(req: Request): boolean {
-  const origin = req.headers.get('Origin') ?? '';
-  return !origin || allowedOrigins().has(origin);
+function isRequestOriginAllowed(req: Request): boolean {
+  return isOriginAllowed(
+    req.headers.get('Origin'),
+    Deno.env.get('ADMIN_ALLOWED_ORIGINS') ?? '',
+  );
 }
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -118,13 +94,13 @@ Deno.serve(async (req: Request) => {
   const respond = (body: unknown, status = 200) => json(body, status, corsHeaders);
 
   if (req.method === 'OPTIONS') {
-    return new Response(isOriginAllowed(req) ? 'ok' : 'Origin not allowed', {
-      status: isOriginAllowed(req) ? 200 : 403,
+    return new Response(isRequestOriginAllowed(req) ? 'ok' : 'Origin not allowed', {
+      status: isRequestOriginAllowed(req) ? 200 : 403,
       headers: corsHeaders,
     });
   }
 
-  if (!isOriginAllowed(req)) return respond({ error: 'Origin tidak diizinkan.' }, 403);
+  if (!isRequestOriginAllowed(req)) return respond({ error: 'Origin tidak diizinkan.' }, 403);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';

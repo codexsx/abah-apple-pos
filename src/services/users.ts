@@ -25,7 +25,11 @@ export interface UpdateUserInput {
   permissions?: PermissionOverrides;
 }
 
-async function callAdmin(action: string, payload?: Record<string, unknown>) {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+async function callAdmin(action: string, payload?: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await supabase.functions.invoke('admin-users', { body: { action, payload } });
   if (error) {
     // supabase FunctionsHttpError carries the Response in `context`; the body
@@ -33,9 +37,9 @@ async function callAdmin(action: string, payload?: Record<string, unknown>) {
     // (never let an empty object reach the UI).
     let msg = error.message || 'Gagal menghubungi server';
     try {
-      const ctx = (error as any).context;
+      const ctx = (error as { context?: Response }).context;
       if (ctx && typeof ctx.json === 'function') {
-        const body = await ctx.clone().json();
+        const body = asRecord(await ctx.clone().json());
         if (typeof body?.error === 'string' && body.error) msg = body.error;
         else if (typeof body?.message === 'string' && body.message) msg = body.message;
       }
@@ -47,17 +51,19 @@ async function callAdmin(action: string, payload?: Record<string, unknown>) {
     }
     throw new Error(msg);
   }
-  if (data && (data as any).error) throw new Error(String((data as any).error));
+  const response = asRecord(data);
+  if (response?.error) throw new Error(String(response.error));
   return data;
 }
 
-function normalize(u: any): ManagedUser {
+function normalize(u: ManagedUser): ManagedUser {
   return { ...u, permissions: u.permissions ?? {} } as ManagedUser;
 }
 
 export async function listUsers(): Promise<ManagedUser[]> {
-  const d = await callAdmin('list');
-  return (d?.users ?? []).map(normalize);
+  const d = asRecord(await callAdmin('list'));
+  const users = Array.isArray(d?.users) ? (d.users as ManagedUser[]) : [];
+  return users.map(normalize);
 }
 
 export async function createUser(input: CreateUserInput): Promise<void> {
