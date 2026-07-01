@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { getAgents, getAgentTransactions, type Agent, type AgentTransaction } from '@/services/agents';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -124,6 +125,7 @@ function TransactionRow({ tx, agentMap }: { tx: AgentTransaction; agentMap: Map<
 
 export default function AgenRiwayat() {
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [search, setSearch] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -142,7 +144,10 @@ export default function AgenRiwayat() {
     setLoading(true);
     setError('');
     try {
-      const [agentsData, txData] = await Promise.all([getAgents(), getAgentTransactions()]);
+      const [agentsData, txData] = await Promise.all([
+        getAgents(),
+        canViewAgentMoney ? getAgentTransactions() : Promise.resolve([]),
+      ]);
       setAgents(agentsData);
       setTransactions(
         [...txData].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
@@ -157,7 +162,7 @@ export default function AgenRiwayat() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [canViewAgentMoney]);
 
   const filteredTransactions = useMemo(() => {
     let result = transactions;
@@ -239,7 +244,9 @@ export default function AgenRiwayat() {
           />
         </div>
         <p className="text-[14px] text-slate-500 ml-12 mt-2">
-          {filteredTransactions.length} transaksi · {formatRupiah(totalAmount)}
+          {canViewAgentMoney
+            ? `${filteredTransactions.length} transaksi - ${formatRupiah(totalAmount)}`
+            : 'Nominal agen dikunci'}
         </p>
       </motion.div>
 
@@ -253,6 +260,12 @@ export default function AgenRiwayat() {
           >
             Coba Lagi
           </button>
+        </div>
+      ) : !canViewAgentMoney ? (
+        <div className="text-center py-16 rounded-2xl border border-slate-200 bg-white">
+          <History size={48} className="mx-auto text-slate-300 mb-4" />
+          <p className="text-[15px] font-medium text-slate-600">Riwayat nominal agen dikunci</p>
+          <p className="mt-1 text-[12px] text-slate-400">Hanya akun Boss yang bisa membuka transaksi agen.</p>
         </div>
       ) : (
         <>

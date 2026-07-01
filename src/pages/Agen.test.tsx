@@ -30,6 +30,8 @@ vi.mock('@/services/agents', async (importActual) => {
   };
 });
 
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: vi.fn() }));
+
 import {
   createAgent,
   deleteAgent,
@@ -37,6 +39,7 @@ import {
   getAgentTransactions,
   updateAgent,
 } from '@/services/agents';
+import { useAuth } from '@/contexts/AuthContext';
 
 const OWING_AGENT: Agent = {
   id: 'agent-owing',
@@ -106,6 +109,26 @@ function renderAgen() {
 describe('Agen_Page balance label (Requirement 2.5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      profile: {
+        id: 'boss',
+        name: 'Boss',
+        role: 'MANAJER',
+        initials: 'BO',
+        email: 'boss@test.local',
+        username: 'boss',
+        permissions: {},
+        avatar_url: null,
+        avatar_crop_x: 50,
+        avatar_crop_y: 50,
+        avatar_zoom: 1,
+      },
+      isLoading: false,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      refreshProfile: vi.fn(),
+    });
   });
 
   it('shows "Sisa Hutang" for an owing agent and never "LUNAS" for that agent', async () => {
@@ -250,5 +273,38 @@ describe('Agen_Page balance label (Requirement 2.5)', () => {
     await waitFor(() => {
       expect(deleteAgent).toHaveBeenCalledWith(OWING_AGENT.id);
     });
+  });
+
+  it('hides agent money and skips transaction fetching for non-boss staff', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      profile: {
+        id: 'kasir',
+        name: 'Kasir',
+        role: 'KASIR',
+        initials: 'KA',
+        email: 'kasir@test.local',
+        username: 'kasir',
+        permissions: {},
+        avatar_url: null,
+        avatar_crop_x: 50,
+        avatar_crop_y: 50,
+        avatar_zoom: 1,
+      },
+      isLoading: false,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      refreshProfile: vi.fn(),
+    });
+    vi.mocked(getAgents).mockResolvedValue([OWING_AGENT]);
+    vi.mocked(getAgentTransactions).mockResolvedValue(OWING_TRANSACTIONS);
+
+    renderAgen();
+
+    await screen.findByText(OWING_AGENT.name);
+
+    expect(getAgentTransactions).not.toHaveBeenCalled();
+    expect(screen.queryByText('Rp 100.000')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Nominal agen dikunci/i).length).toBeGreaterThan(0);
   });
 });

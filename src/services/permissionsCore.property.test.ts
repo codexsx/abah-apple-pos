@@ -3,6 +3,7 @@ import fc from 'fast-check';
 import {
   resolveLoginEmail,
   normalizeUsername,
+  canViewAgentMoney,
   effectivePermission,
   ROLE_DEFAULTS,
   PERMISSION_KEYS,
@@ -297,6 +298,17 @@ describe('Property 3: Role defaults are exactly as specified and fail-closed', (
         expect(effectivePermission(unknownRole, undefined, key)).toBe(false);
         // Override-then-default still applies: a true override grants the key.
         expect(effectivePermission(unknownRole, { [key]: true }, key)).toBe(true);
+      }),
+      RUNS,
+    );
+  });
+});
+
+describe('Agent money visibility', () => {
+  it('allows only MANAJER to see agent debt and deposit nominal values', () => {
+    fc.assert(
+      fc.property(weirdRoleArb, overridesOrNullArb, (role, overrides) => {
+        expect(canViewAgentMoney(role, overrides)).toBe(role === 'MANAJER');
       }),
       RUNS,
     );

@@ -28,6 +28,7 @@ import { recordAgentPaymentWithPosting } from '@/services/postings';
 import AccountPicker from '@/components/AccountPicker';
 import { Input } from '@/components/ui/input';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -401,9 +402,10 @@ function ActionForm({
 export default function AgenDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const actionParam = resolveActionParam(searchParams.get('action'));
+  const actionParam = canViewAgentMoney ? resolveActionParam(searchParams.get('action')) : null;
 
   const [activeAction, setActiveAction] = useState<'Stor/Bayar' | 'Koreksi' | 'Penyesuaian' | null>(actionParam);
 
@@ -447,7 +449,10 @@ export default function AgenDetail() {
     setLoading(true);
     setError('');
     try {
-      const [agentData, txData] = await Promise.all([getAgentById(id), getAgentTransactions(id)]);
+      const [agentData, txData] = await Promise.all([
+        getAgentById(id),
+        canViewAgentMoney ? getAgentTransactions(id) : Promise.resolve([]),
+      ]);
       if (!agentData) {
         setError('Agen tidak ditemukan');
       } else {
@@ -464,7 +469,7 @@ export default function AgenDetail() {
 
   useEffect(() => {
     loadData();
-  }, [id]);
+  }, [id, canViewAgentMoney]);
 
   function handleAction(type: 'Stor/Bayar' | 'Koreksi' | 'Penyesuaian') {
     setActiveAction(type);
@@ -565,27 +570,48 @@ export default function AgenDetail() {
       </motion.div>
 
       {/* Balance Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1, ease: easeSmooth }}
-        className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card mb-6"
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet size={16} className={balanceDisplay.iconColor} />
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-            {balanceDisplay.label}
+      {canViewAgentMoney ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: easeSmooth }}
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card mb-6"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Wallet size={16} className={balanceDisplay.iconColor} />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+              {balanceDisplay.label}
+            </p>
+          </div>
+          <p className={`font-mono text-[32px] font-bold ${balanceDisplay.valueColor} leading-none`}>
+            {balanceDisplay.value}
           </p>
-        </div>
-        <p className={`font-mono text-[32px] font-bold ${balanceDisplay.valueColor} leading-none`}>
-          {balanceDisplay.value}
-        </p>
-        <p className="text-[13px] text-slate-500 mt-2">
-          {balanceDisplay.subtext}
-        </p>
-      </motion.div>
+          <p className="text-[13px] text-slate-500 mt-2">
+            {balanceDisplay.subtext}
+          </p>
+        </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1, ease: easeSmooth }}
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card mb-6"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Wallet size={16} className="text-slate-400" />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+              Nominal Agen
+            </p>
+          </div>
+          <p className="font-mono text-[24px] font-bold text-slate-500 leading-none">Dikunci Boss</p>
+          <p className="text-[13px] text-slate-500 mt-2">
+            Hutang, deposit, dan riwayat nominal agen hanya bisa dilihat Boss.
+          </p>
+        </motion.div>
+      )}
 
       {/* Action Buttons */}
+      {canViewAgentMoney && (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -615,10 +641,11 @@ export default function AgenDetail() {
           Koreksi / Penyesuaian
         </button>
       </motion.div>
+      )}
 
       {/* Action Form */}
       <AnimatePresence>
-        {activeAction && agent && (
+        {canViewAgentMoney && activeAction && agent && (
           <div className="mb-6">
             <ActionForm
               type={activeAction}
@@ -643,7 +670,13 @@ export default function AgenDetail() {
           <span className="text-[12px] text-slate-400">{transactions.length} transaksi</span>
         </div>
 
-        {transactions.length === 0 ? (
+        {!canViewAgentMoney ? (
+          <div className="text-center py-16 rounded-2xl border border-slate-200 bg-white">
+            <History size={48} className="mx-auto text-slate-300 mb-4" />
+            <p className="text-[15px] font-medium text-slate-600">Riwayat nominal agen dikunci</p>
+            <p className="mt-1 text-[12px] text-slate-400">Hanya akun Boss yang bisa membuka riwayat ini.</p>
+          </div>
+        ) : transactions.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-slate-200 bg-white">
             <History size={48} className="mx-auto text-slate-300 mb-4" />
             <p className="text-[15px] font-medium text-slate-500">Belum ada transaksi</p>

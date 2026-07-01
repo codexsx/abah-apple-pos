@@ -183,6 +183,22 @@ describe('getFinanceSummary', () => {
     expect(summary.netProfit).toBe(1_000_000);
   });
 
+  it('can omit agent receivable/deposit fetches for roles that may not see agent money', async () => {
+    vi.mocked(getTransactions).mockResolvedValue([tx({ type: 'Penjualan', amount: 1_000_000 })]);
+    vi.mocked(getAccounts).mockResolvedValue([account({ current_balance: 2_000_000 })]);
+    vi.mocked(getStockItems).mockResolvedValue([stock({ status: 'READY', price: 3_000_000, count: 1 })]);
+    vi.mocked(getAgents).mockResolvedValue([agent('A1')]);
+    vi.mocked(getAgentTransactions).mockRejectedValue(new Error('forbidden'));
+
+    const summary = await getFinanceSummary(undefined, { includeAgentMoney: false });
+
+    expect(getAgents).not.toHaveBeenCalled();
+    expect(getAgentTransactions).not.toHaveBeenCalled();
+    expect(summary.agentReceivable).toBe(0);
+    expect(summary.agentDepositLiability).toBe(0);
+    expect(summary.totalAsset).toBe(5_000_000);
+  });
+
   it('rethrows when an underlying fetch fails', async () => {
     vi.mocked(getTransactions).mockRejectedValue(new Error('network down'));
     vi.mocked(getAccounts).mockResolvedValue([]);

@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/popover';
 import { getNotificationsWithCount } from '@/services/notifications';
 import type { NotificationItem } from '@/services/notificationsCore';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 interface NotificationsMenuProps {
   className?: string;
@@ -37,6 +38,7 @@ const SEVERITY_STYLES: Record<
  */
 export default function NotificationsMenu({ className }: NotificationsMenuProps) {
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<LoadState>('loading');
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -45,14 +47,14 @@ export default function NotificationsMenu({ className }: NotificationsMenuProps)
   const load = useCallback(async () => {
     setState('loading');
     try {
-      const result = await getNotificationsWithCount();
+      const result = await getNotificationsWithCount({ includeAgentMoney: canViewAgentMoney });
       setItems(result.items);
       setActionableCount(result.actionableCount);
       setState('loaded');
     } catch {
       setState('error');
     }
-  }, []);
+  }, [canViewAgentMoney]);
 
   useEffect(() => {
     void load();

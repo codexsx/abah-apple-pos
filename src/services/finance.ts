@@ -19,6 +19,10 @@ export interface FinancePeriodInput {
   to?: string | null;
 }
 
+export interface FinanceSummaryOptions {
+  includeAgentMoney?: boolean;
+}
+
 /**
  * Gather the live data needed for the read-only finance summary and delegate
  * the roll-ups to the pure `buildFinanceSummary` core (Req 5.1, 5.2, 5.3).
@@ -35,14 +39,15 @@ export interface FinancePeriodInput {
  */
 export async function getFinanceSummary(
   period?: FinancePeriodInput,
+  options: FinanceSummaryOptions = {},
 ): Promise<FinanceSummary> {
   const p: FinancePeriod = { from: period?.from ?? null, to: period?.to ?? null };
+  const includeAgentMoney = options.includeAgentMoney ?? true;
 
-  const [transactions, accounts, stockItems, agents] = await Promise.all([
+  const [transactions, accounts, stockItems] = await Promise.all([
     getTransactions(),
     getAccounts(),
     getStockItems(),
-    getAgents(),
   ]);
 
   const cashBankTotal = accounts.reduce(
@@ -50,11 +55,15 @@ export async function getFinanceSummary(
     0,
   );
 
-  const breakdowns = await Promise.all(
-    agents.map((a) =>
-      getAgentTransactions(a.id).then((txs) => getAgentBalanceBreakdown(txs)),
-    ),
-  );
+  const breakdowns = includeAgentMoney
+    ? await getAgents().then((agents) =>
+        Promise.all(
+          agents.map((a) =>
+            getAgentTransactions(a.id).then((txs) => getAgentBalanceBreakdown(txs)),
+          ),
+        ),
+      )
+    : [];
 
   const agentReceivable = breakdowns.reduce(
     (sum, b) => sum + b.outstandingDebt,

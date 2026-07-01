@@ -171,6 +171,21 @@ describe('getNotifications — empty path', () => {
   });
 });
 
+describe('getNotifications — hidden agent money', () => {
+  it('omits agent receivable alerts without fetching agents or agent transactions', async () => {
+    mockGetStockItems.mockResolvedValue([]);
+    mockGetAccessoryStock.mockResolvedValue([]);
+    mockGetAccounts.mockResolvedValue([]);
+    mockGetAgents.mockRejectedValue(new Error('forbidden'));
+    mockGetAgentTransactions.mockRejectedValue(new Error('forbidden'));
+    mockGetTransactions.mockResolvedValue([]);
+
+    await expect(getNotifications({ includeAgentMoney: false })).resolves.toEqual([]);
+    expect(mockGetAgents).not.toHaveBeenCalled();
+    expect(mockGetAgentTransactions).not.toHaveBeenCalled();
+  });
+});
+
 describe('getNotifications — rethrow', () => {
   it('propagates an underlying fetch error (no catch)', async () => {
     mockGetStockItems.mockRejectedValue(new Error('stock fetch failed'));

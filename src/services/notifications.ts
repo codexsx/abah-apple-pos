@@ -27,27 +27,36 @@ export interface FinanceNotificationsResult {
   actionableCount: number;
 }
 
+export interface NotificationsOptions {
+  includeAgentMoney?: boolean;
+}
+
 /**
  * Gather the live snapshot and derive the ordered notification list.
  * Throws on any underlying fetch error (no catch).
  */
-export async function getNotifications(): Promise<NotificationItem[]> {
+export async function getNotifications(
+  options: NotificationsOptions = {},
+): Promise<NotificationItem[]> {
+  const includeAgentMoney = options.includeAgentMoney ?? true;
   const [stock, accessories, accounts, agents, transactions] = await Promise.all([
     getStockItems(),
     getAccessoryStock(),
     getAccounts(),
-    getAgents(),
+    includeAgentMoney ? getAgents() : Promise.resolve([]),
     getTransactions(),
   ]);
 
   // For each agent, fetch their transactions and compute the outstanding debt.
-  const agentLikes = await Promise.all(
-    agents.map(async (agent) => {
-      const txs = await getAgentTransactions(agent.id);
-      const breakdown = getAgentBalanceBreakdown(txs);
-      return { name: agent.name, outstandingDebt: breakdown.outstandingDebt };
-    }),
-  );
+  const agentLikes = includeAgentMoney
+    ? await Promise.all(
+        agents.map(async (agent) => {
+          const txs = await getAgentTransactions(agent.id);
+          const breakdown = getAgentBalanceBreakdown(txs);
+          return { name: agent.name, outstandingDebt: breakdown.outstandingDebt };
+        }),
+      )
+    : [];
 
   const cutoff = Date.now() - RECENT_WINDOW_MS;
   const recentTxCount = transactions.filter(
@@ -76,7 +85,9 @@ export async function getNotifications(): Promise<NotificationItem[]> {
  * Convenience variant returning the derived items alongside the actionable
  * count (severity !== 'info'). Throws on any underlying fetch error.
  */
-export async function getNotificationsWithCount(): Promise<FinanceNotificationsResult> {
-  const items = await getNotifications();
+export async function getNotificationsWithCount(
+  options: NotificationsOptions = {},
+): Promise<FinanceNotificationsResult> {
+  const items = await getNotifications(options);
   return { items, actionableCount: countActionable(items) };
 }

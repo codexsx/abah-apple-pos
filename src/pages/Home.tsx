@@ -31,6 +31,7 @@ import NominalGuard from '@/components/NominalGuard';
 import ProfilePhotoDialog from '@/components/ProfilePhotoDialog';
 import StaffPerformanceBadge from '@/components/StaffPerformanceBadge';
 import StoreStories from '@/components/StoreStories';
+import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 import { type MiniStat, type DailyStat } from '@/data/mockData';
 import { getAgents, getAgentTransactions, getAgentBalance, type Agent, type AgentTransaction } from '@/services/agents';
 import { getAccessories, type Accessory } from '@/services/accessories';
@@ -42,6 +43,7 @@ import { getTransactions, getTransactionDisplayDetail, type Transaction } from '
 import { getAccountPickerData, type AccountWithBalance } from '@/services/accounts';
 import { canAccessPath } from '@/services/routePermissions';
 import { getOwnStaffPerformance, type StaffPerformance } from '@/services/staffPerformance';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 /* ──────────────────────────────── easing tokens */
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -442,6 +444,7 @@ function ActionWidget({ card, index }: { card: ActionWidgetData; index: number }
 /* ──────────────────────────────── Agen Widget */
 function AgenWidget() {
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [transactions, setTransactions] = useState<AgentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -449,7 +452,10 @@ function AgenWidget() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    Promise.all([getAgents(), getAgentTransactions()])
+    Promise.all([
+      getAgents(),
+      canViewAgentMoney ? getAgentTransactions() : Promise.resolve([]),
+    ])
       .then(([agentsData, txData]) => {
         if (!mounted) return;
         setAgents(agentsData);
@@ -458,7 +464,7 @@ function AgenWidget() {
       .catch((err) => console.error('[AgenWidget] load error:', err))
       .finally(() => setLoading(false));
     return () => { mounted = false; };
-  }, []);
+  }, [canViewAgentMoney]);
 
   const totalDebt = getAgentBalance(transactions);
   const isDeposit = totalDebt < 0;
@@ -489,12 +495,12 @@ function AgenWidget() {
               <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Total Agen</p>
               <p className="font-mono text-[28px] font-bold text-slate-900">{agents.length}</p>
             </div>
-            <div className={`rounded-2xl p-4 ${isDeposit ? 'bg-blue-50' : 'bg-rose-50'}`}>
-              <p className={`text-[11px] font-medium uppercase tracking-wide ${isDeposit ? 'text-blue-500' : 'text-rose-500'}`}>
-                {isDeposit ? 'Total Deposit' : 'Total Hutang'}
+            <div className={`rounded-2xl p-4 ${canViewAgentMoney ? (isDeposit ? 'bg-blue-50' : 'bg-rose-50') : 'bg-slate-50'}`}>
+              <p className={`text-[11px] font-medium uppercase tracking-wide ${canViewAgentMoney ? (isDeposit ? 'text-blue-500' : 'text-rose-500') : 'text-slate-500'}`}>
+                {canViewAgentMoney ? (isDeposit ? 'Total Deposit' : 'Total Hutang') : 'Nominal Agen'}
               </p>
-              <p className={`font-mono text-[18px] font-bold ${isDeposit ? 'text-blue-600' : 'text-rose-600'}`}>
-                <NominalGuard>{formatRupiah(Math.abs(totalDebt))}</NominalGuard>
+              <p className={`font-mono text-[18px] font-bold ${canViewAgentMoney ? (isDeposit ? 'text-blue-600' : 'text-rose-600') : 'text-slate-500'}`}>
+                {canViewAgentMoney ? formatRupiah(Math.abs(totalDebt)) : 'Dikunci'}
               </p>
             </div>
           </div>
@@ -851,6 +857,9 @@ function ActivityTimeline() {
                         {detail}
                       </p>
                       <span className="text-[12px] text-slate-400 font-body">{formatActivityTime(tx.created_at)}</span>
+                      <div className="mt-1">
+                        <TransactionStaffBadge transaction={tx} />
+                      </div>
                     </div>
                     {tx.amount !== null ? (
                       <span

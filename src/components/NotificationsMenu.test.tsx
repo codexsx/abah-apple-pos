@@ -10,10 +10,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 
 import { getNotificationsWithCount } from '@/services/notifications';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 import type { NotificationItem } from '@/services/notificationsCore';
 
 // ---- Mock the service layer ----------------------------------------------
 vi.mock('@/services/notifications');
+vi.mock('@/hooks/useCanViewAgentMoney');
 
 // Import after the mock is registered.
 import NotificationsMenu from './NotificationsMenu';
@@ -42,6 +44,7 @@ const ITEMS: NotificationItem[] = [
 describe('NotificationsMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useCanViewAgentMoney).mockReturnValue(true);
   });
 
   it('shows the actionable count badge after loading on mount', async () => {
@@ -57,6 +60,7 @@ describe('NotificationsMenu', () => {
     );
 
     expect(await screen.findByText('1')).toBeInTheDocument();
+    expect(getNotificationsWithCount).toHaveBeenCalledWith({ includeAgentMoney: true });
   });
 
   it('opens the popover and navigates to the item route on click', async () => {

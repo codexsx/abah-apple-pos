@@ -11,10 +11,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 
 import { getFinanceSummary } from '@/services/finance';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 import type { FinanceSummary } from '@/services/financeCore';
 
 // ---- Mock the service layer ----------------------------------------------
 vi.mock('@/services/finance');
+vi.mock('@/hooks/useCanViewAgentMoney');
 
 // Import after the mock is registered.
 import Keuangan from './Keuangan';
@@ -48,6 +50,7 @@ function renderPage() {
 describe('Keuangan page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useCanViewAgentMoney).mockReturnValue(true);
   });
 
   it('renders headline figures once the summary resolves (loaded state)', async () => {
@@ -66,7 +69,20 @@ describe('Keuangan page', () => {
     expect(screen.getByText('Laba Bersih')).toBeInTheDocument();
     expect(screen.getByText('Total Aset')).toBeInTheDocument();
 
+    expect(getFinanceSummary).toHaveBeenCalledWith(undefined, { includeAgentMoney: true });
     expect(getFinanceSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks agent receivable/deposit for roles that cannot see agent money', async () => {
+    vi.mocked(useCanViewAgentMoney).mockReturnValue(false);
+    vi.mocked(getFinanceSummary).mockResolvedValue(
+      makeSummary({ agentReceivable: 0, agentDepositLiability: 0, totalAsset: 6_500_000 }),
+    );
+
+    renderPage();
+
+    expect((await screen.findAllByText('Dikunci Boss')).length).toBeGreaterThanOrEqual(2);
+    expect(getFinanceSummary).toHaveBeenCalledWith(undefined, { includeAgentMoney: false });
   });
 
   it('shows an error with a retry button, then loads after clicking "Coba lagi"', async () => {

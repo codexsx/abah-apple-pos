@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import AgentDefectImportDialog from '@/components/AgentDefectImportDialog';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
@@ -510,12 +511,14 @@ function AgentCard({
   agent,
   index,
   transactions,
+  canViewMoney,
   onEdit,
   onDelete,
 }: {
   agent: Agent;
   index: number;
   transactions: AgentTransaction[];
+  canViewMoney: boolean;
   onEdit: (agent: Agent) => void;
   onDelete: (agent: Agent) => void;
 }) {
@@ -554,7 +557,14 @@ function AgentCard({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {balance > 0 ? (
+          {!canViewMoney ? (
+            <div className="text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                Nominal Agen
+              </p>
+              <span className="text-[12px] font-semibold text-slate-500">Dikunci</span>
+            </div>
+          ) : balance > 0 ? (
             <div className="text-right">
               <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-rose-500">
                 Sisa Hutang
@@ -605,36 +615,40 @@ function AgentCard({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/agen/${agent.id}?action=stor`);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[12px] font-semibold text-white hover:bg-emerald-600 transition-colors"
-                >
-                  <Banknote size={13} />
-                  Stor / Bayar
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/agen/${agent.id}?tab=riwayat`);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <History size={13} />
-                  Riwayat
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/agen/${agent.id}?action=koreksi`);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <Wrench size={13} />
-                  Koreksi / Penyesuaian
-                </button>
+                {canViewMoney && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/agen/${agent.id}?action=stor`);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-[12px] font-semibold text-white hover:bg-emerald-600 transition-colors"
+                    >
+                      <Banknote size={13} />
+                      Stor / Bayar
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/agen/${agent.id}?tab=riwayat`);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <History size={13} />
+                      Riwayat
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/agen/${agent.id}?action=koreksi`);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Wrench size={13} />
+                      Koreksi / Penyesuaian
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -657,7 +671,13 @@ function AgentCard({
                 </button>
               </div>
 
-              {agentTransactionsSorted.length > 0 && (
+              {!canViewMoney && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] text-slate-500">
+                  Nominal agen dikunci. Riwayat hutang, deposit, dan transaksi agen hanya bisa dilihat Boss.
+                </div>
+              )}
+
+              {canViewMoney && agentTransactionsSorted.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-100">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                     Transaksi Terakhir
@@ -689,6 +709,7 @@ function AgentCard({
 
 export default function Agen() {
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [activeTab, setActiveTab] = useState<'daftar' | 'riwayat'>('daftar');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [transactions, setTransactions] = useState<AgentTransaction[]>([]);
@@ -709,7 +730,10 @@ export default function Agen() {
     setLoading(true);
     setError('');
     try {
-      const [agentsData, txData] = await Promise.all([getAgents(), getAgentTransactions()]);
+      const [agentsData, txData] = await Promise.all([
+        getAgents(),
+        canViewAgentMoney ? getAgentTransactions() : Promise.resolve([]),
+      ]);
       setAgents(agentsData);
       setTransactions(txData);
     } catch (err: any) {
@@ -722,7 +746,7 @@ export default function Agen() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [canViewAgentMoney]);
 
   async function handleSaveAgent(agent: Agent, payload: AgentUpdate) {
     await updateAgent(agent.id, payload);
@@ -758,9 +782,11 @@ export default function Agen() {
   // Net agent balance is sign-aware: positive = agents still owe the shop
   // (hutang/piutang toko), negative = net overpayment held for agents (deposit).
   const isDeposit = totalDebt < 0;
-  const balanceLabel = isDeposit ? 'Total Deposit Agen' : 'Total Hutang Toko';
-  const balanceValue = formatRupiah(Math.abs(totalDebt));
-  const balanceAccent: 'rose' | 'blue' = isDeposit ? 'blue' : 'rose';
+  const balanceLabel = canViewAgentMoney
+    ? (isDeposit ? 'Total Deposit Agen' : 'Total Hutang Toko')
+    : 'Nominal Agen';
+  const balanceValue = canViewAgentMoney ? formatRupiah(Math.abs(totalDebt)) : 'Dikunci';
+  const balanceAccent: 'rose' | 'blue' = canViewAgentMoney ? (isDeposit ? 'blue' : 'rose') : 'blue';
 
   if (loading) {
     return (
@@ -807,7 +833,7 @@ export default function Agen() {
             <div className="flex items-center gap-3">
               <h1 className="font-display text-[36px] text-slate-900 leading-tight">Agen</h1>
               <span className="font-mono text-[13px] text-slate-500">
-                {agents.length} agen · {isDeposit ? 'Total deposit' : 'Total hutang'} {balanceValue}
+                {agents.length} agen - {canViewAgentMoney ? `${isDeposit ? 'Total deposit' : 'Total hutang'} ${balanceValue}` : 'Nominal agen dikunci'}
               </span>
             </div>
           </div>
@@ -925,6 +951,7 @@ export default function Agen() {
                 agent={agent}
                 index={index}
                 transactions={transactionsByAgent.get(agent.id) || []}
+                canViewMoney={canViewAgentMoney}
                 onEdit={setEditingAgent}
                 onDelete={setDeletingAgent}
               />
@@ -939,7 +966,13 @@ export default function Agen() {
             transition={{ duration: 0.3 }}
             className="space-y-3"
           >
-            {transactions.length === 0 ? (
+            {!canViewAgentMoney ? (
+              <div className="text-center py-16 rounded-2xl border border-slate-200 bg-white">
+                <History size={48} className="mx-auto text-slate-300 mb-4" />
+                <p className="text-[15px] font-medium text-slate-600">Nominal agen dikunci</p>
+                <p className="mt-1 text-[12px] text-slate-400">Riwayat transaksi agen hanya bisa dilihat Boss.</p>
+              </div>
+            ) : transactions.length === 0 ? (
               <div className="text-center py-16 rounded-2xl border border-slate-200 bg-white">
                 <History size={48} className="mx-auto text-slate-300 mb-4" />
                 <p className="text-[15px] font-medium text-slate-500">Belum ada transaksi</p>

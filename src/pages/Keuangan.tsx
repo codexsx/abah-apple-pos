@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { getFinanceSummary } from '@/services/finance';
 import type { FinanceSummary } from '@/services/financeCore';
+import { useCanViewAgentMoney } from '@/hooks/useCanViewAgentMoney';
 
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
@@ -63,6 +64,17 @@ function SummaryRow({
   );
 }
 
+function LockedSummaryRow({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-5 py-3">
+      <span className="text-[14px] text-slate-600 font-body">{label}</span>
+      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+        Dikunci Boss
+      </span>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Highlighted total row                                              */
 /* ------------------------------------------------------------------ */
@@ -90,6 +102,7 @@ function HighlightRow({
 
 export default function Keuangan() {
   const navigate = useNavigate();
+  const canViewAgentMoney = useCanViewAgentMoney();
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -98,7 +111,7 @@ export default function Keuangan() {
     setLoading(true);
     setError('');
     try {
-      const data = await getFinanceSummary();
+      const data = await getFinanceSummary(undefined, { includeAgentMoney: canViewAgentMoney });
       setSummary(data);
     } catch (err: unknown) {
       console.error('[Keuangan] load error:', err);
@@ -106,7 +119,7 @@ export default function Keuangan() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canViewAgentMoney]);
 
   useEffect(() => {
     loadSummary();
@@ -226,12 +239,21 @@ export default function Keuangan() {
           <div className="divide-y divide-slate-100">
             <SummaryRow label="Kas &amp; Bank" value={summary.cashBankTotal} />
             <SummaryRow label="Nilai Persediaan" value={summary.inventoryValue} />
-            <SummaryRow label="Piutang Agen" value={summary.agentReceivable} />
-            <SummaryRow
-              label="Titipan/Deposit Agen"
-              value={summary.agentDepositLiability}
-              valueClass="text-rose-600"
-            />
+            {canViewAgentMoney ? (
+              <>
+                <SummaryRow label="Piutang Agen" value={summary.agentReceivable} />
+                <SummaryRow
+                  label="Titipan/Deposit Agen"
+                  value={summary.agentDepositLiability}
+                  valueClass="text-rose-600"
+                />
+              </>
+            ) : (
+              <>
+                <LockedSummaryRow label="Piutang Agen" />
+                <LockedSummaryRow label="Titipan/Deposit Agen" />
+              </>
+            )}
           </div>
           <HighlightRow label="Total Aset" value={summary.totalAsset} valueClass="text-slate-900" />
         </motion.section>

@@ -42,6 +42,10 @@ vi.mock('@/services/accounts', () => ({
   getAccountPickerData: vi.fn(),
 }));
 
+vi.mock('@/hooks/useCanViewAgentMoney', () => ({
+  useCanViewAgentMoney: vi.fn(() => true),
+}));
+
 // Imported after vi.mock so these reference the mocked functions.
 import {
   getAgentById,

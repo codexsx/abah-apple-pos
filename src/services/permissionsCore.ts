@@ -154,3 +154,15 @@ export function effectivePermissions(
   }
   return result;
 }
+
+/**
+ * Agent balances are supplier debt/deposit data, so they are stricter than the
+ * generic finance permission. Per-user permission overrides intentionally do not
+ * open this surface; only the persisted Boss/MANAJER role may see it.
+ */
+export function canViewAgentMoney(
+  role: string | null | undefined,
+  _overrides?: PermissionOverrides | null | undefined,
+): boolean {
+  return role === 'MANAJER';
+}
