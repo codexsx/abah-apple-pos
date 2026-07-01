@@ -179,7 +179,15 @@ const phoneModels = [
   'iPhone SE Gen 3', 'iPhone SE Gen 2',
 ];
 const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
-const conditions = ['Second iBox', 'Second Inter', 'Second Ex-Inter', 'Second Bid', 'Baru iBox', 'Baru Inter'];
+const conditions = [
+  'Second iBox',
+  'Second Bea Cukai',
+  'Second Inter',
+  'Second Ex-Inter',
+  'Second Bid',
+  'Baru iBox',
+  'Baru Inter',
+];
 const colors = ['Deep Purple', 'Space Black', 'Silver', 'Gold', 'Midnight', 'Starlight', 'Blue', 'Green', 'Red', 'Pink', 'Natural Titanium'];
 
 /* ------------------------------------------------------------------ */

@@ -110,7 +110,15 @@ const TIPE_OPTIONS = [
 
 const KAPASITAS_OPTIONS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
-const KONDISI_OPTIONS = ['Second iBox', 'Second Inter', 'Second Ex-Inter', 'Second Bid', 'Baru iBox', 'Baru Inter'];
+const KONDISI_OPTIONS = [
+  'Second iBox',
+  'Second Bea Cukai',
+  'Second Inter',
+  'Second Ex-Inter',
+  'Second Bid',
+  'Baru iBox',
+  'Baru Inter',
+];
 
 const WARNA_MAP: Record<string, string[]> = {
   'iPhone 11': ['Black', 'White', 'Green', 'Yellow', 'Purple', 'Red'],

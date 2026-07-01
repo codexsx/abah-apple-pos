@@ -104,6 +104,7 @@ const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
 const conditions = [
   'Second iBox',
+  'Second Bea Cukai',
   'Second Inter Unlock',
   'Second Inter SimLock',
   'Second Inter Unlock Minus',

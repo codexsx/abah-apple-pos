@@ -18,7 +18,14 @@ export interface StockItem {
   id: string;
   model: string;
   capacity: string;
-  condition: 'Second iBox' | 'Second Inter' | 'Second Ex-Inter' | 'Second Bid' | 'Baru iBox' | 'Baru Inter';
+  condition:
+    | 'Second iBox'
+    | 'Second Bea Cukai'
+    | 'Second Inter'
+    | 'Second Ex-Inter'
+    | 'Second Bid'
+    | 'Baru iBox'
+    | 'Baru Inter';
   color: string;
   imei: string;
   count: number;
