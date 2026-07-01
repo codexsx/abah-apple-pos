@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
+import { drawImageToCanvas } from '@/services/mediaCore';
 import {
   DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
   DEFAULT_ATTENDANCE_LATE_PENALTY,
@@ -227,7 +228,10 @@ export async function cleanupOldAttendance(): Promise<void> {
   if (error) console.warn('[attendance] cleanup skipped:', error.message);
 }
 
-export async function captureVideoFrameToWebp(video: HTMLVideoElement): Promise<Blob> {
+export async function captureVideoFrameToWebp(
+  video: HTMLVideoElement,
+  options: { mirror?: boolean } = {},
+): Promise<Blob> {
   const sourceWidth = video.videoWidth || 720;
   const sourceHeight = video.videoHeight || 960;
   const maxDimension = 960;
@@ -240,7 +244,7 @@ export async function captureVideoFrameToWebp(video: HTMLVideoElement): Promise<
   canvas.height = height;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('Browser tidak mendukung kamera absensi.');
-  ctx.drawImage(video, 0, 0, width, height);
+  drawImageToCanvas(ctx, video, width, height, options.mirror ?? false);
 
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob(resolve, 'image/webp', 0.78);

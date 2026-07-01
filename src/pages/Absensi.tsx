@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  FlipHorizontal2,
   Loader2,
   MapPin,
   Printer,
@@ -166,6 +167,7 @@ export default function Absensi() {
   const [submitting, setSubmitting] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [mirrorCamera, setMirrorCamera] = useState(true);
   const [error, setError] = useState('');
 
   const selectedShift = useMemo(() => (
@@ -341,7 +343,7 @@ export default function Absensi() {
     setSubmitting(true);
     setError('');
     try {
-      const photoBlob = await captureVideoFrameToWebp(videoRef.current);
+      const photoBlob = await captureVideoFrameToWebp(videoRef.current, { mirror: mirrorCamera });
       await createAttendanceRecord({
         staffId: user.id,
         settings,
@@ -521,7 +523,7 @@ export default function Absensi() {
             ))}
           </div>
 
-          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
             <button
               type="button"
               onClick={locateStore}
@@ -539,6 +541,20 @@ export default function Absensi() {
             >
               {cameraLoading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
               Kamera
+            </button>
+            <button
+              type="button"
+              onClick={() => setMirrorCamera((value) => !value)}
+              aria-pressed={mirrorCamera}
+              className={
+                'inline-flex h-12 items-center justify-center gap-2 rounded-2xl border px-4 text-[13px] font-semibold transition-colors ' +
+                (mirrorCamera
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')
+              }
+            >
+              <FlipHorizontal2 size={16} />
+              Mirror {mirrorCamera ? 'On' : 'Off'}
             </button>
           </div>
 
@@ -558,6 +574,7 @@ export default function Absensi() {
               muted
               playsInline
               className="aspect-[3/4] w-full bg-slate-950 object-cover"
+              style={{ transform: mirrorCamera ? 'scaleX(-1)' : 'none' }}
             />
           </div>
 

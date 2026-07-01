@@ -1,3 +1,9 @@
+import {
+  drawImageToCanvas,
+  isHeicOrHeifImageFile,
+  isSupportedWebCaptureImageFile,
+} from '@/services/mediaCore';
+
 export const STORY_TTL_HOURS = 24;
 export const STORY_MAX_DIMENSION = 1080;
 export const STORY_WEBP_QUALITY = 0.76;
@@ -62,7 +68,7 @@ export function groupStoriesByAuthor<T extends StoryRecordCore>(stories: T[]): S
       || new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
 }
 
-function loadImage(file: File): Promise<HTMLImageElement> {
+function loadImage(file: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -78,16 +84,40 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
+async function convertHeicOrHeifToPng(file: File): Promise<Blob> {
+  const { default: heic2any } = await import('heic2any');
+  const converted = await heic2any({
+    blob: file,
+    toType: 'image/png',
+    quality: 0.92,
+  });
+  return Array.isArray(converted) ? converted[0] : converted;
+}
+
 export async function convertImageFileToWebp(
   file: File,
   maxDimension = STORY_MAX_DIMENSION,
   quality = STORY_WEBP_QUALITY,
+  options: { mirror?: boolean } = {},
 ): Promise<StoryMediaResult> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('Story saat ini hanya menerima file gambar.');
+  if (!isSupportedWebCaptureImageFile(file)) {
+    throw new Error('Story mendukung JPG, PNG, WebP, GIF, HEIC, dan HEIF.');
   }
 
-  const img = await loadImage(file);
+  let source: Blob = file;
+  let img: HTMLImageElement;
+  try {
+    img = await loadImage(source);
+  } catch (error) {
+    if (!isHeicOrHeifImageFile(file)) throw error;
+    try {
+      source = await convertHeicOrHeifToPng(file);
+      img = await loadImage(source);
+    } catch {
+      throw new Error('File HEIC/HEIF tidak dapat dibaca browser ini. Coba ambil ulang foto atau ubah ke JPG/PNG.');
+    }
+  }
+
   const scale = Math.min(1, maxDimension / Math.max(img.naturalWidth, img.naturalHeight));
   const width = Math.max(1, Math.round(img.naturalWidth * scale));
   const height = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -97,7 +127,7 @@ export async function convertImageFileToWebp(
 
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('Browser tidak mendukung kompresi gambar.');
-  ctx.drawImage(img, 0, 0, width, height);
+  drawImageToCanvas(ctx, img, width, height, options.mirror ?? false);
 
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob(resolve, 'image/webp', quality);

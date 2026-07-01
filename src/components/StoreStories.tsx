@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronLeft,
   ChevronRight,
+  FlipHorizontal2,
   ImagePlus,
   Loader2,
   Plus,
@@ -12,6 +13,7 @@ import {
 
 import { useAuth } from '@/contexts/AuthContext';
 import { avatarImageStyle } from '@/services/avatarCrop';
+import { WEB_CAPTURE_IMAGE_ACCEPT } from '@/services/mediaCore';
 import {
   deleteStoreStory,
   getActiveStories,
@@ -83,6 +85,7 @@ export default function StoreStories() {
   const [error, setError] = useState('');
   const [viewer, setViewer] = useState<{ groupIndex: number; storyIndex: number } | null>(null);
   const [progress, setProgress] = useState(0);
+  const [mirrorUpload, setMirrorUpload] = useState(false);
 
   const activeGroup = viewer ? groups[viewer.groupIndex] : null;
   const activeStory = activeGroup ? activeGroup.stories[viewer?.storyIndex ?? 0] : null;
@@ -192,7 +195,7 @@ export default function StoreStories() {
     setUploading(true);
     setError('');
     try {
-      await uploadStoreStory({ userId: user.id, file });
+      await uploadStoreStory({ userId: user.id, file, mirror: mirrorUpload });
       await refreshStories();
     } catch (err) {
       console.error('[StoreStories] upload error:', err);
@@ -224,26 +227,42 @@ export default function StoreStories() {
     <>
       <section className="relative z-10 mb-6">
         <div className="rounded-[28px] border border-slate-100 bg-white/85 px-4 py-4 shadow-card backdrop-blur-xl sm:px-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-[15px] font-semibold text-slate-900">Story Toko</h2>
               <p className="text-[12px] text-slate-500">
                 {totalStories > 0 ? `${totalStories} story aktif` : 'Belum ada story aktif'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={uploading}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 text-[13px] font-semibold text-white shadow-md shadow-blue-500/20 transition-colors hover:bg-blue-700 disabled:cursor-wait disabled:bg-blue-300"
-            >
-              {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
-              Upload
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMirrorUpload((value) => !value)}
+                aria-pressed={mirrorUpload}
+                className={
+                  'inline-flex h-10 items-center justify-center gap-2 rounded-full border px-4 text-[13px] font-semibold transition-colors ' +
+                  (mirrorUpload
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')
+                }
+              >
+                <FlipHorizontal2 size={15} />
+                Mirror {mirrorUpload ? 'On' : 'Off'}
+              </button>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 text-[13px] font-semibold text-white shadow-md shadow-blue-500/20 transition-colors hover:bg-blue-700 disabled:cursor-wait disabled:bg-blue-300"
+              >
+                {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+                Upload
+              </button>
+            </div>
             <input
               ref={inputRef}
               type="file"
-              accept="image/*"
+              accept={WEB_CAPTURE_IMAGE_ACCEPT}
               className="sr-only"
               onChange={handleFileChange}
             />

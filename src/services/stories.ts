@@ -148,9 +148,12 @@ export async function uploadStoreStory(input: {
   userId: string;
   file: File;
   caption?: string;
+  mirror?: boolean;
 }): Promise<StoreStory['id']> {
   const storyId = crypto.randomUUID();
-  const media = await convertImageFileToWebp(input.file);
+  const media = await convertImageFileToWebp(input.file, undefined, undefined, {
+    mirror: input.mirror ?? false,
+  });
   const path = buildStoryPath(input.userId, storyId);
 
   const { error: uploadError } = await supabase.storage
