@@ -7,7 +7,7 @@ import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 export interface AuthProfile extends AvatarCrop {
   id: string;
   name: string;
-  role: 'MANAJER' | 'KASIR' | 'TEKNISI';
+  role: 'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI';
   initials: string;
   email?: string;
   username: string | null;

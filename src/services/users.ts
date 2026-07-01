@@ -6,7 +6,7 @@ export interface ManagedUser {
   id: string;
   username: string | null;
   name: string;
-  role: 'MANAJER' | 'KASIR' | 'TEKNISI';
+  role: 'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI';
   permissions: PermissionOverrides;
   avatar_url: string | null;
 }

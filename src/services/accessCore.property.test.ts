@@ -13,7 +13,7 @@ const RUNS = { numRuns: 100 } as const;
  * boundary around the exact string 'MANAJER' is exercised from both sides.
  */
 const roleArb = fc.oneof(
-  fc.constantFrom('MANAJER', 'KASIR', 'TEKNISI'),
+  fc.constantFrom('MANAJER', 'KEUANGAN', 'KASIR', 'TEKNISI'),
   fc.constant(''),
   fc.string(),
 );
@@ -25,11 +25,12 @@ const roleArb = fc.oneof(
 describe('Property 1: Boss-only finance permission', () => {
   // Feature: role-based-access, Property 1
   // Validates: Requirements 1.1, 1.2
-  it('grants finance + nominal access IFF the role is exactly MANAJER', () => {
+  it('grants finance + nominal access IFF the role is MANAJER or KEUANGAN', () => {
     fc.assert(
       fc.property(roleArb, (role) => {
-        expect(canAccessFinance(role)).toBe(role === 'MANAJER');
-        expect(canViewNominal(role)).toBe(role === 'MANAJER');
+        const expected = role === 'MANAJER' || role === 'KEUANGAN';
+        expect(canAccessFinance(role)).toBe(expected);
+        expect(canViewNominal(role)).toBe(expected);
       }),
       RUNS,
     );
@@ -104,7 +105,7 @@ describe('Property 4: Access level mapping is total and fail-closed', () => {
   // Feature: role-based-access, Property 4
   // Validates: Requirements 1.1, 5.2
   const inputArb = fc.oneof(
-    fc.constantFrom('MANAJER', 'KASIR', 'TEKNISI'),
+    fc.constantFrom('MANAJER', 'KEUANGAN', 'KASIR', 'TEKNISI'),
     fc.constant(''),
     fc.string(),
     fc.constant(null),
@@ -116,7 +117,7 @@ describe('Property 4: Access level mapping is total and fail-closed', () => {
       fc.property(inputArb, (input) => {
         let result;
         expect(() => {
-          result = roleToAccessLevel(input as any);
+          result = roleToAccessLevel(input);
         }).not.toThrow();
         expect(result).toBe(input === 'MANAJER' ? 'BOSS' : 'STAFF');
       }),

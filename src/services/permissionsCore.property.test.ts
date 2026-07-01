@@ -154,14 +154,16 @@ describe('Property 1: Login identifier resolution', () => {
 const keyArb: fc.Arbitrary<PermissionKey> = fc.constantFrom(...PERMISSION_KEYS);
 
 /** A real, persisted role value. */
-const roleArb: fc.Arbitrary<'MANAJER' | 'KASIR' | 'TEKNISI'> = fc.constantFrom(
+const roleArb: fc.Arbitrary<'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI'> = fc.constantFrom(
   'MANAJER',
+  'KEUANGAN',
   'KASIR',
   'TEKNISI',
 );
 
-/** A non-MANAJER role: only KASIR/TEKNISI. */
-const nonManajerRoleArb: fc.Arbitrary<'KASIR' | 'TEKNISI'> = fc.constantFrom(
+/** A non-MANAJER role: KEUANGAN/KASIR/TEKNISI. */
+const nonManajerRoleArb: fc.Arbitrary<'KEUANGAN' | 'KASIR' | 'TEKNISI'> = fc.constantFrom(
+  'KEUANGAN',
   'KASIR',
   'TEKNISI',
 );
@@ -244,7 +246,7 @@ const TRANSACTION_KEYS: PermissionKey[] = [
 /** A role string that is NOT one of the three known persisted roles. */
 const unknownRoleArb: fc.Arbitrary<string> = fc
   .string()
-  .filter((s) => !['MANAJER', 'KASIR', 'TEKNISI'].includes(s));
+  .filter((s) => !['MANAJER', 'KEUANGAN', 'KASIR', 'TEKNISI'].includes(s));
 
 describe('Property 3: Role defaults are exactly as specified and fail-closed', () => {
   // Feature: user-management, Property 3
@@ -262,6 +264,16 @@ describe('Property 3: Role defaults are exactly as specified and fail-closed', (
     expect(ROLE_DEFAULTS.KASIR.manage_users).toBe(false);
     for (const key of TRANSACTION_KEYS) {
       expect(ROLE_DEFAULTS.KASIR[key]).toBe(true);
+    }
+  });
+
+  it('KEUANGAN defaults grant finance and pengeluaran only', () => {
+    expect(ROLE_DEFAULTS.KEUANGAN.finance).toBe(true);
+    expect(ROLE_DEFAULTS.KEUANGAN.pengeluaran).toBe(true);
+    expect(ROLE_DEFAULTS.KEUANGAN.manage_users).toBe(false);
+    for (const key of PERMISSION_KEYS) {
+      if (key === 'finance' || key === 'pengeluaran') continue;
+      expect(ROLE_DEFAULTS.KEUANGAN[key]).toBe(false);
     }
   });
 

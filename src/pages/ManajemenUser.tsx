@@ -49,16 +49,18 @@ const easeOutExpo = [0.19, 1, 0.22, 1] as [number, number, number, number];
 /*  Labels                                                             */
 /* ------------------------------------------------------------------ */
 
-const ROLES: AppRole[] = ['MANAJER', 'KASIR', 'TEKNISI'];
+const ROLES: AppRole[] = ['MANAJER', 'KEUANGAN', 'KASIR', 'TEKNISI'];
 
 const ROLE_LABEL: Record<AppRole, string> = {
   MANAJER: 'MANAJER',
+  KEUANGAN: 'ADMIN/KEUANGAN',
   KASIR: 'KASIR',
   TEKNISI: 'TEKNISI',
 };
 
 const ROLE_BADGE_CLASS: Record<AppRole, string> = {
   MANAJER: 'bg-indigo-50 text-indigo-700',
+  KEUANGAN: 'bg-violet-50 text-violet-700',
   KASIR: 'bg-teal-50 text-teal-700',
   TEKNISI: 'bg-amber-50 text-amber-700',
 };
@@ -361,7 +363,7 @@ function UserFormDialog({
 
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-slate-600">Peran</span>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {ROLES.map((r) => {
                 const active = role === r;
                 return (

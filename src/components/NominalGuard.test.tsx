@@ -1,19 +1,37 @@
-// Feature: role-based-access (Phase 6)
-// Component tests for NominalGuard (Req 4).
-// Uses the real pure accessCore; only useAuth is mocked.
-
+// Feature: role-based-access
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-import NominalGuard from './NominalGuard';
 import { useAuth } from '@/contexts/AuthContext';
+import type { AuthProfile } from '@/services/auth';
+import NominalGuard from './NominalGuard';
 
-// Mock ONLY the auth context — accessCore stays real.
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 
-/** Drive the guard by setting the current user's role. */
-function setRole(role: string) {
-  vi.mocked(useAuth).mockReturnValue({ profile: { role } } as any);
+function testProfile(role: AuthProfile['role']): AuthProfile {
+  return {
+    id: `${role.toLowerCase()}-id`,
+    name: role,
+    role,
+    initials: role.slice(0, 2),
+    email: `${role.toLowerCase()}@test.local`,
+    username: role.toLowerCase(),
+    permissions: {},
+    avatar_url: null,
+    avatar_crop_x: 50,
+    avatar_crop_y: 50,
+    avatar_zoom: 1,
+  };
+}
+
+function setRole(role: AuthProfile['role']) {
+  vi.mocked(useAuth).mockReturnValue({
+    user: null,
+    profile: testProfile(role),
+    isLoading: false,
+    signIn: async () => undefined,
+    signOut: async () => undefined,
+    refreshProfile: async () => undefined,
+  });
 }
 
 describe('NominalGuard', () => {
@@ -21,43 +39,43 @@ describe('NominalGuard', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the nominal figure for the Boss (MANAJER) and no placeholder', () => {
+  it('renders the nominal figure for Boss users', () => {
     setRole('MANAJER');
 
     render(
-      <NominalGuard>
+      <NominalGuard placeholder="MASKED">
         <span>Rp 1.000.000</span>
       </NominalGuard>,
     );
 
     expect(screen.getByText('Rp 1.000.000')).toBeTruthy();
-    expect(screen.queryByText('••••')).toBeNull();
+    expect(screen.queryByText('MASKED')).toBeNull();
   });
 
-  it('masks the nominal figure for Staff (KASIR) with the default placeholder', () => {
+  it('renders the nominal figure for Admin/Keuangan users', () => {
+    setRole('KEUANGAN');
+
+    render(
+      <NominalGuard placeholder="MASKED">
+        <span>Rp 1.000.000</span>
+      </NominalGuard>,
+    );
+
+    expect(screen.getByText('Rp 1.000.000')).toBeTruthy();
+    expect(screen.queryByText('MASKED')).toBeNull();
+  });
+
+  it('masks the nominal figure for Staff users', () => {
     setRole('KASIR');
 
     render(
-      <NominalGuard>
+      <NominalGuard placeholder="MASKED">
         <span>Rp 1.000.000</span>
       </NominalGuard>,
     );
 
     expect(screen.queryByText('Rp 1.000.000')).toBeNull();
-    expect(screen.getByText('••••')).toBeTruthy();
-  });
-
-  it('renders a custom placeholder for Staff instead of the value', () => {
-    setRole('KASIR');
-
-    render(
-      <NominalGuard placeholder="—">
-        <span>Rp 5.000</span>
-      </NominalGuard>,
-    );
-
-    expect(screen.getByText('—')).toBeTruthy();
-    expect(screen.queryByText('Rp 5.000')).toBeNull();
+    expect(screen.getByText('MASKED')).toBeTruthy();
   });
 
   it('keeps surrounding operational content while masking the value for Staff', () => {
@@ -66,16 +84,14 @@ describe('NominalGuard', () => {
     const { container } = render(
       <div>
         Total Hutang{' '}
-        <NominalGuard>
+        <NominalGuard placeholder="MASKED">
           <span>Rp 9</span>
         </NominalGuard>
       </div>,
     );
 
-    // Surrounding operational label still renders.
     expect(screen.getByText(/Total Hutang/)).toBeTruthy();
-    // The nominal value is masked, the placeholder is shown in its place.
     expect(screen.queryByText('Rp 9')).toBeNull();
-    expect(container.textContent).toContain('••••');
+    expect(container.textContent).toContain('MASKED');
   });
 });

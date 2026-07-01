@@ -2,7 +2,7 @@
 import { type ReactNode } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { canAccessFinance } from '@/services/accessCore';
+import { effectivePermission } from '@/services/permissionsCore';
 
 /** Boss-only route guard: blocks Staff from finance pages (Req 2.1-2.3). */
 export default function FinanceRoute({ children }: { children: ReactNode }) {
@@ -14,7 +14,7 @@ export default function FinanceRoute({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (!canAccessFinance(profile?.role)) {
+  if (!effectivePermission(profile?.role, profile?.permissions, 'finance')) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;

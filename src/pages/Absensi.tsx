@@ -4,8 +4,10 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  Download,
   Loader2,
   MapPin,
+  Printer,
   RefreshCw,
   Save,
   Settings2,
@@ -30,6 +32,12 @@ import {
   type AttendanceSettings,
   type AttendanceStatus,
 } from '@/services/attendance';
+import {
+  attendanceReportFilename,
+  buildAttendanceCsv,
+  buildAttendancePhotoReportHtml,
+  type AttendanceReportItem,
+} from '@/services/attendanceReport';
 import {
   DEFAULT_ATTENDANCE_SHIFTS,
   calculateDistanceMeters,
@@ -80,9 +88,7 @@ function statusLabel(status: AttendanceStatus): string {
   return 'Menunggu';
 }
 
-type AttendanceListItem =
-  | { type: 'record'; key: string; date: string; sortTime: string; record: AttendanceRecord }
-  | { type: 'absence'; key: string; date: string; sortTime: string; absence: AttendanceAbsence };
+type AttendanceListItem = AttendanceReportItem;
 
 function AttendancePhoto({ record }: { record: AttendanceRecord }) {
   if (!record.photo_url) {
@@ -388,6 +394,43 @@ export default function Absensi() {
     }
   }
 
+  function exportCsvReport() {
+    if (!canManage || attendanceItems.length === 0) return;
+    const csv = buildAttendanceCsv(attendanceItems);
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = attendanceReportFilename(startDate, endDate, 'csv');
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
+
+  function printPhotoReport() {
+    if (!canManage || attendanceItems.length === 0) return;
+    const html = buildAttendancePhotoReportHtml({
+      title: `Report Absensi ${settings?.store_name ?? 'Toko'}`,
+      startDate,
+      endDate,
+      generatedAt: new Date(),
+      items: attendanceItems,
+    });
+
+    const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!reportWindow) {
+      setError('Popup report diblokir browser. Izinkan popup lalu coba lagi.');
+      return;
+    }
+
+    reportWindow.document.open();
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+    window.setTimeout(() => reportWindow.print(), 500);
+  }
+
   return (
     <div className="space-y-6">
       <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-card sm:p-6">
@@ -537,19 +580,43 @@ export default function Absensi() {
                 {canManage ? 'Semua staff' : profile?.name ?? 'Staff'}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-blue-300"
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-blue-300"
-              />
+            <div className="flex flex-col gap-2 sm:items-end">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-blue-300"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-blue-300"
+                />
+              </div>
+              {canManage && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={exportCsvReport}
+                    disabled={attendanceItems.length === 0}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Download size={14} />
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={printPhotoReport}
+                    disabled={attendanceItems.length === 0}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-3 text-[12px] font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <Printer size={14} />
+                    Foto
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

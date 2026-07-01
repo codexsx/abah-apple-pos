@@ -31,6 +31,7 @@ import {
   Store,
   UserRound,
   VolumeX,
+  Wallet,
   Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,18 +57,21 @@ type MotionEventWithPermission = {
 
 const ROLE_LABEL: Record<LoginAccount['role'], string> = {
   MANAJER: 'Manajer',
+  KEUANGAN: 'Admin/Keuangan',
   KASIR: 'Kasir',
   TEKNISI: 'Teknisi',
 };
 
 const ROLE_TONE: Record<LoginAccount['role'], string> = {
   MANAJER: 'border-blue-200 bg-blue-50 text-blue-700',
+  KEUANGAN: 'border-violet-200 bg-violet-50 text-violet-700',
   KASIR: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   TEKNISI: 'border-amber-200 bg-amber-50 text-amber-700',
 };
 
 const ROLE_ICON: Record<LoginAccount['role'], ReactNode> = {
   MANAJER: <ShieldCheck size={14} />,
+  KEUANGAN: <Wallet size={14} />,
   KASIR: <ShoppingBag size={14} />,
   TEKNISI: <Wrench size={14} />,
 };

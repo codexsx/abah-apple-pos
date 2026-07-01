@@ -32,7 +32,7 @@ export type PermissionKey = (typeof PERMISSION_KEYS)[number];
  * The persisted role values (`profiles.role`, CHECK-constrained). Re-declared
  * locally to keep this module pure and independent of accessCore.
  */
-export type AppRole = 'MANAJER' | 'KASIR' | 'TEKNISI';
+export type AppRole = 'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI';
 
 /** A sparse per-user override map; an absent key means "use the role default" (Req 2). */
 export type PermissionOverrides = Partial<Record<PermissionKey, boolean>>;
@@ -40,6 +40,7 @@ export type PermissionOverrides = Partial<Record<PermissionKey, boolean>>;
 /**
  * The baseline permission grants per role (Req 2):
  * - MANAJER: every feature is granted.
+ * - KEUANGAN: finance surfaces plus pengeluaran/closing adjustments.
  * - KASIR: all operational features except `finance` and `manage_users`.
  * - TEKNISI: only `servis` and `stok`.
  */
@@ -54,6 +55,17 @@ export const ROLE_DEFAULTS: Record<AppRole, Record<PermissionKey, boolean>> = {
     tukar_tambah: true,
     stok: true,
     agen: true,
+  },
+  KEUANGAN: {
+    finance: true,
+    manage_users: false,
+    penjualan: false,
+    pembelian: false,
+    servis: false,
+    pengeluaran: true,
+    tukar_tambah: false,
+    stok: false,
+    agen: false,
   },
   KASIR: {
     finance: false,

@@ -13,8 +13,9 @@ export interface LoginAccount extends AvatarCrop {
 
 const ROLE_ORDER: Record<AppRole, number> = {
   MANAJER: 0,
-  KASIR: 1,
-  TEKNISI: 2,
+  KEUANGAN: 1,
+  KASIR: 2,
+  TEKNISI: 3,
 };
 
 function initialsFromName(name: string, username: string): string {
@@ -26,7 +27,10 @@ function normalizeLoginAccount(row: Partial<LoginAccount>): LoginAccount | null 
   const username = typeof row.username === 'string' ? row.username.trim() : '';
   if (!username) return null;
 
-  const role: AppRole = row.role === 'KASIR' || row.role === 'TEKNISI' ? row.role : 'MANAJER';
+  const role: AppRole =
+    row.role === 'KEUANGAN' || row.role === 'KASIR' || row.role === 'TEKNISI'
+      ? row.role
+      : 'MANAJER';
   const name = typeof row.name === 'string' && row.name.trim() ? row.name.trim() : username;
 
   return {

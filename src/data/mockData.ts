@@ -4,7 +4,7 @@
 
 export interface User {
   name: string;
-  role: 'MANAJER' | 'KASIR' | 'TEKNISI';
+  role: 'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI';
   initials: string;
 }
 

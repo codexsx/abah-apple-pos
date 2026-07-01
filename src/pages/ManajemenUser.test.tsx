@@ -74,6 +74,7 @@ describe('ManajemenUser page', () => {
     // There are role buttons (KASIR/MANAJER/TEKNISI) and permission checkboxes.
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Penjualan')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'ADMIN/KEUANGAN' })).toBeInTheDocument();
 
     // Submit the dialog without filling the username (the create submit button
     // is the "Tambah User" button inside the dialog).

@@ -10,7 +10,7 @@
 // ---------- Domain types ----------
 
 /** The persisted role values (`profiles.role`, CHECK-constrained). */
-export type AppRole = 'MANAJER' | 'KASIR' | 'TEKNISI';
+export type AppRole = 'MANAJER' | 'KEUANGAN' | 'KASIR' | 'TEKNISI';
 
 /** The derived access tier: Boss sees everything, Staff is gated. */
 export type AccessLevel = 'BOSS' | 'STAFF';
@@ -46,7 +46,7 @@ export function roleToAccessLevel(role: string | null | undefined): AccessLevel 
  * True iff the role may access the finance surfaces — Boss only (Req 1.1, 1.2).
  */
 export function canAccessFinance(role: string | null | undefined): boolean {
-  return roleToAccessLevel(role) === 'BOSS';
+  return role === 'MANAJER' || role === 'KEUANGAN';
 }
 
 /**
@@ -54,7 +54,7 @@ export function canAccessFinance(role: string | null | undefined): boolean {
  * semantics to {@link canAccessFinance} (Req 1.1, 1.2).
  */
 export function canViewNominal(role: string | null | undefined): boolean {
-  return roleToAccessLevel(role) === 'BOSS';
+  return canAccessFinance(role);
 }
 
 // ---------- Route predicates ----------

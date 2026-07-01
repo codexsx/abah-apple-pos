@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { listUsers, createUser, updateUser, deleteUser } from './users';
 
 const invoke = vi.mocked(supabase.functions.invoke);
+type InvokeResponse = Awaited<ReturnType<typeof invoke>>;
 
 beforeEach(() => {
   invoke.mockReset();
@@ -23,7 +24,7 @@ describe('users service', () => {
         ],
       },
       error: null,
-    } as any);
+    } as InvokeResponse);
 
     const result = await listUsers();
 
@@ -36,7 +37,7 @@ describe('users service', () => {
   });
 
   it('createUser calls admin-users create with payload spread from input', async () => {
-    invoke.mockResolvedValue({ data: { ok: true }, error: null } as any);
+    invoke.mockResolvedValue({ data: { ok: true }, error: null } as InvokeResponse);
 
     const input = {
       username: 'kasir2',
@@ -52,8 +53,25 @@ describe('users service', () => {
     });
   });
 
+  it('createUser accepts the Admin/Keuangan role payload', async () => {
+    invoke.mockResolvedValue({ data: { ok: true }, error: null } as InvokeResponse);
+
+    const input = {
+      username: 'finance1',
+      password: 'password',
+      name: 'Finance Satu',
+      role: 'KEUANGAN' as const,
+      permissions: {},
+    };
+    await createUser(input);
+
+    expect(invoke).toHaveBeenCalledWith('admin-users', {
+      body: { action: 'create', payload: { ...input } },
+    });
+  });
+
   it('updateUser calls admin-users update with id and patch', async () => {
-    invoke.mockResolvedValue({ data: { ok: true }, error: null } as any);
+    invoke.mockResolvedValue({ data: { ok: true }, error: null } as InvokeResponse);
 
     await updateUser('id', { role: 'TEKNISI' });
 
@@ -63,7 +81,7 @@ describe('users service', () => {
   });
 
   it('deleteUser calls admin-users delete with id', async () => {
-    invoke.mockResolvedValue({ data: { ok: true }, error: null } as any);
+    invoke.mockResolvedValue({ data: { ok: true }, error: null } as InvokeResponse);
 
     await deleteUser('id');
 
@@ -73,7 +91,7 @@ describe('users service', () => {
   });
 
   it('throws using error.message when invoke returns an error without context', async () => {
-    invoke.mockResolvedValue({ data: null, error: { message: 'boom' } } as any);
+    invoke.mockResolvedValue({ data: null, error: { message: 'boom' } } as InvokeResponse);
 
     await expect(listUsers()).rejects.toThrow(/boom/);
   });
@@ -82,13 +100,13 @@ describe('users service', () => {
     invoke.mockResolvedValue({
       data: null,
       error: { message: 'Failed to send a request to the Edge Function' },
-    } as any);
+    } as InvokeResponse);
 
     await expect(listUsers()).rejects.toThrow(/fungsi admin/i);
   });
 
   it('throws using data.error when the response payload carries an error', async () => {
-    invoke.mockResolvedValue({ data: { error: 'denied' }, error: null } as any);
+    invoke.mockResolvedValue({ data: { error: 'denied' }, error: null } as InvokeResponse);
 
     await expect(
       createUser({

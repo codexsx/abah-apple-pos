@@ -2,23 +2,43 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
+import { useAuth } from '@/contexts/AuthContext';
+import type { AuthProfile } from '@/services/auth';
+import Navbar from './Navbar';
 
-// Phase 6 — role-based access. The Navbar filters the finance "Laporan
-// Keuangan" section out of the quick-access Sheet drawer for non-Boss roles
-// via `canAccessFinance(profile?.role)`. We mock `useAuth` with vi.fn() so each
-// test can drive the active role (and therefore the access decision).
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-import { useAuth } from '@/contexts/AuthContext';
-import Navbar from './Navbar';
+function profileFor(role: AuthProfile['role'], name = 'Test User'): AuthProfile {
+  return {
+    id: `${role.toLowerCase()}-id`,
+    name,
+    role,
+    initials: name.slice(0, 2).toUpperCase(),
+    email: `${role.toLowerCase()}@test.local`,
+    username: role.toLowerCase(),
+    permissions: {},
+    avatar_url: null,
+    avatar_crop_x: 50,
+    avatar_crop_y: 50,
+    avatar_zoom: 1,
+  };
+}
 
-function setRole(role: string) {
+function setProfile(profile: AuthProfile) {
   vi.mocked(useAuth).mockReturnValue({
-    profile: { role, name: 'Test User', initials: 'TU' },
-    signOut: vi.fn(),
-  } as any);
+    user: null,
+    profile,
+    isLoading: false,
+    signIn: async () => undefined,
+    signOut: async () => undefined,
+    refreshProfile: async () => undefined,
+  });
+}
+
+function setRole(role: AuthProfile['role']) {
+  setProfile(profileFor(role));
 }
 
 function renderNavbar() {
@@ -32,16 +52,15 @@ function renderNavbar() {
 async function openDrawer() {
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Menu cepat' }));
-  // Wait for the radix Sheet portal content to mount.
   await screen.findByRole('dialog');
 }
 
-describe('Navbar — finance-section access filtering (Phase 6, role-based-access)', () => {
+describe('Navbar finance-section access filtering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('Boss (MANAJER) sees the Laporan Keuangan section and its finance entries', async () => {
+  it('Boss sees the finance section and finance entries', async () => {
     setRole('MANAJER');
     renderNavbar();
     await openDrawer();
@@ -52,22 +71,32 @@ describe('Navbar — finance-section access filtering (Phase 6, role-based-acces
     expect(within(dialog).getByText('Tutup Harian')).toBeTruthy();
   });
 
-  it('Staff (KASIR) does not see the finance section or its entries, but keeps operational entries', async () => {
+  it('Staff does not see the finance section but keeps operational entries', async () => {
     setRole('KASIR');
     renderNavbar();
     await openDrawer();
 
-    // Finance surfaces are hidden for non-Boss roles.
     expect(screen.queryByText('Laporan Keuangan')).toBeNull();
     expect(screen.queryByText('Akun & Kas')).toBeNull();
     expect(screen.queryByText('Tutup Harian')).toBeNull();
 
-    // Operational entry stays visible.
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Pengeluaran')).toBeTruthy();
   });
 
-  it('Staff (KASIR) still sees other operational sections (Transaksi, Stok HP)', async () => {
+  it('Admin/Keuangan sees finance entries and pengeluaran without boss settings', async () => {
+    setProfile(profileFor('KEUANGAN', 'Finance'));
+    renderNavbar();
+    await openDrawer();
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Laporan Keuangan' })).toBeTruthy();
+    expect(within(dialog).getByText('Tutup Harian')).toBeTruthy();
+    expect(within(dialog).getByText('Pengeluaran')).toBeTruthy();
+    expect(within(dialog).queryByText('Manajemen User')).toBeNull();
+  });
+
+  it('Staff still sees other operational sections', async () => {
     setRole('KASIR');
     renderNavbar();
     await openDrawer();

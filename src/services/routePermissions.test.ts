@@ -31,4 +31,17 @@ describe('routePermissions', () => {
     expect(canAccessPath(cashier, '/stok/pelengkap')).toBe(false);
     expect(canAccessPath(cashier, '/pengeluaran')).toBe(true);
   });
+
+  it('allows admin keuangan to access finance closing routes without user management', () => {
+    const financeAdmin = {
+      role: 'KEUANGAN',
+      permissions: {},
+    };
+
+    expect(canAccessPath(financeAdmin, '/laporan/tutup-harian')).toBe(true);
+    expect(canAccessPath(financeAdmin, '/akun-kas')).toBe(true);
+    expect(canAccessPath(financeAdmin, '/pengeluaran')).toBe(true);
+    expect(canAccessPath(financeAdmin, '/pengaturan/users')).toBe(false);
+    expect(canAccessPath(financeAdmin, '/penjualan')).toBe(false);
+  });
 });

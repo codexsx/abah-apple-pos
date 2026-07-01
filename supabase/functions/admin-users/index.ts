@@ -21,7 +21,7 @@ const PERMISSION_KEYS = [
   'pengeluaran', 'tukar_tambah', 'stok', 'agen',
 ] as const;
 
-const ROLES = ['MANAJER', 'KASIR', 'TEKNISI'] as const;
+const ROLES = ['MANAJER', 'KEUANGAN', 'KASIR', 'TEKNISI'] as const;
 const HIDDEN_OWNER_EMAIL = 'exe14102000@gmail.com';
 
 function corsHeadersFor(req: Request): Record<string, string> {
