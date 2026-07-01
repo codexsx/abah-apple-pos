@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   calculateDistanceMeters,
+  calculateAbsencePenalty,
   calculateLateMinutes,
   calculateLatePenalty,
   isWithinRadius,
+  listAttendanceDates,
   normalizeShifts,
 } from './attendanceCore';
 
@@ -40,6 +42,21 @@ describe('attendanceCore', () => {
     expect(calculateLatePenalty(0, 50_000)).toBe(0);
     expect(calculateLatePenalty(1, 50_000)).toBe(50_000);
     expect(calculateLatePenalty(120, 50_000)).toBe(50_000);
+  });
+
+  it('calculates one flat absence penalty for days without check-in', () => {
+    expect(calculateAbsencePenalty(true, 150_000)).toBe(0);
+    expect(calculateAbsencePenalty(false, 150_000)).toBe(150_000);
+    expect(calculateAbsencePenalty(false, -1)).toBe(0);
+  });
+
+  it('lists attendance dates only up to the latest closed date', () => {
+    expect(listAttendanceDates('2026-07-01', '2026-07-05', '2026-07-03')).toEqual([
+      '2026-07-01',
+      '2026-07-02',
+      '2026-07-03',
+    ]);
+    expect(listAttendanceDates('2026-07-05', '2026-07-01', '2026-07-03')).toEqual([]);
   });
 
   it('normalizes invalid shift settings to defaults', () => {

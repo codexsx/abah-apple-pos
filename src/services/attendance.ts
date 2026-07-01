@@ -1,13 +1,16 @@
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 import {
+  DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
   DEFAULT_ATTENDANCE_LATE_PENALTY,
   DEFAULT_ATTENDANCE_RADIUS_METERS,
   DEFAULT_ATTENDANCE_RETENTION_DAYS,
   DEFAULT_ATTENDANCE_SHIFTS,
   DEFAULT_ATTENDANCE_TOLERANCE_MINUTES,
+  calculateAbsencePenalty,
   calculateDistanceMeters,
   isWithinRadius,
+  listAttendanceDates,
   normalizeShifts,
   type AttendanceLocation,
   type AttendanceShift,
@@ -25,6 +28,7 @@ export interface AttendanceSettings {
   radius_meters: number;
   tolerance_minutes: number;
   penalty_per_minute: number;
+  absence_penalty_amount: number;
   retention_days: number;
   shifts: AttendanceShift[];
   updated_at: string;
@@ -67,6 +71,14 @@ export interface AttendanceRecord {
   staff: AttendanceStaff;
 }
 
+export interface AttendanceAbsence {
+  id: string;
+  staff_id: string;
+  attendance_date: string;
+  penalty_amount: number;
+  staff: AttendanceStaff;
+}
+
 interface RawSettingsRow {
   id: 'default';
   store_name: string | null;
@@ -75,6 +87,7 @@ interface RawSettingsRow {
   radius_meters: number | null;
   tolerance_minutes: number | null;
   penalty_per_minute: number | null;
+  absence_penalty_amount?: number | null;
   retention_days: number | null;
   shifts: unknown;
   updated_at: string | null;
@@ -132,6 +145,7 @@ function normalizeSettings(row: RawSettingsRow | null | undefined): AttendanceSe
     radius_meters: row?.radius_meters ?? DEFAULT_ATTENDANCE_RADIUS_METERS,
     tolerance_minutes: row?.tolerance_minutes ?? DEFAULT_ATTENDANCE_TOLERANCE_MINUTES,
     penalty_per_minute: row?.penalty_per_minute ?? DEFAULT_ATTENDANCE_LATE_PENALTY,
+    absence_penalty_amount: row?.absence_penalty_amount ?? DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
     retention_days: row?.retention_days ?? DEFAULT_ATTENDANCE_RETENTION_DAYS,
     shifts: normalizeShifts(row?.shifts ?? DEFAULT_ATTENDANCE_SHIFTS),
     updated_at: row?.updated_at ?? new Date().toISOString(),
@@ -199,6 +213,7 @@ export async function saveAttendanceSettings(settings: AttendanceSettings): Prom
       radius_meters: settings.radius_meters,
       tolerance_minutes: settings.tolerance_minutes,
       penalty_per_minute: settings.penalty_per_minute,
+      absence_penalty_amount: settings.absence_penalty_amount,
       retention_days: settings.retention_days,
       shifts: settings.shifts,
       updated_at: new Date().toISOString(),
@@ -296,6 +311,25 @@ export async function createAttendanceRecord(input: {
   return normalizeRecord(data as RawAttendanceRow, normalizeStaff(undefined, input.staffId), null);
 }
 
+function previousPontianakDate(): string {
+  const today = pontianakDate();
+  const date = new Date(`${today}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+export async function getAttendanceExpectedStaff(input: {
+  currentUserId: string;
+  canManage: boolean;
+}): Promise<AttendanceStaff[]> {
+  const { data, error } = await supabase.rpc('get_attendance_expected_staff');
+  if (error) throw error;
+
+  const rows = ((data ?? []) as RawStaffRow[])
+    .filter((row) => input.canManage || row.id === input.currentUserId);
+  return rows.map((row) => normalizeStaff(row, row.id));
+}
+
 export async function getAttendanceRecords(input: {
   currentUserId: string;
   canManage: boolean;
@@ -336,6 +370,38 @@ export async function getAttendanceRecords(input: {
     const photoUrl = signedError ? null : signed.signedUrl;
     return normalizeRecord(row, normalizeStaff(staffMap.get(row.staff_id), row.staff_id), photoUrl);
   }));
+}
+
+export async function getAttendanceAbsences(input: {
+  currentUserId: string;
+  canManage: boolean;
+  startDate: string;
+  endDate: string;
+  settings: AttendanceSettings;
+  records: AttendanceRecord[];
+}): Promise<AttendanceAbsence[]> {
+  const dates = listAttendanceDates(input.startDate, input.endDate, previousPontianakDate());
+  if (dates.length === 0) return [];
+
+  const staff = await getAttendanceExpectedStaff({
+    currentUserId: input.currentUserId,
+    canManage: input.canManage,
+  });
+  if (staff.length === 0) return [];
+
+  const checkedIn = new Set(
+    input.records.map((record) => `${record.staff_id}:${record.attendance_date}`),
+  );
+
+  return staff.flatMap((member) => dates
+    .filter((date) => !checkedIn.has(`${member.id}:${date}`))
+    .map((date) => ({
+      id: `absence-${member.id}-${date}`,
+      staff_id: member.id,
+      attendance_date: date,
+      penalty_amount: calculateAbsencePenalty(false, input.settings.absence_penalty_amount),
+      staff: member,
+    })));
 }
 
 export async function verifyAttendanceRecord(input: {

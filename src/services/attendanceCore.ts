@@ -17,6 +17,7 @@ export const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShift[] = [
 
 export const DEFAULT_ATTENDANCE_TOLERANCE_MINUTES = 10;
 export const DEFAULT_ATTENDANCE_LATE_PENALTY = 50_000;
+export const DEFAULT_ATTENDANCE_ABSENCE_PENALTY = 150_000;
 export const DEFAULT_ATTENDANCE_RADIUS_METERS = 150;
 export const DEFAULT_ATTENDANCE_RETENTION_DAYS = 35;
 export const PONTIANAK_TIME_ZONE_OFFSET = '+07:00';
@@ -70,6 +71,39 @@ export function calculateLatePenalty(lateMinutes: number, latePenaltyAmount: num
   return Math.max(0, Math.floor(lateMinutes)) > 0
     ? Math.max(0, Math.floor(latePenaltyAmount))
     : 0;
+}
+
+export function calculateAbsencePenalty(hasCheckIn: boolean, absencePenaltyAmount: number): number {
+  return hasCheckIn ? 0 : Math.max(0, Math.floor(absencePenaltyAmount));
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(new Date(`${value}T00:00:00Z`).getTime());
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function listAttendanceDates(startDate: string, endDate: string, latestDate: string): string[] {
+  if (!isIsoDate(startDate) || !isIsoDate(endDate) || !isIsoDate(latestDate)) return [];
+  const start = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  const latest = new Date(`${latestDate}T00:00:00Z`);
+  const cappedEnd = end.getTime() < latest.getTime() ? end : latest;
+  if (start.getTime() > cappedEnd.getTime()) return [];
+
+  const dates: string[] = [];
+  for (let current = start; current.getTime() <= cappedEnd.getTime(); current = addDays(current, 1)) {
+    dates.push(toIsoDate(current));
+  }
+  return dates;
 }
 
 export function normalizeShifts(value: unknown): AttendanceShift[] {

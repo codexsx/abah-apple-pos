@@ -19,11 +19,13 @@ import { effectivePermission } from '@/services/permissionsCore';
 import {
   captureVideoFrameToWebp,
   createAttendanceRecord,
+  getAttendanceAbsences,
   getAttendanceRecords,
   getAttendanceSettings,
   pontianakDate,
   saveAttendanceSettings,
   verifyAttendanceRecord,
+  type AttendanceAbsence,
   type AttendanceRecord,
   type AttendanceSettings,
   type AttendanceStatus,
@@ -77,6 +79,10 @@ function statusLabel(status: AttendanceStatus): string {
   if (status === 'rejected') return 'Ditolak';
   return 'Menunggu';
 }
+
+type AttendanceListItem =
+  | { type: 'record'; key: string; date: string; sortTime: string; record: AttendanceRecord }
+  | { type: 'absence'; key: string; date: string; sortTime: string; absence: AttendanceAbsence };
 
 function AttendancePhoto({ record }: { record: AttendanceRecord }) {
   if (!record.photo_url) {
@@ -142,6 +148,7 @@ export default function Absensi() {
   const [settings, setSettings] = useState<AttendanceSettings | null>(null);
   const [draft, setDraft] = useState<AttendanceSettings | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [absences, setAbsences] = useState<AttendanceAbsence[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState(DEFAULT_ATTENDANCE_SHIFTS[0].id);
   const [position, setPosition] = useState<(AttendanceLocation & { accuracy?: number | null; distance: number; ok: boolean }) | null>(null);
   const [startDate, setStartDate] = useState(range.startDate);
@@ -165,7 +172,7 @@ export default function Absensi() {
   }, [records, user?.id]);
 
   const summary = useMemo(() => {
-    return records.reduce(
+    const recordSummary = records.reduce(
       (acc, record) => {
         acc.total += 1;
         if (record.status === 'pending') acc.pending += 1;
@@ -173,9 +180,36 @@ export default function Absensi() {
         acc.penalty += record.penalty_amount;
         return acc;
       },
-      { total: 0, pending: 0, late: 0, penalty: 0 },
+      { total: 0, pending: 0, late: 0, absent: 0, penalty: 0 },
     );
-  }, [records]);
+    recordSummary.absent = absences.length;
+    recordSummary.total += absences.length;
+    recordSummary.penalty += absences.reduce((sum, absence) => sum + absence.penalty_amount, 0);
+    return recordSummary;
+  }, [absences, records]);
+
+  const attendanceItems = useMemo<AttendanceListItem[]>(() => {
+    return [
+      ...records.map((record): AttendanceListItem => ({
+        type: 'record',
+        key: record.id,
+        date: record.attendance_date,
+        sortTime: record.check_in_at,
+        record,
+      })),
+      ...absences.map((absence): AttendanceListItem => ({
+        type: 'absence',
+        key: absence.id,
+        date: absence.attendance_date,
+        sortTime: `${absence.attendance_date}T23:59:59+07:00`,
+        absence,
+      })),
+    ].sort((a, b) => {
+      const dateDiff = b.date.localeCompare(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.sortTime.localeCompare(a.sortTime);
+    });
+  }, [absences, records]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -196,11 +230,20 @@ export default function Absensi() {
           ? current
           : loadedSettings.shifts[0]?.id ?? DEFAULT_ATTENDANCE_SHIFTS[0].id
       ));
-      setRecords(await getAttendanceRecords({
+      const loadedRecords = await getAttendanceRecords({
         currentUserId: user.id,
         canManage,
         startDate,
         endDate,
+      });
+      setRecords(loadedRecords);
+      setAbsences(await getAttendanceAbsences({
+        currentUserId: user.id,
+        canManage,
+        startDate,
+        endDate,
+        settings: loadedSettings,
+        records: loadedRecords,
       }));
     } catch (err) {
       console.error('[Absensi] load error:', err);
@@ -372,7 +415,7 @@ export default function Absensi() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Total</p>
             <p className="mt-2 text-[28px] font-bold text-slate-950">{summary.total}</p>
@@ -384,6 +427,10 @@ export default function Absensi() {
           <div className="rounded-2xl bg-rose-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-500">Telat</p>
             <p className="mt-2 text-[28px] font-bold text-rose-700">{summary.late}</p>
+          </div>
+          <div className="rounded-2xl bg-orange-50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-orange-500">Tidak Absen</p>
+            <p className="mt-2 text-[28px] font-bold text-orange-700">{summary.absent}</p>
           </div>
           <div className="rounded-2xl bg-blue-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-500">Potongan</p>
@@ -510,14 +557,60 @@ export default function Absensi() {
             <div className="flex min-h-[260px] items-center justify-center">
               <Loader2 size={26} className="animate-spin text-slate-300" />
             </div>
-          ) : records.length === 0 ? (
+          ) : attendanceItems.length === 0 ? (
             <div className="flex min-h-[260px] items-center justify-center rounded-2xl bg-slate-50 text-[13px] font-semibold text-slate-400">
               Belum ada absensi
             </div>
           ) : (
             <div className="space-y-3">
-              {records.map((record) => (
-                <div key={record.id} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
+              {attendanceItems.map((item) => {
+                if (item.type === 'absence') {
+                  const { absence } = item;
+                  return (
+                    <div key={item.key} className="grid gap-3 rounded-2xl border border-orange-100 bg-orange-50/70 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
+                      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-2xl bg-white text-orange-500 ring-1 ring-orange-100">
+                        <XCircle size={28} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {absence.staff.avatar_url ? (
+                              <img
+                                src={absence.staff.avatar_url}
+                                alt={absence.staff.name}
+                                className="h-9 w-9 rounded-full object-cover"
+                                style={avatarImageStyle(absence.staff)}
+                              />
+                            ) : (
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-[12px] font-bold text-white">
+                                {absence.staff.initials}
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-[14px] font-bold text-slate-950">{absence.staff.name}</p>
+                              <p className="text-[11px] font-semibold text-slate-500">{absence.staff.role}</p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-bold text-orange-700 ring-1 ring-orange-200">
+                            Tidak absen
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-[12px] font-semibold text-slate-600 sm:grid-cols-2">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock3 size={13} /> {formatDate(absence.attendance_date)}
+                          </span>
+                          <span className="text-orange-700">Tidak ada check-in</span>
+                          <span className="text-orange-700">Potongan {formatRupiah(absence.penalty_amount)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const { record } = item;
+                return (
+                <div key={item.key} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
                   <AttendancePhoto record={record} />
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-3">
@@ -581,7 +674,8 @@ export default function Absensi() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -661,6 +755,15 @@ export default function Absensi() {
                 type="number"
                 value={draft.penalty_per_minute}
                 onChange={(event) => setDraft({ ...draft, penalty_per_minute: Number(event.target.value) })}
+                className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-[13px] font-semibold outline-none focus:border-blue-300"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Potongan Tidak Absen</span>
+              <input
+                type="number"
+                value={draft.absence_penalty_amount}
+                onChange={(event) => setDraft({ ...draft, absence_penalty_amount: Number(event.target.value) })}
                 className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-[13px] font-semibold outline-none focus:border-blue-300"
               />
             </label>
