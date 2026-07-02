@@ -1,5 +1,17 @@
 export type TransactionChangeAction = 'edit' | 'delete';
 
+const DELETE_SUPPORTED_TYPES = new Set([
+  'Penjualan',
+  'Pembelian',
+  'Pengeluaran',
+  'Pemasukan Lain',
+  'Upah Servis',
+]);
+
+export function isTransactionDeleteRequestSupported(type: string): boolean {
+  return DELETE_SUPPORTED_TYPES.has(type);
+}
+
 export interface TransactionChangeCurrentValue {
   description: string;
   detail: string;

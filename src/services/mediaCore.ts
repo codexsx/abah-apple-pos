@@ -65,3 +65,69 @@ export function drawImageToCanvas(
   ctx.drawImage(image, 0, 0, width, height);
   ctx.restore();
 }
+
+export interface EncodeCanvasImageBlobOptions {
+  preferredType?: string;
+  fallbackType?: string;
+  quality?: number;
+  timeoutMs?: number;
+}
+
+function dataUrlToBlob(dataUrl: string, fallbackType: string): Blob {
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(dataUrl);
+  if (!match) throw new Error('Foto tidak dapat dikompres.');
+
+  const mimeType = match[1] || fallbackType;
+  const isBase64 = !!match[2];
+  const payload = match[3] || '';
+  const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: mimeType });
+}
+
+function canvasToBlobWithTimeout(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+  timeoutMs: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (blob: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(blob);
+    };
+    const timer = window.setTimeout(() => finish(null), Math.max(1, timeoutMs));
+
+    try {
+      canvas.toBlob((blob) => finish(blob), type, quality);
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+export async function encodeCanvasImageBlob(
+  canvas: HTMLCanvasElement,
+  options: EncodeCanvasImageBlobOptions = {},
+): Promise<Blob> {
+  const preferredType = options.preferredType ?? 'image/webp';
+  const fallbackType = options.fallbackType ?? 'image/jpeg';
+  const quality = options.quality ?? 0.78;
+  const timeoutMs = options.timeoutMs ?? 2500;
+
+  const preferredBlob = await canvasToBlobWithTimeout(canvas, preferredType, quality, timeoutMs);
+  if (preferredBlob && preferredBlob.size > 0) return preferredBlob;
+
+  const fallbackDataUrl = canvas.toDataURL(fallbackType, quality);
+  const fallbackBlob = dataUrlToBlob(fallbackDataUrl, fallbackType);
+  if (fallbackBlob.size <= 0) throw new Error('Foto tidak dapat dikompres.');
+  return fallbackBlob;
+}

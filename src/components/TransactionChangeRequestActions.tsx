@@ -17,6 +17,7 @@ import {
   submitTransactionChangeRequest,
   type SubmitTransactionChangeRequestInput,
 } from '@/services/transactionApprovals';
+import { isTransactionDeleteRequestSupported } from '@/services/transactionApprovalsCore';
 import type { Transaction } from '@/services/transactions';
 
 interface TransactionChangeRequestActionsProps {
@@ -25,13 +26,6 @@ interface TransactionChangeRequestActionsProps {
 }
 
 type ActiveAction = SubmitTransactionChangeRequestInput['action'];
-
-const DELETE_SUPPORTED_TYPES = new Set<Transaction['type']>([
-  'Penjualan',
-  'Pembelian',
-  'Pengeluaran',
-  'Pemasukan Lain',
-]);
 
 function parseIdr(value: string): number | null {
   const digits = value.replace(/[^\d]/g, '');
@@ -54,7 +48,7 @@ export default function TransactionChangeRequestActions({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const canDelete = DELETE_SUPPORTED_TYPES.has(transaction.type);
+  const canDelete = isTransactionDeleteRequestSupported(transaction.type);
   const isOpen = activeAction !== null;
   const dialogTitle = activeAction === 'delete' ? 'Ajukan Hapus Transaksi' : 'Ajukan Edit Transaksi';
 

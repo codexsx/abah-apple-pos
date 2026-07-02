@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
-import { drawImageToCanvas } from '@/services/mediaCore';
+import { drawImageToCanvas, encodeCanvasImageBlob } from '@/services/mediaCore';
 import {
   DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
   DEFAULT_ATTENDANCE_LATE_PENALTY,
@@ -246,11 +246,23 @@ export async function captureVideoFrameToWebp(
   if (!ctx) throw new Error('Browser tidak mendukung kamera absensi.');
   drawImageToCanvas(ctx, video, width, height, options.mirror ?? false);
 
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, 'image/webp', 0.78);
+  const blob = await encodeCanvasImageBlob(canvas, {
+    preferredType: 'image/webp',
+    fallbackType: 'image/jpeg',
+    quality: 0.78,
   });
   if (!blob) throw new Error('Foto absen tidak dapat dikompres.');
   return blob;
+}
+
+function attendancePhotoContentType(blob: Blob): string {
+  return ['image/webp', 'image/jpeg', 'image/png'].includes(blob.type) ? blob.type : 'image/webp';
+}
+
+function attendancePhotoExtension(contentType: string): string {
+  if (contentType === 'image/jpeg') return 'jpg';
+  if (contentType === 'image/png') return 'png';
+  return 'webp';
 }
 
 export async function createAttendanceRecord(input: {
@@ -272,12 +284,14 @@ export async function createAttendanceRecord(input: {
   }
 
   const recordId = crypto.randomUUID();
-  const path = `${input.staffId}/${attendanceDate}/${recordId}.webp`;
+  const contentType = attendancePhotoContentType(input.photoBlob);
+  const extension = attendancePhotoExtension(contentType);
+  const path = `${input.staffId}/${attendanceDate}/${recordId}.${extension}`;
 
   const { error: uploadError } = await supabase.storage
     .from(ATTENDANCE_PHOTOS_BUCKET)
     .upload(path, input.photoBlob, {
-      contentType: 'image/webp',
+      contentType,
       cacheControl: '2678400',
       upsert: false,
     });

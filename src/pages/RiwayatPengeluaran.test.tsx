@@ -39,23 +39,25 @@ describe('RiwayatPengeluaran', () => {
     mockedGet.mockReset();
   });
 
-  it('fetches Pengeluaran and Upah Servis transactions on mount and renders them after loading', async () => {
+  it('fetches cash movement transactions on mount and renders them after loading', async () => {
     const txs = [
       makeTx({ id: 'TX-001', description: 'Bayar Listrik', amount: 150000 }),
       makeTx({ id: 'TX-002', description: 'Beli ATK', amount: 75000 }),
       makeTx({ id: 'TX-003', type: 'Upah Servis', description: 'Upah Rendi', amount: 200000 }),
+      makeTx({ id: 'TX-004', type: 'Pemasukan Lain', description: 'Bonus Transfer', amount: 500000 }),
     ];
     mockedGet.mockResolvedValueOnce(txs);
 
     render(<RiwayatPengeluaran />);
 
-    // Called with both expense types on mount.
-    expect(mockedGet).toHaveBeenCalledWith(['Pengeluaran', 'Upah Servis']);
+    // Called with every transaction type that belongs in cash movement history.
+    expect(mockedGet).toHaveBeenCalledWith(['Pengeluaran', 'Upah Servis', 'Pemasukan Lain']);
 
     // Transactions render once loading resolves.
     expect(await screen.findByText('Bayar Listrik')).toBeInTheDocument();
     expect(screen.getByText('Beli ATK')).toBeInTheDocument();
     expect(screen.getByText('Upah Rendi')).toBeInTheDocument();
+    expect(screen.getByText('Bonus Transfer')).toBeInTheDocument();
   });
 
   it('renders the empty-state message when no transactions are returned', async () => {
@@ -94,6 +96,6 @@ describe('RiwayatPengeluaran', () => {
     // Retry triggers a second fetch and renders the new data.
     expect(await screen.findByText('Sewa Toko')).toBeInTheDocument();
     await waitFor(() => expect(mockedGet).toHaveBeenCalledTimes(2));
-    expect(mockedGet).toHaveBeenLastCalledWith(['Pengeluaran', 'Upah Servis']);
+    expect(mockedGet).toHaveBeenLastCalledWith(['Pengeluaran', 'Upah Servis', 'Pemasukan Lain']);
   });
 });

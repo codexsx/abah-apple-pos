@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   WEB_CAPTURE_IMAGE_ACCEPT,
+  encodeCanvasImageBlob,
   getCanvasMirrorTransform,
   isSupportedWebCaptureImageFile,
 } from './mediaCore';
@@ -32,5 +33,43 @@ describe('mediaCore', () => {
   it('returns deterministic canvas transform settings for mirrored captures', () => {
     expect(getCanvasMirrorTransform(false, 320)).toEqual({ translateX: 0, scaleX: 1 });
     expect(getCanvasMirrorTransform(true, 320)).toEqual({ translateX: 320, scaleX: -1 });
+  });
+
+  it('falls back when canvas.toBlob never resolves for WebP', async () => {
+    const fallbackData = btoa('fallback-image');
+    const canvas = {
+      toBlob: () => {
+        // Some mobile browsers can leave the callback unresolved for unsupported encoders.
+      },
+      toDataURL: () => `data:image/jpeg;base64,${fallbackData}`,
+    } as unknown as HTMLCanvasElement;
+
+    const blob = await encodeCanvasImageBlob(canvas, {
+      preferredType: 'image/webp',
+      fallbackType: 'image/jpeg',
+      quality: 0.78,
+      timeoutMs: 1,
+    });
+
+    expect(blob.type).toBe('image/jpeg');
+    expect(await blob.text()).toBe('fallback-image');
+  });
+
+  it('falls back when canvas.toBlob returns null', async () => {
+    const fallbackData = btoa('fallback-null');
+    const canvas = {
+      toBlob: (callback: BlobCallback) => callback(null),
+      toDataURL: () => `data:image/jpeg;base64,${fallbackData}`,
+    } as unknown as HTMLCanvasElement;
+
+    const blob = await encodeCanvasImageBlob(canvas, {
+      preferredType: 'image/webp',
+      fallbackType: 'image/jpeg',
+      quality: 0.78,
+      timeoutMs: 1,
+    });
+
+    expect(blob.type).toBe('image/jpeg');
+    expect(await blob.text()).toBe('fallback-null');
   });
 });

@@ -356,7 +356,7 @@ const operasiItems: RouteMenuItem[] = [
 const riwayatItems: RouteMenuItem[] = [
   { label: 'Riwayat Pembelian', route: '/riwayat/pembelian' },
   { label: 'Riwayat Penjualan', route: '/riwayat/penjualan' },
-  { label: 'Riwayat Pengeluaran', route: '/riwayat/pengeluaran' },
+  { label: 'Riwayat Kas', route: '/riwayat/pengeluaran' },
   { label: 'Riwayat Tukar Tambah', route: '/riwayat/tukar-tambah' },
 ];
 

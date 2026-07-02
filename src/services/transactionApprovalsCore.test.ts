@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeTransactionChangeRequest } from './transactionApprovalsCore';
+import {
+  isTransactionDeleteRequestSupported,
+  normalizeTransactionChangeRequest,
+} from './transactionApprovalsCore';
 
 const current = {
   description: 'Penjualan 1 unit',
@@ -61,5 +64,12 @@ describe('normalizeTransactionChangeRequest', () => {
       ok: false,
       message: 'Nominal transaksi tidak boleh negatif.',
     });
+  });
+
+  it('allows delete approval requests for simple cash expense transaction types', () => {
+    expect(isTransactionDeleteRequestSupported('Pengeluaran')).toBe(true);
+    expect(isTransactionDeleteRequestSupported('Pemasukan Lain')).toBe(true);
+    expect(isTransactionDeleteRequestSupported('Upah Servis')).toBe(true);
+    expect(isTransactionDeleteRequestSupported('Tukar Tambah')).toBe(false);
   });
 });

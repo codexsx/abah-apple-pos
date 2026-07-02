@@ -110,7 +110,7 @@ const sheetSections = [
     items: [
       { path: '/riwayat/pembelian', label: 'Riwayat Pembelian', icon: History },
       { path: '/riwayat/penjualan', label: 'Riwayat Penjualan', icon: History },
-      { path: '/riwayat/pengeluaran', label: 'Riwayat Pengeluaran', icon: History },
+      { path: '/riwayat/pengeluaran', label: 'Riwayat Kas', icon: History },
       { path: '/riwayat/tukar-tambah', label: 'Riwayat Tukar Tambah', icon: History },
     ],
   },

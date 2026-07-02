@@ -90,7 +90,11 @@ export default function RiwayatPengeluaran() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getTransactionsWithStockDetailsByTypes(['Pengeluaran', 'Upah Servis']);
+      const data = await getTransactionsWithStockDetailsByTypes([
+        'Pengeluaran',
+        'Upah Servis',
+        'Pemasukan Lain',
+      ]);
       setTransactions(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data transaksi');
@@ -153,7 +157,7 @@ export default function RiwayatPengeluaran() {
         className="mb-8"
       >
         <h1 className="font-display text-[36px] sm:text-[40px] text-slate-900 leading-tight">
-          Riwayat Pengeluaran
+          Riwayat Kas
         </h1>
         <p className="text-[13px] text-slate-500 mt-1">
           {totalUnit} transaksi · {formatRupiah(totalPengeluaran)}
@@ -256,7 +260,7 @@ export default function RiwayatPengeluaran() {
           <div className="flex items-center gap-2 mb-2">
             <Wallet size={14} className="text-rose-500" />
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-[0.08em]">
-              Total Pengeluaran
+              Total Kas
             </p>
           </div>
           <p className="font-mono text-[28px] sm:text-[32px] font-bold text-slate-900 leading-none">
