@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { groupStoriesByAuthor, isActiveStory, storyExpiresAt, type StoryRecordCore } from './storiesCore';
+import {
+  STORY_COMMENT_MAX_LENGTH,
+  groupStoriesByAuthor,
+  isActiveStory,
+  normalizeStoryCommentBody,
+  storyExpiresAt,
+  type StoryRecordCore,
+} from './storiesCore';
 
 describe('storiesCore', () => {
   it('sets story expiry around 24 hours after creation', () => {
@@ -28,5 +35,20 @@ describe('storiesCore', () => {
     expect(groups[0].hasUnseen).toBe(true);
     expect(groups[0].stories.map((story) => story.id)).toEqual(['1', '2']);
     expect(groups[1].authorId).toBe('staff-2');
+  });
+
+  it('normalizes story comments before insert', () => {
+    expect(normalizeStoryCommentBody('  Mantap toko hari ini  ')).toEqual({
+      ok: true,
+      body: 'Mantap toko hari ini',
+    });
+    expect(normalizeStoryCommentBody('   ')).toEqual({
+      ok: false,
+      message: 'Komentar tidak boleh kosong.',
+    });
+    expect(normalizeStoryCommentBody('x'.repeat(STORY_COMMENT_MAX_LENGTH + 1))).toEqual({
+      ok: false,
+      message: `Komentar maksimal ${STORY_COMMENT_MAX_LENGTH} karakter.`,
+    });
   });
 });

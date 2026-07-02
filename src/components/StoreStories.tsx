@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronLeft,
@@ -6,7 +6,9 @@ import {
   FlipHorizontal2,
   ImagePlus,
   Loader2,
+  MessageCircle,
   Plus,
+  Send,
   Trash2,
   X,
 } from 'lucide-react';
@@ -15,10 +17,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { avatarImageStyle } from '@/services/avatarCrop';
 import { WEB_CAPTURE_IMAGE_ACCEPT } from '@/services/mediaCore';
 import {
+  addStoryComment,
+  deleteStoryComment,
   deleteStoreStory,
   getActiveStories,
+  getStoryComments,
   markStoryViewed,
   uploadStoreStory,
+  type StoryComment,
   type StoreStory,
   type StoreStoryGroup,
 } from '@/services/stories';
@@ -86,11 +92,18 @@ export default function StoreStories() {
   const [viewer, setViewer] = useState<{ groupIndex: number; storyIndex: number } | null>(null);
   const [progress, setProgress] = useState(0);
   const [mirrorUpload, setMirrorUpload] = useState(false);
+  const [comments, setComments] = useState<StoryComment[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentError, setCommentError] = useState('');
 
   const activeGroup = viewer ? groups[viewer.groupIndex] : null;
   const activeStory = activeGroup ? activeGroup.stories[viewer?.storyIndex ?? 0] : null;
   const activeStoryId = activeStory?.id;
   const activeStoryViewed = activeStory?.viewed ?? true;
+  const activeStoryCommentCount = activeStory?.comment_count ?? comments.length;
   const canDeleteActiveStory = Boolean(
     activeStory && (activeStory.author_id === user?.id || profile?.role === 'MANAJER'),
   );
@@ -113,6 +126,30 @@ export default function StoreStories() {
     refreshStories();
   }, [refreshStories]);
 
+  const syncCommentCount = useCallback((storyId: string, count: number) => {
+    setGroups((current) => current.map((group) => ({
+      ...group,
+      stories: group.stories.map((story) => (
+        story.id === storyId ? { ...story, comment_count: count } : story
+      )),
+    })));
+  }, []);
+
+  const loadComments = useCallback(async (storyId: string) => {
+    setCommentsLoading(true);
+    setCommentError('');
+    try {
+      const nextComments = await getStoryComments(storyId);
+      setComments(nextComments);
+      syncCommentCount(storyId, nextComments.length);
+    } catch (err) {
+      console.error('[StoreStories] comments load error:', err);
+      setCommentError(err instanceof Error ? err.message : 'Komentar tidak dapat dimuat.');
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [syncCommentCount]);
+
   const openViewer = useCallback((groupIndex: number) => {
     const firstUnseen = groups[groupIndex]?.stories.findIndex((story) => !story.viewed) ?? -1;
     setViewer({ groupIndex, storyIndex: firstUnseen >= 0 ? firstUnseen : 0 });
@@ -121,6 +158,10 @@ export default function StoreStories() {
   const closeViewer = useCallback(() => {
     setViewer(null);
     setProgress(0);
+    setComments([]);
+    setCommentsOpen(false);
+    setCommentDraft('');
+    setCommentError('');
   }, []);
 
   const goNext = useCallback(() => {
@@ -174,6 +215,15 @@ export default function StoreStories() {
 
   useEffect(() => {
     if (!activeStoryId) return;
+    setComments([]);
+    setCommentsOpen(false);
+    setCommentDraft('');
+    setCommentError('');
+    void loadComments(activeStoryId);
+  }, [activeStoryId, loadComments]);
+
+  useEffect(() => {
+    if (!activeStoryId || commentsOpen) return;
     const startedAt = Date.now();
     const timer = window.setInterval(() => {
       const next = Math.min(100, ((Date.now() - startedAt) / STORY_DURATION_MS) * 100);
@@ -185,7 +235,7 @@ export default function StoreStories() {
     }, 80);
 
     return () => window.clearInterval(timer);
-  }, [activeStoryId, goNext]);
+  }, [activeStoryId, commentsOpen, goNext]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -215,6 +265,43 @@ export default function StoreStories() {
     } catch (err) {
       console.error('[StoreStories] delete error:', err);
       setError(err instanceof Error ? err.message : 'Story tidak dapat dihapus.');
+    }
+  }
+
+  async function handleSubmitComment(event: FormEvent) {
+    event.preventDefault();
+    if (!activeStory?.id || !user?.id || commentSubmitting) return;
+
+    setCommentSubmitting(true);
+    setCommentError('');
+    try {
+      await addStoryComment({
+        storyId: activeStory.id,
+        userId: user.id,
+        body: commentDraft,
+      });
+      setCommentDraft('');
+      await loadComments(activeStory.id);
+      setCommentsOpen(true);
+    } catch (err) {
+      console.error('[StoreStories] comment submit error:', err);
+      setCommentError(err instanceof Error ? err.message : 'Komentar tidak dapat dikirim.');
+    } finally {
+      setCommentSubmitting(false);
+    }
+  }
+
+  async function handleDeleteComment(comment: StoryComment) {
+    if (!(comment.author_id === user?.id || profile?.role === 'MANAJER')) return;
+    setCommentError('');
+    try {
+      await deleteStoryComment(comment.id);
+      const nextComments = comments.filter((item) => item.id !== comment.id);
+      setComments(nextComments);
+      syncCommentCount(comment.story_id, nextComments.length);
+    } catch (err) {
+      console.error('[StoreStories] comment delete error:', err);
+      setCommentError(err instanceof Error ? err.message : 'Komentar tidak dapat dihapus.');
     }
   }
 
@@ -345,6 +432,15 @@ export default function StoreStories() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setCommentsOpen((value) => !value)}
+                      className="flex h-9 items-center justify-center gap-1.5 rounded-full bg-white/10 px-3 text-[12px] font-semibold text-white backdrop-blur transition-colors hover:bg-white/20"
+                      aria-label="Lihat komentar"
+                    >
+                      <MessageCircle size={16} />
+                      {activeStoryCommentCount}
+                    </button>
                     {canDeleteActiveStory && (
                       <button
                         type="button"
@@ -373,9 +469,115 @@ export default function StoreStories() {
                 className="h-full w-full object-contain"
               />
 
-              {activeStory.caption && (
-                <div className="absolute bottom-8 left-4 right-4 z-20 rounded-2xl bg-black/45 px-4 py-3 text-[14px] font-medium text-white backdrop-blur">
-                  {activeStory.caption}
+              {!commentsOpen && (
+                <div className="absolute bottom-5 left-4 right-4 z-20 space-y-3">
+                  {activeStory.caption && (
+                    <div className="rounded-2xl bg-black/45 px-4 py-3 text-[14px] font-medium text-white backdrop-blur">
+                      {activeStory.caption}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setCommentsOpen(true)}
+                    className="flex h-12 w-full items-center gap-3 rounded-full border border-white/15 bg-black/45 px-4 text-left text-[13px] font-medium text-white/80 backdrop-blur transition-colors hover:bg-black/60"
+                  >
+                    <MessageCircle size={17} />
+                    Tulis komentar...
+                    {activeStoryCommentCount > 0 && (
+                      <span className="ml-auto rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold">
+                        {activeStoryCommentCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {commentsOpen && (
+                <div className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border-t border-white/10 bg-slate-950/90 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4 text-white shadow-[0_-22px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[14px] font-semibold">Komentar</p>
+                      <p className="text-[11px] font-medium text-white/50">{activeStoryCommentCount} komentar</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCommentsOpen(false)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                      aria-label="Tutup komentar"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[34vh] space-y-3 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {commentsLoading ? (
+                      <div className="flex min-h-[90px] items-center justify-center">
+                        <Loader2 size={20} className="animate-spin text-white/50" />
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <div className="rounded-2xl bg-white/8 px-4 py-5 text-center text-[13px] font-medium text-white/55">
+                        Belum ada komentar
+                      </div>
+                    ) : comments.map((comment) => {
+                      const canDeleteComment = comment.author_id === user?.id || profile?.role === 'MANAJER';
+                      return (
+                        <div key={comment.id} className="flex gap-3">
+                          {comment.author.avatar_url ? (
+                            <img
+                              src={comment.author.avatar_url}
+                              alt={comment.author.name}
+                              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+                              style={avatarImageStyle(comment.author)}
+                            />
+                          ) : (
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white ring-1 ring-white/20">
+                              {comment.author.initials}
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1 rounded-2xl bg-white/10 px-3 py-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-[12px] font-semibold text-white">{comment.author.name}</p>
+                                <p className="text-[10px] font-medium text-white/45">{formatStoryTime(comment.created_at)}</p>
+                              </div>
+                              {canDeleteComment && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(comment)}
+                                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                                  aria-label="Hapus komentar"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-white/85">
+                              {comment.body}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={handleSubmitComment} className="mt-3 flex items-center gap-2">
+                    <input
+                      value={commentDraft}
+                      onChange={(event) => setCommentDraft(event.target.value)}
+                      maxLength={240}
+                      placeholder="Tulis komentar..."
+                      className="h-11 min-w-0 flex-1 rounded-full border border-white/10 bg-white/10 px-4 text-[13px] font-medium text-white outline-none placeholder:text-white/35 focus:border-white/30"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!commentDraft.trim() || commentSubmitting}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/35"
+                      aria-label="Kirim komentar"
+                    >
+                      {commentSubmitting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+                    </button>
+                  </form>
+                  {commentError && <p className="mt-2 text-[12px] font-medium text-rose-200">{commentError}</p>}
                 </div>
               )}
 

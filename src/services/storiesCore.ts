@@ -7,6 +7,7 @@ import {
 export const STORY_TTL_HOURS = 24;
 export const STORY_MAX_DIMENSION = 1080;
 export const STORY_WEBP_QUALITY = 0.76;
+export const STORY_COMMENT_MAX_LENGTH = 240;
 
 export interface StoryMediaResult {
   blob: Blob;
@@ -34,6 +35,17 @@ export function storyExpiresAt(now = new Date()): string {
 
 export function isActiveStory(expiresAt: string, now = new Date()): boolean {
   return new Date(expiresAt).getTime() > now.getTime();
+}
+
+export function normalizeStoryCommentBody(value: unknown):
+  | { ok: true; body: string }
+  | { ok: false; message: string } {
+  const body = typeof value === 'string' ? value.trim() : '';
+  if (!body) return { ok: false, message: 'Komentar tidak boleh kosong.' };
+  if (body.length > STORY_COMMENT_MAX_LENGTH) {
+    return { ok: false, message: `Komentar maksimal ${STORY_COMMENT_MAX_LENGTH} karakter.` };
+  }
+  return { ok: true, body };
 }
 
 export function groupStoriesByAuthor<T extends StoryRecordCore>(stories: T[]): StoryGroupCore<T>[] {
