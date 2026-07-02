@@ -63,6 +63,7 @@ const ManajemenUser = lazyRoute(() => import('./pages/ManajemenUser'));
 const CompanySettings = lazyRoute(() => import('./pages/CompanySettings'));
 const StaffPerformance = lazyRoute(() => import('./pages/StaffPerformance'));
 const Absensi = lazyRoute(() => import('./pages/Absensi'));
+const TransactionApprovals = lazyRoute(() => import('./pages/TransactionApprovals'));
 
 /* ── loading fallback ── */
 function PageLoader() {
@@ -310,6 +311,16 @@ function AppRoutes() {
             <PermissionRoute permission="manage_users">
               <Suspense fallback={<PageLoader />}>
                 <StaffPerformance />
+              </Suspense>
+            </PermissionRoute>
+          }
+        />
+        <Route
+          path="/approval/transaksi"
+          element={
+            <PermissionRoute permission="manage_users">
+              <Suspense fallback={<PageLoader />}>
+                <TransactionApprovals />
               </Suspense>
             </PermissionRoute>
           }

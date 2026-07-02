@@ -23,6 +23,7 @@ import {
 import { getDateRange, isInDateRange, type QuickFilter } from '@/services/dateFilters';
 import { TransactionStockDetails } from '@/components/TransactionStockDetails';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
+import TransactionChangeRequestActions from '@/components/TransactionChangeRequestActions';
 import { ConfirmationView } from '@/components/sale/ConfirmationView';
 import type { ReceiptData } from '@/services/receipt';
 import { transactionToReceiptData, printReceipt } from '@/services/receipt';
@@ -634,6 +635,7 @@ export default function RiwayatPenjualan() {
                               <Printer size={12} />
                               Cetak Nota
                             </button>
+                            <TransactionChangeRequestActions transaction={item} />
                           </div>
                         </div>
                       </motion.div>

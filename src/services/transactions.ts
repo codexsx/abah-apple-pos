@@ -19,6 +19,12 @@ export interface Transaction {
   detail: string;
   amount: number | null;
   created_at: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  deleted_reason?: string | null;
+  edited_at?: string | null;
+  edited_by?: string | null;
+  edit_reason?: string | null;
   staff_id?: string | null;
   staff?: TransactionStaff | null;
 }
@@ -399,6 +405,7 @@ export async function getTransactions(): Promise<Transaction[]> {
   const { data, error } = await supabase
     .from('transactions')
     .select(TRANSACTION_SELECT)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -409,6 +416,7 @@ export async function getTransactionsByType(type: TransactionType): Promise<Tran
     .from('transactions')
     .select(TRANSACTION_SELECT)
     .eq('type', type)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -419,6 +427,7 @@ export async function getTransactionsByTypes(types: TransactionType[]): Promise<
     .from('transactions')
     .select(TRANSACTION_SELECT)
     .in('type', types)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -431,6 +440,7 @@ export async function getTransactionsWithStockDetailsByType(
     .from('transactions')
     .select(TRANSACTION_WITH_STOCK_SELECT)
     .eq('type', type)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return ((data || []) as TransactionWithStockDetails[]).map(
@@ -445,6 +455,7 @@ export async function getTransactionsWithStockDetailsByTypes(
     .from('transactions')
     .select(TRANSACTION_WITH_STOCK_SELECT)
     .in('type', types)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return ((data || []) as TransactionWithStockDetails[]).map(
@@ -460,6 +471,6 @@ export async function createTransaction(tx: TransactionInsert): Promise<Transact
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  const { error } = await supabase.from('transactions').delete().eq('id', id);
-  if (error) throw error;
+  void id;
+  throw new Error('Penghapusan transaksi harus lewat approval boss/manajer.');
 }

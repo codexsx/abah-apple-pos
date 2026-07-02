@@ -23,6 +23,7 @@ import {
 } from '@/services/transactions';
 import { TransactionStockDetails } from '@/components/TransactionStockDetails';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
+import TransactionChangeRequestActions from '@/components/TransactionChangeRequestActions';
 import { getDateRange, isInDateRange, type QuickFilter } from '@/services/dateFilters';
 import {
   recordServiceWithStockStatus,
@@ -509,6 +510,7 @@ export default function RiwayatPembelian() {
                           <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
                             <span className="font-mono">{item.id}</span>
                           </div>
+                          <TransactionChangeRequestActions transaction={item} />
                         </div>
                       </div>
                     </motion.div>

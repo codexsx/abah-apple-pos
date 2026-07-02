@@ -10,6 +10,7 @@ describe('routePermissions', () => {
     expect(pathToPermission('/laporan/tutup-harian')).toBe('finance');
     expect(pathToPermission('/pengaturan/perusahaan')).toBe('manage_users');
     expect(pathToPermission('/staff-performance')).toBe('manage_users');
+    expect(pathToPermission('/approval/transaksi')).toBe('manage_users');
     expect(pathToPermission('/')).toBeNull();
   });
 

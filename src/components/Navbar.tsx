@@ -27,6 +27,7 @@ import {
   Store,
   Trophy,
   CalendarCheck,
+  ClipboardCheck,
 } from 'lucide-react';
 import {
   Sheet,
@@ -124,6 +125,7 @@ const sheetSections = [
   {
     title: 'Pengaturan',
     items: [
+      { path: '/approval/transaksi', label: 'Approval Transaksi', icon: ClipboardCheck },
       { path: '/staff-performance', label: 'Staff Performance', icon: Trophy },
       { path: '/pengaturan/perusahaan', label: 'Profile Perusahaan', icon: Store },
       { path: '/pengaturan/users', label: 'Manajemen User', icon: ShieldCheck },
@@ -162,7 +164,8 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    setMenuOpen(false);
+    const frame = window.requestAnimationFrame(() => setMenuOpen(false));
+    return () => window.cancelAnimationFrame(frame);
   }, [location.pathname]);
 
   return (
@@ -261,6 +264,12 @@ export default function Navbar() {
               </DropdownMenuItem>
               {canManageUsers && (
                 <>
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2 text-[13px] font-medium text-slate-700">
+                    <Link to="/approval/transaksi">
+                      <ClipboardCheck size={15} className="text-slate-400" />
+                      Approval Transaksi
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-3 py-2 text-[13px] font-medium text-slate-700">
                     <Link to="/staff-performance">
                       <Trophy size={15} className="text-slate-400" />
