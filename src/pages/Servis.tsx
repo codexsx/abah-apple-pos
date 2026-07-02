@@ -35,6 +35,7 @@ import {
   recordServiceWithStockStatus,
   getServiceSparepartUsages,
   recordServiceSparepartUsage,
+  recordManualServiceSparepartCost,
   updateServiceCostFields,
   type ServiceRecord as DbServiceRecord,
   type ServiceSparepartUsage,
@@ -72,6 +73,10 @@ import {
 import { deserializeSaleDetail, type SaleDetail } from '@/services/finalization';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
+import {
+  buildServiceCostPayload,
+  validateServiceCostDraft,
+} from '@/services/serviceCosts';
 
 /* ------------------------------------------------------------------ */
 /*  DB -> UI service record mapper                                     */
@@ -427,8 +432,19 @@ function MonitorServisView({
 
   // Inline editor (Estimasi + Upah) state — id of the record being edited.
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editEstimasi, setEditEstimasi] = useState('');
-  const [editUpah, setEditUpah] = useState('');
+  const [editDraft, setEditDraft] = useState({
+    customerName: '',
+    phoneModel: '',
+    capacity: '',
+    condition: '',
+    color: '',
+    imei: '',
+    batteryHealth: '',
+    issue: '',
+    additionalNote: '',
+    technician: '' as Technician | '',
+    upah: '',
+  });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -512,11 +528,27 @@ function MonitorServisView({
     }
   };
 
-  // Open the inline editor for a record, prefilling current estimasi & upah.
+  const handleEditDraftChange = (field: keyof typeof editDraft, value: string) => {
+    setEditDraft((prev) => ({ ...prev, [field]: value }));
+    setEditError(null);
+  };
+
+  // Open the inline editor for a record, prefilling current detail and wage.
   const openEdit = (rec: ServiceRecordUi) => {
     setEditingId(rec.id);
-    setEditEstimasi(String(rec.workCost || ''));
-    setEditUpah(String(rec.wageAmount || ''));
+    setEditDraft({
+      customerName: rec.customerName,
+      phoneModel: rec.phoneModel,
+      capacity: rec.capacity ?? '',
+      condition: rec.condition ?? '',
+      color: rec.color ?? '',
+      imei: rec.imei ?? '',
+      batteryHealth: rec.batteryHealth ? String(rec.batteryHealth) : '',
+      issue: rec.issue,
+      additionalNote: rec.additionalNote ?? '',
+      technician: rec.technician ?? '',
+      upah: String(rec.wageAmount || rec.workCost || ''),
+    });
     setEditError(null);
   };
 
@@ -525,17 +557,51 @@ function MonitorServisView({
     setEditError(null);
   };
 
-  // Persist the edited estimasi + upah, then patch local state in place.
+  // Persist the edited detail + required wage, then patch local state in place.
   const saveEdit = async (id: string) => {
-    const workCost = Number(editEstimasi) || 0;
-    const wageAmount = Number(editUpah) || 0;
+    const wageAmount = Number(editDraft.upah) || 0;
+    const workCost = wageAmount;
     const partsTotal = (sparepartUsages[id] ?? []).reduce(
       (sum, usage) => sum + usage.total_cost,
       0,
     );
+    const imei = editDraft.imei.replace(/\D/g, '').slice(0, 20);
+    const batteryHealth = editDraft.batteryHealth
+      ? Number(editDraft.batteryHealth.replace(/\D/g, '').slice(0, 3))
+      : null;
+
+    if (!editDraft.phoneModel.trim()) {
+      setEditError('Tipe HP wajib diisi.');
+      return;
+    }
+    if (!editDraft.issue.trim() || editDraft.issue.trim().length < 3) {
+      setEditError('Keluhan minimal 3 karakter.');
+      return;
+    }
+    if (!editDraft.technician) {
+      setEditError('Pilih tukang terlebih dahulu.');
+      return;
+    }
+    if (wageAmount <= 0) {
+      setEditError('Upah wajib diisi.');
+      return;
+    }
+
     setEditSaving(true);
     setEditError(null);
     try {
+      await updateServiceRecord(id, {
+        customer_name: editDraft.customerName.trim() || 'Customer',
+        phone_model: editDraft.phoneModel.trim(),
+        capacity: editDraft.capacity.trim(),
+        condition: editDraft.condition.trim(),
+        color: editDraft.color.trim(),
+        imei,
+        battery_health: batteryHealth,
+        issue: editDraft.issue.trim(),
+        additional_note: editDraft.additionalNote.trim(),
+        technician: editDraft.technician,
+      });
       await updateServiceCostFields({
         serviceRecordId: id,
         workCost,
@@ -544,7 +610,22 @@ function MonitorServisView({
       setRecords((prev) =>
         prev.map((r) =>
           r.id === id
-            ? { ...r, workCost, estimatedCost: workCost + partsTotal, wageAmount }
+            ? {
+                ...r,
+                customerName: editDraft.customerName.trim() || 'Customer',
+                phoneModel: editDraft.phoneModel.trim(),
+                capacity: editDraft.capacity.trim(),
+                condition: editDraft.condition.trim(),
+                color: editDraft.color.trim(),
+                imei,
+                batteryHealth: batteryHealth ?? undefined,
+                issue: editDraft.issue.trim(),
+                additionalNote: editDraft.additionalNote.trim(),
+                technician: editDraft.technician,
+                workCost,
+                estimatedCost: workCost + partsTotal,
+                wageAmount,
+              }
             : r,
         ),
       );
@@ -780,7 +861,7 @@ function MonitorServisView({
                     </div>
                   )}
                   <div className="rounded-lg bg-slate-50 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Biaya Pengerjaan</p>
+                    <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Upah</p>
                     <p className="mt-1 font-mono text-[13px] text-slate-700">{formatPrice(record.workCost)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-3">
@@ -792,7 +873,7 @@ function MonitorServisView({
                     <p className="mt-1 font-mono text-[13px] font-semibold text-teal-700">{formatPrice(record.estimatedCost)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Upah Tukang</p>
+                    <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Status Upah</p>
                     <p className="mt-1 font-mono text-[13px] text-slate-700">
                       {formatPrice(record.wageAmount)}
                       {record.wageAmount > 0 && (
@@ -848,25 +929,134 @@ function MonitorServisView({
                   )}
                 </div>
 
-                {/* Inline editor: ubah estimasi & upah */}
+                {/* Inline editor: ubah detail servis & upah */}
                 {editingId === record.id ? (
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                    <p className="text-[12px] font-semibold text-slate-600 mb-3">Edit Biaya Pengerjaan &amp; Upah</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <p className="text-[12px] font-semibold text-slate-600 mb-3">Edit Detail Servis</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div>
                         <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                          Biaya Pengerjaan
+                          Nama Customer
                         </label>
-                        <RpInput value={editEstimasi} onChange={setEditEstimasi} />
-                        <p className="mt-1 text-[11px] text-slate-400">
-                          Total akan menjadi {formatPrice((Number(editEstimasi) || 0) + partsTotal)} termasuk modal part.
-                        </p>
+                        <input
+                          value={editDraft.customerName}
+                          onChange={(event) => handleEditDraftChange('customerName', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        />
                       </div>
                       <div>
                         <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                          Upah Tukang
+                          Tipe HP *
                         </label>
-                        <RpInput value={editUpah} onChange={setEditUpah} />
+                        <input
+                          value={editDraft.phoneModel}
+                          onChange={(event) => handleEditDraftChange('phoneModel', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Kapasitas
+                        </label>
+                        <input
+                          value={editDraft.capacity}
+                          onChange={(event) => handleEditDraftChange('capacity', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Kondisi
+                        </label>
+                        <input
+                          value={editDraft.condition}
+                          onChange={(event) => handleEditDraftChange('condition', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Warna
+                        </label>
+                        <input
+                          value={editDraft.color}
+                          onChange={(event) => handleEditDraftChange('color', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          IMEI
+                        </label>
+                        <input
+                          value={editDraft.imei}
+                          onChange={(event) => handleEditDraftChange('imei', event.target.value.replace(/\D/g, '').slice(0, 20))}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 font-mono text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Battery Health
+                        </label>
+                        <input
+                          value={editDraft.batteryHealth}
+                          onChange={(event) => handleEditDraftChange('batteryHealth', event.target.value.replace(/\D/g, '').slice(0, 3))}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 font-mono text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Tukang *
+                        </label>
+                        <select
+                          value={editDraft.technician}
+                          onChange={(event) => handleEditDraftChange('technician', event.target.value)}
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-teal-500"
+                        >
+                          <option value="">Pilih tukang</option>
+                          {technicians.map((tech) => (
+                            <option key={tech} value={tech}>{tech}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          KELUHAN *
+                        </label>
+                        <textarea
+                          value={editDraft.issue}
+                          onChange={(event) => handleEditDraftChange('issue', event.target.value)}
+                          rows={3}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          CATATAN TAMBAHAN
+                        </label>
+                        <textarea
+                          value={editDraft.additionalNote}
+                          onChange={(event) => handleEditDraftChange('additionalNote', event.target.value)}
+                          rows={2}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          UPAH *
+                        </label>
+                        <RpInput value={editDraft.upah} onChange={(value) => handleEditDraftChange('upah', value)} />
+                      </div>
+                      <div className="rounded-xl border border-teal-100 bg-teal-50 p-3">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-teal-600">
+                          Estimasi Total
+                        </p>
+                        <p className="mt-1 font-mono text-[14px] font-semibold text-teal-700">
+                          {formatPrice((Number(editDraft.upah) || 0) + partsTotal)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-teal-600/80">
+                          Upah + modal part yang sudah tercatat.
+                        </p>
                       </div>
                     </div>
                     {editError && <p className="mt-2 text-[12px] text-rose-500">{editError}</p>}
@@ -882,7 +1072,7 @@ function MonitorServisView({
                         disabled={editSaving}
                         className="rounded-lg bg-teal-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors disabled:opacity-60"
                       >
-                        {editSaving ? 'Menyimpan...' : 'Simpan'}
+                        {editSaving ? 'Menyimpan...' : 'Simpan Detail'}
                       </button>
                     </div>
                   </div>
@@ -894,7 +1084,7 @@ function MonitorServisView({
                     onClick={() => (editingId === record.id ? cancelEdit() : openEdit(record))}
                     className="flex items-center justify-center gap-1.5 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-medium text-slate-700 hover:bg-slate-200 transition-colors"
                   >
-                    <Edit3 size={14} /> Edit Biaya
+                    <Edit3 size={14} /> Edit Detail
                   </button>
                   {(record.status === 'ANTRIAN' || record.status === 'PROSES') && (
                     <button
@@ -1670,7 +1860,7 @@ function ServisCustomerForm({
     keluhan: '',
     catatan: '',
     tukang: '' as Technician | '',
-    estimasi: '',
+    sparePart: '',
     upah: '',
     dp: '',
   });
@@ -1703,6 +1893,11 @@ function ServisCustomerForm({
     if (errors[field]) setErrors((p) => ({ ...p, [field]: false }));
   };
 
+  const serviceCost = buildServiceCostPayload({
+    sparePartCost: formData.sparePart,
+    wageAmount: formData.upah,
+  });
+
   const validate = () => {
     const e: Record<string, boolean> = {};
     if (!formData.nama.trim()) e.nama = true;
@@ -1714,10 +1909,12 @@ function ServisCustomerForm({
     if (!formData.imei.trim() || formData.imei.length < 10) e.imei = true;
     if (!formData.keluhan.trim() || formData.keluhan.length < 3) e.keluhan = true;
     if (!formData.tukang) e.tukang = true;
-    if (!formData.estimasi || Number(formData.estimasi) <= 0) e.estimasi = true;
-    const dpNum = Number(formData.dp) || 0;
-    const estNum = Number(formData.estimasi) || 0;
-    if (dpNum > estNum) e.dp = true;
+    const costValidation = validateServiceCostDraft({
+      sparePartCost: formData.sparePart,
+      wageAmount: formData.upah,
+      dp: formData.dp,
+    });
+    if (!costValidation.ok) e[costValidation.field] = true;
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setShaking(true);
@@ -1736,7 +1933,7 @@ function ServisCustomerForm({
     // Persist the service record FIRST so it shows up in the monitor list.
     setSaving(true);
     try {
-      await createServiceRecord({
+      const createdService = await createServiceRecord({
         customer_name: formData.nama,
         phone_model: formData.model,
         capacity: formData.capacity || '',
@@ -1747,17 +1944,21 @@ function ServisCustomerForm({
         issue: formData.keluhan,
         additional_note: formData.wa ? `WA: ${formData.wa}` : '',
         status: 'ANTRIAN',
-        estimated_cost: Number(formData.estimasi) || 0,
-        work_cost: Number(formData.estimasi) || 0,
+        estimated_cost: serviceCost.estimatedCost,
+        work_cost: serviceCost.workCost,
         dp: dpNum,
         completed_at: null,
         technician: formData.tukang || '',
         service_type: 'Customer',
         stk_id: '',
-        wage_amount: Number(formData.upah) || 0,
+        wage_amount: serviceCost.wageAmount,
         wage_paid: false,
         picked_up: false,
         picked_up_at: null,
+      });
+      await recordManualServiceSparepartCost({
+        serviceRecordId: createdService.id,
+        totalCost: serviceCost.sparePartCost,
       });
     } catch {
       setSaving(false);
@@ -1804,7 +2005,7 @@ function ServisCustomerForm({
         imei: formData.imei,
         issue: formData.keluhan,
         technician: formData.tukang,
-        estimatedCost: Number(formData.estimasi) || 0,
+        estimatedCost: serviceCost.estimatedCost,
         dp: dpNum,
         method: payMethod,
       });
@@ -2036,24 +2237,24 @@ function ServisCustomerForm({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                    ESTIMASI BIAYA *
+                    SPARE PART (JIKA ADA)
                   </label>
                   <RpInput
-                    value={formData.estimasi}
-                    onChange={(v) => handleChange('estimasi', v)}
-                    error={errors.estimasi}
+                    value={formData.sparePart}
+                    onChange={(v) => handleChange('sparePart', v)}
                   />
-                  {errors.estimasi && <p className="mt-1 text-[12px] text-rose-500">Estimasi wajib diisi</p>}
+                  <p className="mt-1 text-[11px] text-slate-400">Opsional. Jika part belum pasti, kosongkan dan tambahkan dari monitor servis nanti.</p>
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                    UPAH TUKANG (OPSIONAL)
+                    UPAH *
                   </label>
                   <RpInput
                     value={formData.upah}
                     onChange={(v) => handleChange('upah', v)}
+                    error={errors.upah}
                   />
-                  <p className="text-[11px] text-slate-400 mt-0.5">Upah untuk tukang, terpisah dari estimasi customer.</p>
+                  {errors.upah && <p className="mt-1 text-[12px] text-rose-500">Upah wajib diisi</p>}
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
@@ -2063,10 +2264,19 @@ function ServisCustomerForm({
                     value={formData.dp}
                     onChange={(v) => handleChange('dp', v)}
                   />
-                  {errors.dp && <p className="mt-1 text-[12px] text-rose-500">DP tidak boleh melebihi estimasi</p>}
+                  {errors.dp && <p className="mt-1 text-[12px] text-rose-500">DP tidak boleh melebihi estimasi total</p>}
+                </div>
+                <div className="rounded-xl border border-teal-100 bg-teal-50 p-3">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-teal-600">
+                    Estimasi Total
+                  </p>
+                  <p className="mt-1 font-mono text-[18px] font-semibold text-teal-700">
+                    {formatPrice(serviceCost.estimatedCost)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-teal-600/80">Spare part + upah.</p>
                 </div>
               </div>
-              <p className="text-[11px] text-slate-400">DP tidak boleh &gt; Estimasi. Kosongkan jika tidak ada DP.</p>
+              <p className="text-[11px] text-slate-400">Estimasi dihitung otomatis dari spare part dan upah. DP tidak boleh lebih besar dari estimasi total.</p>
 
               {/* Payment posting: shown only when a DP is entered. The
                   Cash/Transfer method routes the whole DP to one account. */}
@@ -2150,7 +2360,7 @@ function ServisTokoForm({
     keluhan: '',
     catatan: '',
     tukang: '' as Technician | '',
-    estimasi: '',
+    sparePart: '',
     upah: '',
   });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
@@ -2214,12 +2424,21 @@ function ServisTokoForm({
     if (errors[field]) setErrors((p) => ({ ...p, [field]: false }));
   };
 
+  const serviceCost = buildServiceCostPayload({
+    sparePartCost: formData.sparePart,
+    wageAmount: formData.upah,
+  });
+
   const validate = () => {
     const e: Record<string, boolean> = {};
     if (!selectedUnit) e.unit = true;
     if (!formData.keluhan.trim() || formData.keluhan.length < 3) e.keluhan = true;
     if (!formData.tukang) e.tukang = true;
-    if (!formData.estimasi || Number(formData.estimasi) <= 0) e.estimasi = true;
+    const costValidation = validateServiceCostDraft({
+      sparePartCost: formData.sparePart,
+      wageAmount: formData.upah,
+    });
+    if (!costValidation.ok) e[costValidation.field] = true;
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setShaking(true);
@@ -2234,7 +2453,7 @@ function ServisTokoForm({
     if (!validate() || !selectedUnit) return;
     setSaving(true);
     try {
-      await recordServiceWithStockStatus({
+      const serviceId = await recordServiceWithStockStatus({
         stockId: selectedUnit.realId,
         targetStatus: 'SERVIS',
         record: {
@@ -2248,18 +2467,22 @@ function ServisTokoForm({
           issue: formData.keluhan,
           additional_note: formData.catatan || '',
           status: 'ANTRIAN',
-          estimated_cost: Number(formData.estimasi) || 0,
-          work_cost: Number(formData.estimasi) || 0,
+          estimated_cost: serviceCost.estimatedCost,
+          work_cost: serviceCost.workCost,
           dp: 0,
           completed_at: null,
           technician: formData.tukang || '',
           service_type: 'Toko Sendiri',
           stk_id: '',
-          wage_amount: Number(formData.upah) || 0,
+          wage_amount: serviceCost.wageAmount,
           wage_paid: false,
           picked_up: false,
           picked_up_at: null,
         },
+      });
+      await recordManualServiceSparepartCost({
+        serviceRecordId: serviceId,
+        totalCost: serviceCost.sparePartCost,
       });
     } catch {
       setSaving(false);
@@ -2517,25 +2740,33 @@ function ServisTokoForm({
               </div>
               <div>
                 <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                  ESTIMASI BIAYA *
+                  SPARE PART (JIKA ADA)
                 </label>
                 <RpInput
-                  value={formData.estimasi}
-                  onChange={(v) => handleChange('estimasi', v)}
-                  error={errors.estimasi}
+                  value={formData.sparePart}
+                  onChange={(v) => handleChange('sparePart', v)}
                 />
-                {errors.estimasi && <p className="mt-1 text-[12px] text-rose-500">Estimasi wajib diisi</p>}
-                <p className="text-[11px] text-slate-400 mt-1">Modal toko sendiri — biaya yang dikeluarkan untuk servis ini.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Opsional. Bisa ditambah lagi dari monitor servis saat proses.</p>
               </div>
               <div>
                 <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                  UPAH TUKANG (OPSIONAL)
+                  UPAH *
                 </label>
                 <RpInput
                   value={formData.upah}
                   onChange={(v) => handleChange('upah', v)}
+                  error={errors.upah}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">Upah untuk tukang, terpisah dari estimasi biaya.</p>
+                {errors.upah && <p className="mt-1 text-[12px] text-rose-500">Upah wajib diisi</p>}
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-amber-700">
+                  Estimasi Total
+                </p>
+                <p className="mt-1 font-mono text-[18px] font-semibold text-amber-700">
+                  {formatPrice(serviceCost.estimatedCost)}
+                </p>
+                <p className="mt-1 text-[11px] text-amber-700/80">Spare part + upah.</p>
               </div>
             </div>
           </div>

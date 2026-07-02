@@ -56,6 +56,7 @@ export interface ServiceSparepartUsage {
 }
 
 const SERVICE_RECORD_SELECT = '*, created_by_staff:profiles!service_records_created_by_fkey(id, name, role, initials)';
+export const MANUAL_SERVICE_SPAREPART_NAME = 'Spare Part Manual';
 
 export async function getServiceRecords(): Promise<ServiceRecord[]> {
   const { data, error } = await supabase
@@ -119,6 +120,36 @@ export async function recordServiceSparepartUsage(input: {
   });
   if (error) throw error;
   if (!data) throw new Error('Failed to record service sparepart usage');
+  return data as ServiceSparepartUsage;
+}
+
+export async function recordManualServiceSparepartCost(input: {
+  serviceRecordId: string;
+  totalCost: number;
+  name?: string;
+}): Promise<ServiceSparepartUsage | null> {
+  const totalCost = Number.isFinite(input.totalCost) ? Math.floor(input.totalCost) : 0;
+  if (totalCost <= 0) return null;
+
+  const { data, error } = await supabase
+    .from('service_sparepart_usages')
+    .insert({
+      service_record_id: input.serviceRecordId,
+      sparepart_id: null,
+      sparepart_name: input.name ?? MANUAL_SERVICE_SPAREPART_NAME,
+      quantity: 1,
+      unit_cost: totalCost,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error('Failed to record manual service sparepart cost');
+
+  const { error: recalcError } = await supabase.rpc('recalculate_service_total_cost', {
+    p_service_record_id: input.serviceRecordId,
+  });
+  if (recalcError) throw recalcError;
+
   return data as ServiceSparepartUsage;
 }
 

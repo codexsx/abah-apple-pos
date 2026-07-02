@@ -30,6 +30,9 @@ import {
   getServiceSparepartUsages,
   recordServiceWithStockStatus,
   recordServiceSparepartUsage,
+  recordManualServiceSparepartCost,
+  updateServiceCostFields,
+  updateServiceRecord,
 } from '@/services/services';
 import { getTransactionsWithStockDetailsByType, type TransactionWithStockDetails } from '@/services/transactions';
 import { getSpareparts } from '@/services/spareparts';
@@ -65,6 +68,7 @@ vi.mock('@/services/services', () => ({
   getServiceRecords: vi.fn().mockResolvedValue([]),
   getServiceSparepartUsages: vi.fn().mockResolvedValue([]),
   recordServiceSparepartUsage: vi.fn().mockResolvedValue({ id: 'usage-1' }),
+  recordManualServiceSparepartCost: vi.fn().mockResolvedValue({ id: 'usage-manual-1' }),
   updateServiceCostFields: vi.fn().mockResolvedValue(undefined),
   updateServiceRecord: vi.fn().mockResolvedValue({ id: 'srv-1' }),
 }));
@@ -104,6 +108,9 @@ const mockRecordServiceWithStockStatus = vi.mocked(recordServiceWithStockStatus)
 const mockGetServiceRecords = vi.mocked(getServiceRecords);
 const mockGetServiceSparepartUsages = vi.mocked(getServiceSparepartUsages);
 const mockRecordServiceSparepartUsage = vi.mocked(recordServiceSparepartUsage);
+const mockRecordManualServiceSparepartCost = vi.mocked(recordManualServiceSparepartCost);
+const mockUpdateServiceCostFields = vi.mocked(updateServiceCostFields);
+const mockUpdateServiceRecord = vi.mocked(updateServiceRecord);
 const mockGetSalesWithStockDetails = vi.mocked(getTransactionsWithStockDetailsByType);
 const mockGetSpareparts = vi.mocked(getSpareparts);
 
@@ -136,7 +143,8 @@ const BANK_ACCOUNT: AccountWithBalance = {
   is_overdraft: false,
 };
 
-const ESTIMASI = 500_000;
+const SPARE_PART_COST = 120_000;
+const UPAH = 500_000;
 const DP = 200_000;
 
 // ---------------------------------------------------------------------------
@@ -186,7 +194,8 @@ function fillRequiredServiceForm() {
   fireEvent.click(screen.getByText('Zaidan').closest('button')!);
 
   // Money fields (RpInput strips non-digits on change).
-  setByLabel('ESTIMASI BIAYA *', String(ESTIMASI));
+  setByLabel('SPARE PART (JIKA ADA)', String(SPARE_PART_COST));
+  setByLabel('UPAH *', String(UPAH));
   setByLabel('DP (OPSIONAL)', String(DP));
 }
 
@@ -208,6 +217,21 @@ beforeEach(() => {
   mockCreateServiceRecord.mockResolvedValue({ id: 'srv-1' } as Awaited<ReturnType<typeof createServiceRecord>>);
   mockRecordServiceWithStockStatus.mockReset();
   mockRecordServiceWithStockStatus.mockResolvedValue('srv-claim-1');
+  mockRecordManualServiceSparepartCost.mockReset();
+  mockRecordManualServiceSparepartCost.mockResolvedValue({
+    id: 'usage-manual-1',
+    service_record_id: 'srv-1',
+    sparepart_id: null,
+    sparepart_name: 'Spare Part Manual',
+    quantity: 1,
+    unit_cost: SPARE_PART_COST,
+    total_cost: SPARE_PART_COST,
+    created_at: '2024-01-01T00:00:00.000Z',
+  });
+  mockUpdateServiceCostFields.mockReset();
+  mockUpdateServiceCostFields.mockResolvedValue(undefined);
+  mockUpdateServiceRecord.mockReset();
+  mockUpdateServiceRecord.mockResolvedValue({ id: 'srv-1' } as Awaited<ReturnType<typeof updateServiceRecord>>);
   mockGetSalesWithStockDetails.mockReset();
   mockGetSalesWithStockDetails.mockResolvedValue([]);
   mockGetServiceRecords.mockReset();
@@ -447,6 +471,91 @@ describe('Servis sparepart usage', () => {
         unitCost: 120000,
       }),
     );
+  });
+});
+
+describe('Servis cost input and monitor detail edit', () => {
+  it('creates a customer service using optional sparepart plus mandatory wage as the computed estimate', async () => {
+    renderPage();
+    openCustomerForm();
+    fillRequiredServiceForm();
+
+    fireEvent.click(getSaveButton());
+
+    await waitFor(() => expect(mockCreateServiceRecord).toHaveBeenCalledTimes(1));
+    expect(mockCreateServiceRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimated_cost: SPARE_PART_COST + UPAH,
+        work_cost: UPAH,
+        wage_amount: UPAH,
+      }),
+    );
+    expect(mockRecordManualServiceSparepartCost).toHaveBeenCalledWith({
+      serviceRecordId: 'srv-1',
+      totalCost: SPARE_PART_COST,
+    });
+  });
+
+  it('edits service details and required wage from the monitor view', async () => {
+    mockGetServiceRecords.mockResolvedValue([
+      {
+        id: 'srv-monitor-1',
+        customer_name: 'Budi Santoso',
+        phone_model: 'iPhone 11',
+        capacity: '128GB',
+        condition: 'Second iBox',
+        color: 'Black',
+        imei: '352345678901234',
+        battery_health: null,
+        issue: 'Ganti battery',
+        additional_note: 'WA: 0812',
+        status: 'PROSES',
+        estimated_cost: 620000,
+        work_cost: 500000,
+        dp: 0,
+        created_at: '2024-01-01T00:00:00.000Z',
+        completed_at: null,
+        technician: 'Zaidan',
+        service_type: 'Customer',
+        stk_id: '',
+        wage_amount: 500000,
+        wage_paid: false,
+        picked_up: false,
+        picked_up_at: null,
+      },
+    ]);
+
+    renderPage();
+    fireEvent.click(screen.getByText('Monitor Servis').closest('button')!);
+
+    fireEvent.click(await screen.findByText(/iPhone 11/));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit Detail/i }));
+    fireEvent.change(fieldByLabel('KELUHAN *'), {
+      target: { value: 'Ganti battery dan speaker bawah' },
+    });
+    fireEvent.change(fieldByLabel('CATATAN TAMBAHAN'), {
+      target: { value: 'Customer minta cepat' },
+    });
+    fireEvent.change(fieldByLabel('UPAH *'), {
+      target: { value: '600000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Detail/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateServiceRecord).toHaveBeenCalledWith(
+        'srv-monitor-1',
+        expect.objectContaining({
+          issue: 'Ganti battery dan speaker bawah',
+          additional_note: 'Customer minta cepat',
+          technician: 'Zaidan',
+        }),
+      ),
+    );
+    expect(mockUpdateServiceCostFields).toHaveBeenCalledWith({
+      serviceRecordId: 'srv-monitor-1',
+      workCost: 600000,
+      wageAmount: 600000,
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import {
   recordServiceWithStockStatus,
   getServiceSparepartUsages,
   recordServiceSparepartUsage,
+  recordManualServiceSparepartCost,
   updateServiceCostFields,
 } from './services';
 
@@ -178,6 +179,49 @@ describe('service sparepart usage', () => {
       p_quantity: 2,
       p_unit_cost: 120000,
     });
+  });
+
+  it('records a manual sparepart estimate and recalculates service total', async () => {
+    const row = {
+      id: 'usage-manual-1',
+      service_record_id: 'srv-1',
+      sparepart_id: null,
+      sparepart_name: 'Spare Part Manual',
+      quantity: 1,
+      unit_cost: 150000,
+      total_cost: 150000,
+    };
+    chain.single.mockResolvedValue({ data: row, error: null });
+    chain.rpc.mockResolvedValue({ data: null, error: null });
+
+    const result = await recordManualServiceSparepartCost({
+      serviceRecordId: 'srv-1',
+      totalCost: 150000,
+    });
+
+    expect(result).toBe(row);
+    expect(chain.from).toHaveBeenCalledWith('service_sparepart_usages');
+    expect(chain.insert).toHaveBeenCalledWith({
+      service_record_id: 'srv-1',
+      sparepart_id: null,
+      sparepart_name: 'Spare Part Manual',
+      quantity: 1,
+      unit_cost: 150000,
+    });
+    expect(chain.rpc).toHaveBeenCalledWith('recalculate_service_total_cost', {
+      p_service_record_id: 'srv-1',
+    });
+  });
+
+  it('skips manual sparepart persistence when cost is empty', async () => {
+    const result = await recordManualServiceSparepartCost({
+      serviceRecordId: 'srv-1',
+      totalCost: 0,
+    });
+
+    expect(result).toBeNull();
+    expect(chain.insert).not.toHaveBeenCalled();
+    expect(chain.rpc).not.toHaveBeenCalled();
   });
 
   it('updates editable service cost fields through the recalculation RPC', async () => {
