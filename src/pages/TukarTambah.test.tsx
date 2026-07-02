@@ -198,6 +198,49 @@ beforeEach(() => {
 // ===========================================================================
 // Positive Selisih → money_in (Req 6.5, 7.3) + stock wiring (Phase 11)
 // ===========================================================================
+describe('HP Keluar search', () => {
+  it('filters ready stock by IMEI', async () => {
+    const matchingByImei: StockItem = {
+      ...HP_KELUAR,
+      id: 'stk-imei-match',
+      model: 'iPhone 14 Pro',
+      capacity: '128GB',
+      condition: 'Second Inter Unlock Minus',
+      color: 'Silver',
+      imei: '356011269135262',
+      price: 8_000_000,
+      cost_price: 6_000_000,
+    };
+    const nonMatching: StockItem = {
+      ...HP_KELUAR,
+      id: 'stk-imei-other',
+      model: 'iPhone 11',
+      capacity: '128GB',
+      condition: 'Second Inter Unlock Minus',
+      color: 'Black',
+      imei: '359481985375087',
+      price: 3_300_000,
+      cost_price: 2_600_000,
+    };
+
+    mockGetStock.mockResolvedValueOnce([nonMatching, matchingByImei]);
+
+    renderPage();
+
+    expect(await screen.findByText('iPhone 14 Pro 128GB')).toBeInTheDocument();
+    expect(screen.getByText('iPhone 11 128GB')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Cari tipe/i), {
+      target: { value: '356011269135262' },
+    });
+
+    expect(await screen.findByText('iPhone 14 Pro 128GB')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('iPhone 11 128GB')).not.toBeInTheDocument();
+    });
+  });
+});
+
 describe('positive Selisih (HP keluar price > appraisal)', () => {
   it('records a money_in posting with amount = |Selisih| and moves stock', async () => {
     renderPage();

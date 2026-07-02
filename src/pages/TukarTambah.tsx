@@ -740,14 +740,16 @@ export default function TukarTambah() {
 
   /* ── available stock for HP Keluar (live READY rows) ── */
   const availableStock = stockRows.filter((s) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      s.model.toLowerCase().includes(q) ||
-      s.capacity.toLowerCase().includes(q) ||
-      s.color.toLowerCase().includes(q) ||
-      s.condition.toLowerCase().includes(q)
-    );
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const searchable = [
+      s.model,
+      s.capacity,
+      s.color,
+      s.condition,
+      s.imei ?? '',
+    ].join(' ').toLowerCase();
+    return searchable.includes(q);
   });
 
   /* ── warna options ── */
@@ -978,7 +980,7 @@ export default function TukarTambah() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari tipe / kapasitas / warna..."
+            placeholder="Cari tipe / kapasitas / warna / IMEI..."
             className="w-full h-11 rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-[14px] text-slate-700 transition-colors duration-200 focus:outline-none focus:ring-[3px] focus:ring-teal-500/10 focus:border-teal-500"
           />
         </div>
@@ -1072,6 +1074,11 @@ export default function TukarTambah() {
                     <span className="text-slate-300 mx-1">|</span>
                     <span>{item.condition}</span>
                   </div>
+                  {item.imei && (
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-400">
+                      IMEI: {item.imei}
+                    </p>
+                  )}
                 </div>
                 <span className="font-mono text-[13px] font-semibold text-slate-700 shrink-0">
                   {formatPrice(item.price)}
