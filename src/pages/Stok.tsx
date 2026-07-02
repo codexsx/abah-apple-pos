@@ -27,21 +27,40 @@ import {
   AlertTriangle,
   AlertCircle,
   Copy,
+  Pencil,
+  Save,
 } from 'lucide-react';
 import {
   getStockItems,
+  updateStockItem,
   updateStockStatus,
   moveStockUnitStatus,
   type StockItem,
 } from '@/services/stock';
 import { getAccessories, type Accessory } from '@/services/accessories';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
-import { STOCK_STATUSES, type StockStatus } from '@/services/stockCore';
+import {
+  normalizeStockEditDraft,
+  STOCK_STATUSES,
+  type StockEditDraft,
+  type StockStatus,
+} from '@/services/stockCore';
 import {
   runStockIntegrityCheck,
   type IntegrityResult,
 } from '@/services/stockIntegrity';
 import StatusEditor from '@/components/StatusEditor';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 /* ──────────────────────────────── easing */
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -67,6 +86,27 @@ type TabId = 'hp' | 'pelengkap' | 'sparepart' | 'integritas';
 /* ──────────────────────────────── helpers */
 function formatPrice(n: number): string {
   return 'Rp ' + n.toLocaleString('id-ID');
+}
+
+function formatIdrInput(n: number | null | undefined): string {
+  return n && n > 0 ? n.toLocaleString('id-ID') : '';
+}
+
+function stockItemToEditDraft(item: StockItem): StockEditDraft {
+  return {
+    model: item.model,
+    capacity: item.capacity,
+    condition: item.condition,
+    color: item.color,
+    hasImei: item.has_imei,
+    imei: item.imei ?? '',
+    price: formatIdrInput(item.price),
+    costPrice: formatIdrInput(item.cost_price),
+    batteryHealth: item.battery_health === null || item.battery_health === undefined
+      ? ''
+      : String(item.battery_health),
+    defectDescription: item.defect_description ?? '',
+  };
 }
 
 function ColorDot({ color, size = 8 }: { color: string; size?: number }) {
@@ -164,6 +204,10 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [updateErrors, setUpdateErrors] = useState<Record<string, string>>({});
+  const [editingItem, setEditingItem] = useState<StockItem | null>(null);
+  const [editDraft, setEditDraft] = useState<StockEditDraft | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -242,6 +286,48 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
     [items],
   );
 
+  const openEditDialog = useCallback((item: StockItem) => {
+    setEditingItem(item);
+    setEditDraft(stockItemToEditDraft(item));
+    setEditError(null);
+  }, []);
+
+  const closeEditDialog = useCallback(() => {
+    if (savingEdit) return;
+    setEditingItem(null);
+    setEditDraft(null);
+    setEditError(null);
+  }, [savingEdit]);
+
+  const updateEditDraft = useCallback(
+    <K extends keyof StockEditDraft>(key: K, value: StockEditDraft[K]) => {
+      setEditDraft((current) => (current ? { ...current, [key]: value } : current));
+    },
+    [],
+  );
+
+  const saveEdit = useCallback(async () => {
+    if (!editingItem || !editDraft) return;
+    const normalized = normalizeStockEditDraft(editDraft);
+    if (!normalized.ok) {
+      setEditError(normalized.message);
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const updated = await updateStockItem(editingItem.id, normalized.payload);
+      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setEditingItem(null);
+      setEditDraft(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Gagal menyimpan perubahan stok.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editDraft, editingItem]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -284,6 +370,7 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
             updatingId={updatingId}
             updateErrors={updateErrors}
             onStatusChange={handleStatusChange}
+            onEditRequest={openEditDialog}
           />
         ))}
 
@@ -293,6 +380,140 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
           <p className="text-[15px] font-medium text-slate-500">Belum ada unit stok</p>
         </div>
       )}
+
+      <Dialog open={Boolean(editingItem && editDraft)} onOpenChange={(open) => (!open ? closeEditDialog() : undefined)}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil size={18} className="text-teal-600" />
+              Edit Unit Stok
+            </DialogTitle>
+            <DialogDescription>
+              Koreksi detail unit tanpa mengubah riwayat transaksi awal.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editDraft && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-model">Tipe HP</Label>
+                <Input
+                  id="stock-edit-model"
+                  value={editDraft.model}
+                  onChange={(event) => updateEditDraft('model', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-capacity">Kapasitas</Label>
+                <Input
+                  id="stock-edit-capacity"
+                  value={editDraft.capacity}
+                  onChange={(event) => updateEditDraft('capacity', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-condition">Kondisi</Label>
+                <Input
+                  id="stock-edit-condition"
+                  value={editDraft.condition}
+                  onChange={(event) => updateEditDraft('condition', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-color">Warna</Label>
+                <Input
+                  id="stock-edit-color"
+                  value={editDraft.color}
+                  onChange={(event) => updateEditDraft('color', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-imei">IMEI</Label>
+                <Input
+                  id="stock-edit-imei"
+                  inputMode="numeric"
+                  value={editDraft.imei}
+                  disabled={!editDraft.hasImei}
+                  onChange={(event) => updateEditDraft('imei', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-bh">Battery health</Label>
+                <Input
+                  id="stock-edit-bh"
+                  inputMode="numeric"
+                  value={editDraft.batteryHealth}
+                  placeholder="Contoh: 86"
+                  onChange={(event) => updateEditDraft('batteryHealth', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-cost">Harga modal</Label>
+                <Input
+                  id="stock-edit-cost"
+                  inputMode="numeric"
+                  value={editDraft.costPrice}
+                  onChange={(event) => updateEditDraft('costPrice', event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-edit-price">Harga jual</Label>
+                <Input
+                  id="stock-edit-price"
+                  inputMode="numeric"
+                  value={editDraft.price}
+                  onChange={(event) => updateEditDraft('price', event.target.value)}
+                />
+              </div>
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-semibold text-slate-700 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={editDraft.hasImei}
+                  onChange={(event) => updateEditDraft('hasImei', event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-600"
+                />
+                Punya nomor seri
+              </label>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="stock-edit-defect">Keterangan minus</Label>
+                <Textarea
+                  id="stock-edit-defect"
+                  value={editDraft.defectDescription}
+                  placeholder="Contoh: Kaca kamera pecah, LCD ganti, Face ID off"
+                  onChange={(event) => updateEditDraft('defectDescription', event.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          {editError && (
+            <p className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">
+              {editError}
+            </p>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              disabled={savingEdit}
+              onClick={closeEditDialog}
+              className="rounded-xl bg-slate-100 px-4 py-2 text-[13px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-60"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              disabled={savingEdit}
+              onClick={saveEdit}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 disabled:opacity-60"
+            >
+              {savingEdit ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              Simpan Perubahan
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -305,6 +526,7 @@ interface StatusSectionProps {
   updatingId: string | null;
   updateErrors: Record<string, string>;
   onStatusChange: (id: string, target: StockStatus) => void;
+  onEditRequest: (item: StockItem) => void;
 }
 
 function StatusSection({
@@ -314,6 +536,7 @@ function StatusSection({
   updatingId,
   updateErrors,
   onStatusChange,
+  onEditRequest,
 }: StatusSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -432,6 +655,17 @@ function StatusSection({
                       </div>
                     </div>
                     <div className="min-w-[240px]">
+                      <div className="mb-2 flex justify-end">
+                        <button
+                          type="button"
+                          aria-label={`Edit unit ${item.model}`}
+                          onClick={() => onEditRequest(item)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+                        >
+                          <Pencil size={12} />
+                          Edit
+                        </button>
+                      </div>
                       {updatingId === item.id ? (
                         <div className="flex items-center justify-end gap-2 text-[12px] text-slate-500">
                           <Loader2 size={14} className="animate-spin" />

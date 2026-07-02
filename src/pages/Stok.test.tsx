@@ -23,15 +23,17 @@ import type { StockItem } from '@/services/stock';
 vi.mock('@/services/stock', () => ({
   getStockItems: vi.fn(),
   updateStockStatus: vi.fn(),
+  updateStockItem: vi.fn(),
   moveStockUnitStatus: vi.fn(),
   createStockItem: vi.fn(),
 }));
 
-import { getStockItems, updateStockStatus, moveStockUnitStatus } from '@/services/stock';
+import { getStockItems, updateStockStatus, updateStockItem, moveStockUnitStatus } from '@/services/stock';
 import Stok from './Stok';
 
 const mockGetStockItems = vi.mocked(getStockItems);
 const mockUpdateStockStatus = vi.mocked(updateStockStatus);
+const mockUpdateStockItem = vi.mocked(updateStockItem);
 const mockMoveStockUnitStatus = vi.mocked(moveStockUnitStatus);
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,7 @@ async function findRowByModel(model: string): Promise<HTMLElement> {
 beforeEach(() => {
   mockGetStockItems.mockReset();
   mockUpdateStockStatus.mockReset();
+  mockUpdateStockItem.mockReset();
   mockMoveStockUnitStatus.mockReset();
 });
 
@@ -186,6 +189,48 @@ describe('status edit', () => {
     await waitFor(() => expect(mockMoveStockUnitStatus).toHaveBeenCalledTimes(1));
     expect(mockMoveStockUnitStatus).toHaveBeenCalledWith('bulk-1', 'SERVIS');
     expect(mockUpdateStockStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('direct unit edit', () => {
+  it('updates editable stock fields from the stock row dialog', async () => {
+    mockGetStockItems.mockResolvedValueOnce([u1]);
+    mockUpdateStockItem.mockResolvedValueOnce({
+      ...u1,
+      imei: '359481985375087',
+      price: 13_000_000,
+      defect_description: 'Kaca kamera pecah',
+    });
+
+    renderPage();
+
+    const row = await findRowByModel('iPhone 14 Pro');
+    fireEvent.click(within(row).getByRole('button', { name: /edit unit iphone 14 pro/i }));
+
+    fireEvent.change(screen.getByLabelText(/imei/i), {
+      target: { value: '359481985375087' },
+    });
+    fireEvent.change(screen.getByLabelText(/harga jual/i), {
+      target: { value: '13.000.000' },
+    });
+    fireEvent.change(screen.getByLabelText(/keterangan minus/i), {
+      target: { value: 'Kaca kamera pecah' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /simpan perubahan/i }));
+
+    await waitFor(() => expect(mockUpdateStockItem).toHaveBeenCalledTimes(1));
+    expect(mockUpdateStockItem).toHaveBeenCalledWith('u1', {
+      model: 'iPhone 14 Pro',
+      capacity: '128GB',
+      condition: 'Second iBox',
+      color: 'Deep Purple',
+      has_imei: true,
+      imei: '359481985375087',
+      price: 13_000_000,
+      cost_price: 10_000_000,
+      battery_health: null,
+      defect_description: 'Kaca kamera pecah',
+    });
   });
 });
 

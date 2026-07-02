@@ -17,6 +17,7 @@ import {
   type TransactionChangeRequest,
   type TransactionReviewDecision,
 } from '@/services/transactionApprovals';
+import { summarizeTransactionDetailForApproval } from '@/services/transactionApprovalsCore';
 import {
   getTransactionDisplayDetail,
   getTransactionStaffName,
@@ -57,6 +58,19 @@ function transactionFromRequest(request: TransactionChangeRequest): Transaction 
     created_at: String(snapshot.created_at ?? request.created_at),
     staff_id: typeof snapshot.staff_id === 'string' ? snapshot.staff_id : null,
   };
+}
+
+function DetailLineList({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <ul className="mt-3 space-y-1 border-t border-white/70 pt-3 text-[12px] text-slate-600">
+      {lines.map((line, index) => (
+        <li key={`${line}-${index}`} className="break-words">
+          {line}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function TransactionApprovals() {
@@ -186,6 +200,10 @@ export default function TransactionApprovals() {
             const isPending = request.status === 'pending';
             const isProcessing = processingId === request.id;
             const requester = request.requester?.name ?? 'Staff tidak tercatat';
+            const currentDetailLines = summarizeTransactionDetailForApproval(transaction?.detail);
+            const proposedDetailLines = summarizeTransactionDetailForApproval(
+              request.proposed_detail ?? transaction?.detail,
+            );
 
             return (
               <motion.div
@@ -232,6 +250,7 @@ export default function TransactionApprovals() {
                           <p className="mt-1 font-mono text-[14px] text-slate-700">
                             {formatRupiah(transaction?.amount)}
                           </p>
+                          <DetailLineList lines={currentDetailLines} />
                         </div>
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-500">
@@ -243,7 +262,17 @@ export default function TransactionApprovals() {
                           <p className="mt-1 font-mono text-[14px] text-blue-700">
                             {formatRupiah(request.proposed_amount ?? transaction?.amount)}
                           </p>
+                          <DetailLineList lines={proposedDetailLines} />
                         </div>
+                      </div>
+                    )}
+
+                    {request.action === 'delete' && currentDetailLines.length > 0 && (
+                      <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+                          Detail Unit
+                        </p>
+                        <DetailLineList lines={currentDetailLines} />
                       </div>
                     )}
                   </div>

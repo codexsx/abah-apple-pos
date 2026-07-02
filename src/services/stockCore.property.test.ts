@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { validateImeiPresence, validateStockUnitInput, isValidStatus, isValidStatusTransition } from './stockCore';
+import {
+  normalizeStockEditDraft,
+  validateImeiPresence,
+  validateStockUnitInput,
+  isValidStatus,
+  isValidStatusTransition,
+} from './stockCore';
 import type { StockUnitInputCore, StockValidationCode, StockStatus } from './stockCore';
 import { MAX_IDR } from '@/services/accountsCore';
 
@@ -82,6 +88,59 @@ describe('Property 1: IMEI presence is consistent', () => {
       }),
       RUNS,
     );
+  });
+});
+
+describe('normalizeStockEditDraft', () => {
+  it('normalizes stock edit form values into the stock_items update payload', () => {
+    const result = normalizeStockEditDraft({
+      model: '  iPhone 12 Pro Max  ',
+      capacity: ' 128GB ',
+      condition: ' Second Inter Unlock Minus ',
+      color: ' Silver ',
+      hasImei: true,
+      imei: '359481985375087',
+      price: '6.000.000',
+      costPrice: '5.000.000',
+      batteryHealth: '86',
+      defectDescription: ' Kaca Kamera Pecah ',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        model: 'iPhone 12 Pro Max',
+        capacity: '128GB',
+        condition: 'Second Inter Unlock Minus',
+        color: 'Silver',
+        has_imei: true,
+        imei: '359481985375087',
+        price: 6_000_000,
+        cost_price: 5_000_000,
+        battery_health: 86,
+        defect_description: 'Kaca Kamera Pecah',
+      },
+    });
+  });
+
+  it('rejects a unit marked with IMEI when the IMEI is not 15 digits', () => {
+    expect(
+      normalizeStockEditDraft({
+        model: 'iPhone 12 Pro Max',
+        capacity: '128GB',
+        condition: 'Second Inter Unlock Minus',
+        color: 'Silver',
+        hasImei: true,
+        imei: '123',
+        price: '6.000.000',
+        costPrice: '5.000.000',
+        batteryHealth: '',
+        defectDescription: '',
+      }),
+    ).toEqual({
+      ok: false,
+      message: 'IMEI harus 15 digit angka',
+    });
   });
 });
 

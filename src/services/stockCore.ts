@@ -49,6 +49,36 @@ export interface StockUnitInputCore {
   imei: string | null; // required 15 digits iff hasImei
 }
 
+export interface StockEditDraft {
+  model: string;
+  capacity: string;
+  condition: string;
+  color: string;
+  hasImei: boolean;
+  imei: string;
+  price: string | number;
+  costPrice: string | number;
+  batteryHealth: string | number;
+  defectDescription: string;
+}
+
+export interface StockEditPayload {
+  model: string;
+  capacity: string;
+  condition: string;
+  color: string;
+  has_imei: boolean;
+  imei: string | null;
+  price: number;
+  cost_price: number;
+  battery_health: number | null;
+  defect_description: string;
+}
+
+export type NormalizeStockEditDraftResult =
+  | { ok: true; payload: StockEditPayload }
+  | { ok: false; message: string };
+
 // ---------- Helpers / predicates ----------
 
 /** A real IMEI is exactly 15 digits (Req 2.1). */
@@ -61,6 +91,28 @@ const IMEI_RE = /^\d{15}$/;
  */
 function isValidPrice(n: number): boolean {
   return Number.isInteger(n) && n >= 0 && n <= MAX_IDR;
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return value?.trim() ?? '';
+}
+
+function parseIdrLike(value: string | number): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value) : 0;
+  }
+  const digits = value.replace(/[^\d]/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+function parseOptionalInteger(value: string | number): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.round(value) : null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/[^\d]/g, '');
+  return digits ? Number(digits) : null;
 }
 
 /**
@@ -159,6 +211,52 @@ export function validateStockUnitInput(
   }
 
   return { ok: true };
+}
+
+export function normalizeStockEditDraft(
+  draft: StockEditDraft,
+): NormalizeStockEditDraftResult {
+  const model = normalizeText(draft.model);
+  if (!model) {
+    return { ok: false, message: 'Model wajib diisi' };
+  }
+
+  const imei = normalizeText(draft.imei);
+  const imeiResult = validateImeiPresence(draft.hasImei, imei || null);
+  if (!imeiResult.ok) {
+    return { ok: false, message: imeiResult.message };
+  }
+
+  const price = parseIdrLike(draft.price);
+  if (!isValidPrice(price)) {
+    return { ok: false, message: 'Harga jual di luar rentang yang diizinkan' };
+  }
+
+  const costPrice = parseIdrLike(draft.costPrice);
+  if (!isValidPrice(costPrice)) {
+    return { ok: false, message: 'Harga modal di luar rentang yang diizinkan' };
+  }
+
+  const batteryHealth = parseOptionalInteger(draft.batteryHealth);
+  if (batteryHealth !== null && (batteryHealth < 0 || batteryHealth > 100)) {
+    return { ok: false, message: 'Battery health harus 0-100' };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      model,
+      capacity: normalizeText(draft.capacity),
+      condition: normalizeText(draft.condition),
+      color: normalizeText(draft.color),
+      has_imei: draft.hasImei,
+      imei: draft.hasImei ? imei : null,
+      price,
+      cost_price: costPrice,
+      battery_health: batteryHealth,
+      defect_description: normalizeText(draft.defectDescription),
+    },
+  };
 }
 
 /**
