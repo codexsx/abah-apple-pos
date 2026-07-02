@@ -115,4 +115,20 @@ describe('transactionApprovals service', () => {
       p_review_note: 'OK',
     });
   });
+
+  it('surfaces the approval RPC error message', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: 'Pembelian tidak bisa dihapus karena ada unit dari pembelian ini yang sudah terjual.',
+      },
+    });
+
+    await expect(
+      reviewTransactionChangeRequest({
+        requestId: 'req-1',
+        decision: 'approved',
+      }),
+    ).rejects.toThrow('Pembelian tidak bisa dihapus karena ada unit dari pembelian ini yang sudah terjual.');
+  });
 });

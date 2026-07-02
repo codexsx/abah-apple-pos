@@ -50,6 +50,21 @@ const REQUEST_SELECT = [
   'reviewer:profiles!transaction_change_requests_reviewed_by_fkey(id, name, role, initials)',
 ].join(', ');
 
+function throwSupabaseError(error: unknown, fallback: string): never {
+  if (error instanceof Error) {
+    throw error;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      throw new Error(message);
+    }
+  }
+
+  throw new Error(fallback);
+}
+
 function snapshotTransaction(transaction: Transaction): Record<string, unknown> {
   return {
     id: transaction.id,
@@ -92,7 +107,7 @@ export async function submitTransactionChangeRequest(
     snapshot: snapshotTransaction(input.transaction),
   });
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, 'Request edit/hapus transaksi gagal dibuat.');
 }
 
 export async function getTransactionChangeRequests(): Promise<TransactionChangeRequest[]> {
@@ -101,7 +116,7 @@ export async function getTransactionChangeRequests(): Promise<TransactionChangeR
     .select(REQUEST_SELECT)
     .order('created_at', { ascending: false });
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, 'Gagal memuat request approval transaksi.');
   return (data || []) as unknown as TransactionChangeRequest[];
 }
 
@@ -114,5 +129,5 @@ export async function reviewTransactionChangeRequest(
     p_review_note: input.reviewNote?.trim() ?? '',
   });
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, 'Approval transaksi gagal diproses.');
 }
