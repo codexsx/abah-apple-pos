@@ -71,15 +71,42 @@ const absenceItem: AttendanceReportItem = {
   },
 };
 
+const offItem: AttendanceReportItem = {
+  type: 'off',
+  key: 'off-staff-2-2026-07-02',
+  date: '2026-07-02',
+  sortTime: '2026-07-02T23:59:59+07:00',
+  offRequest: {
+    id: 'off-1',
+    staff_id: 'staff-2',
+    attendance_date: '2026-07-02',
+    reason: 'Jadwal libur',
+    status: 'approved',
+    requested_by: 'staff-2',
+    reviewed_by: 'boss-1',
+    reviewed_at: '2026-07-01T12:00:00.000Z',
+    review_note: 'OK',
+    created_at: '2026-07-01T10:00:00.000Z',
+    updated_at: '2026-07-01T12:00:00.000Z',
+    staff: {
+      ...staff,
+      id: 'staff-2',
+      name: 'Bella Staff',
+      initials: 'BS',
+    },
+  },
+};
+
 describe('attendance report helpers', () => {
   it('builds a CSV report with attendance rows, absence rows, and photo URLs', () => {
-    const csv = buildAttendanceCsv([recordItem, absenceItem]);
+    const csv = buildAttendanceCsv([recordItem, absenceItem, offItem]);
 
     expect(csv).toContain('Nama Staff,Jabatan,Tanggal,Status,Shift');
     expect(csv).toContain('"Ali, Staff",KASIR,2026-07-01,Disetujui,Pagi');
     expect(csv).toContain('https://signed.test/attendance.webp');
     expect(csv).toContain('Bella Staff,KASIR,2026-07-01,Tidak Absen');
     expect(csv).toContain('150000');
+    expect(csv).toContain('Bella Staff,KASIR,2026-07-02,Libur / Off');
   });
 
   it('builds a print-ready photo report that includes signed attendance photos', () => {
@@ -88,7 +115,7 @@ describe('attendance report helpers', () => {
       startDate: '2026-07-01',
       endDate: '2026-07-31',
       generatedAt: new Date('2026-07-31T12:00:00+07:00'),
-      items: [recordItem, absenceItem],
+      items: [recordItem, absenceItem, offItem],
     });
 
     expect(html).toContain('Report Absensi');
@@ -97,6 +124,7 @@ describe('attendance report helpers', () => {
     expect(html).toContain('Ali, Staff');
     expect(html).toContain('Tidak Absen');
     expect(html).toContain('Bella Staff');
+    expect(html).toContain('Libur / Off');
   });
 
   it('creates a stable filename for attendance exports', () => {

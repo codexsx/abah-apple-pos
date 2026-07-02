@@ -1,8 +1,9 @@
-import type { AttendanceAbsence, AttendanceRecord } from '@/services/attendance';
+import type { AttendanceAbsence, AttendanceOffRequest, AttendanceRecord } from '@/services/attendance';
 
 export type AttendanceReportItem =
   | { type: 'record'; key: string; date: string; sortTime: string; record: AttendanceRecord }
-  | { type: 'absence'; key: string; date: string; sortTime: string; absence: AttendanceAbsence };
+  | { type: 'absence'; key: string; date: string; sortTime: string; absence: AttendanceAbsence }
+  | { type: 'off'; key: string; date: string; sortTime: string; offRequest: AttendanceOffRequest };
 
 const CSV_HEADERS = [
   'Nama Staff',
@@ -83,10 +84,29 @@ function absenceRow(absence: AttendanceAbsence): Array<string | number | null> {
   ];
 }
 
+function offRow(offRequest: AttendanceOffRequest): Array<string | number | null> {
+  return [
+    offRequest.staff.name,
+    offRequest.staff.role,
+    offRequest.attendance_date,
+    'Libur / Off',
+    '',
+    '',
+    '',
+    '',
+    0,
+    '',
+    '',
+    '',
+  ];
+}
+
 export function buildAttendanceCsv(items: AttendanceReportItem[]): string {
-  const rows = items.map((item) => (
-    item.type === 'record' ? recordRow(item.record) : absenceRow(item.absence)
-  ));
+  const rows = items.map((item) => {
+    if (item.type === 'record') return recordRow(item.record);
+    if (item.type === 'off') return offRow(item.offRequest);
+    return absenceRow(item.absence);
+  });
   return [
     CSV_HEADERS.map(csvCell).join(','),
     ...rows.map((row) => row.map(csvCell).join(',')),
@@ -102,6 +122,21 @@ export function attendanceReportFilename(
 }
 
 function photoBlock(item: AttendanceReportItem): string {
+  if (item.type === 'off') {
+    const { offRequest } = item;
+    return `
+      <article class="card off">
+        <div class="photo empty">Libur / Off</div>
+        <div class="meta">
+          <h2>${escapeHtml(offRequest.staff.name)}</h2>
+          <p>${escapeHtml(offRequest.staff.role)} - ${escapeHtml(offRequest.attendance_date)}</p>
+          <span class="badge info">Libur / Off</span>
+          <strong>${escapeHtml(offRequest.reason)}</strong>
+        </div>
+      </article>
+    `;
+  }
+
   if (item.type === 'absence') {
     const { absence } = item;
     return `
@@ -171,6 +206,7 @@ export function buildAttendancePhotoReportHtml(input: {
     .meta strong, .meta small { display: block; margin-top: 8px; }
     .badge { display: inline-flex; margin-top: 8px; padding: 4px 9px; border-radius: 999px; background: #dcfce7; color: #047857; font-size: 11px; font-weight: 800; }
     .danger { background: #ffedd5; color: #c2410c; }
+    .info { background: #dbeafe; color: #1d4ed8; }
     @media print { body { background: #fff; } }
   </style>
 </head>

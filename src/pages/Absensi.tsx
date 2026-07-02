@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarCheck,
+  CalendarOff,
   Camera,
   CheckCircle2,
+  ClipboardCheck,
   Clock3,
   Download,
   FlipHorizontal2,
@@ -23,14 +25,20 @@ import {
   captureVideoFrameToWebp,
   createAttendanceRecord,
   getAttendanceAbsences,
+  getAttendanceExpectedStaff,
+  getAttendanceOffRequests,
   getAttendanceRecords,
   getAttendanceSettings,
   pontianakDate,
+  requestAttendanceOff,
+  reviewAttendanceOffRequest,
   saveAttendanceSettings,
   verifyAttendanceRecord,
   type AttendanceAbsence,
+  type AttendanceOffRequest,
   type AttendanceRecord,
   type AttendanceSettings,
+  type AttendanceStaff,
   type AttendanceStatus,
 } from '@/services/attendance';
 import {
@@ -43,6 +51,7 @@ import {
   DEFAULT_ATTENDANCE_SHIFTS,
   calculateDistanceMeters,
   isWithinRadius,
+  summarizeAttendanceByStaff,
   type AttendanceLocation,
   type AttendanceShift,
 } from '@/services/attendanceCore';
@@ -156,16 +165,22 @@ export default function Absensi() {
   const [draft, setDraft] = useState<AttendanceSettings | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [absences, setAbsences] = useState<AttendanceAbsence[]>([]);
+  const [offRequests, setOffRequests] = useState<AttendanceOffRequest[]>([]);
+  const [expectedStaff, setExpectedStaff] = useState<AttendanceStaff[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState(DEFAULT_ATTENDANCE_SHIFTS[0].id);
   const [position, setPosition] = useState<(AttendanceLocation & { accuracy?: number | null; distance: number; ok: boolean }) | null>(null);
   const [startDate, setStartDate] = useState(range.startDate);
   const [endDate, setEndDate] = useState(range.endDate);
+  const [offDate, setOffDate] = useState(pontianakDate());
+  const [offReason, setOffReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [requestingOff, setRequestingOff] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [reviewingOffId, setReviewingOffId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [mirrorCamera, setMirrorCamera] = useState(true);
   const [error, setError] = useState('');
@@ -188,13 +203,27 @@ export default function Absensi() {
         acc.penalty += record.penalty_amount;
         return acc;
       },
-      { total: 0, pending: 0, late: 0, absent: 0, penalty: 0 },
+      { total: 0, pending: 0, late: 0, absent: 0, approvedOff: 0, pendingOff: 0, penalty: 0 },
     );
     recordSummary.absent = absences.length;
+    recordSummary.approvedOff = offRequests.filter((request) => request.status === 'approved').length;
+    recordSummary.pendingOff = offRequests.filter((request) => request.status === 'pending').length;
     recordSummary.total += absences.length;
     recordSummary.penalty += absences.reduce((sum, absence) => sum + absence.penalty_amount, 0);
     return recordSummary;
-  }, [absences, records]);
+  }, [absences, offRequests, records]);
+
+  const staffSummaries = useMemo(() => summarizeAttendanceByStaff({
+    staff: expectedStaff,
+    records,
+    absences,
+    offRequests,
+  }), [absences, expectedStaff, offRequests, records]);
+
+  const pendingOffRequests = useMemo(
+    () => offRequests.filter((request) => request.status === 'pending'),
+    [offRequests],
+  );
 
   const attendanceItems = useMemo<AttendanceListItem[]>(() => {
     return [
@@ -212,12 +241,21 @@ export default function Absensi() {
         sortTime: `${absence.attendance_date}T23:59:59+07:00`,
         absence,
       })),
+      ...offRequests
+        .filter((request) => request.status === 'approved')
+        .map((offRequest): AttendanceListItem => ({
+          type: 'off',
+          key: offRequest.id,
+          date: offRequest.attendance_date,
+          sortTime: `${offRequest.attendance_date}T23:58:59+07:00`,
+          offRequest,
+        })),
     ].sort((a, b) => {
       const dateDiff = b.date.localeCompare(a.date);
       if (dateDiff !== 0) return dateDiff;
       return b.sortTime.localeCompare(a.sortTime);
     });
-  }, [absences, records]);
+  }, [absences, offRequests, records]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -238,13 +276,25 @@ export default function Absensi() {
           ? current
           : loadedSettings.shifts[0]?.id ?? DEFAULT_ATTENDANCE_SHIFTS[0].id
       ));
+      const loadedStaff = await getAttendanceExpectedStaff({
+        currentUserId: user.id,
+        canManage,
+      });
+      setExpectedStaff(loadedStaff);
       const loadedRecords = await getAttendanceRecords({
         currentUserId: user.id,
         canManage,
         startDate,
         endDate,
       });
+      const loadedOffRequests = await getAttendanceOffRequests({
+        currentUserId: user.id,
+        canManage,
+        startDate,
+        endDate,
+      });
       setRecords(loadedRecords);
+      setOffRequests(loadedOffRequests);
       setAbsences(await getAttendanceAbsences({
         currentUserId: user.id,
         canManage,
@@ -252,6 +302,7 @@ export default function Absensi() {
         endDate,
         settings: loadedSettings,
         records: loadedRecords,
+        offRequests: loadedOffRequests,
       }));
     } catch (err) {
       console.error('[Absensi] load error:', err);
@@ -377,6 +428,45 @@ export default function Absensi() {
     }
   }
 
+  async function submitOffRequest() {
+    if (!user?.id) return;
+    setRequestingOff(true);
+    setError('');
+    try {
+      await requestAttendanceOff({
+        staffId: user.id,
+        attendanceDate: offDate,
+        reason: offReason,
+      });
+      setOffReason('');
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] off request error:', err);
+      setError(err instanceof Error ? err.message : 'Request libur tidak dapat disimpan.');
+    } finally {
+      setRequestingOff(false);
+    }
+  }
+
+  async function reviewOff(request: AttendanceOffRequest, status: 'approved' | 'rejected') {
+    if (!user?.id) return;
+    setReviewingOffId(request.id);
+    setError('');
+    try {
+      await reviewAttendanceOffRequest({
+        id: request.id,
+        status,
+        reviewerId: user.id,
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] off review error:', err);
+      setError(err instanceof Error ? err.message : 'Request libur tidak dapat diproses.');
+    } finally {
+      setReviewingOffId(null);
+    }
+  }
+
   async function verify(record: AttendanceRecord, status: AttendanceStatus) {
     if (!user?.id) return;
     setVerifyingId(record.id);
@@ -460,7 +550,7 @@ export default function Absensi() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Total</p>
             <p className="mt-2 text-[28px] font-bold text-slate-950">{summary.total}</p>
@@ -477,11 +567,67 @@ export default function Absensi() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-orange-500">Tidak Absen</p>
             <p className="mt-2 text-[28px] font-bold text-orange-700">{summary.absent}</p>
           </div>
+          <div className="rounded-2xl bg-sky-50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-500">Off Approved</p>
+            <p className="mt-2 text-[28px] font-bold text-sky-700">{summary.approvedOff}</p>
+            {summary.pendingOff > 0 && (
+              <p className="mt-1 text-[11px] font-semibold text-sky-600">{summary.pendingOff} pending</p>
+            )}
+          </div>
           <div className="rounded-2xl bg-blue-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-blue-500">Potongan</p>
             <p className="mt-2 text-[22px] font-bold text-blue-700">{formatRupiah(summary.penalty)}</p>
           </div>
         </div>
+
+        {canManage && staffSummaries.length > 0 && (
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/70">
+            <div className="flex flex-col gap-1 border-b border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-[15px] font-bold text-slate-950">Rangkuman Potongan Staff</h2>
+                <p className="text-[12px] font-medium text-slate-500">
+                  Periode {formatDate(startDate)} sampai {formatDate(endDate)}
+                </p>
+              </div>
+              <span className="font-mono text-[13px] font-bold text-blue-700">
+                Total {formatRupiah(summary.penalty)}
+              </span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {staffSummaries.map((item) => (
+                <div key={item.staff_id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1.2fr)_repeat(5,minmax(90px,0.55fr))] md:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-bold text-slate-950">{item.staff_name}</p>
+                    <p className="text-[11px] font-semibold text-slate-500">{item.role}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Hadir</p>
+                    <p className="font-mono text-[15px] font-bold text-slate-800">{item.attended}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Telat</p>
+                    <p className="font-mono text-[15px] font-bold text-rose-700">{item.late}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Tidak Absen</p>
+                    <p className="font-mono text-[15px] font-bold text-orange-700">{item.absent}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Off</p>
+                    <p className="font-mono text-[15px] font-bold text-sky-700">{item.approvedOff}</p>
+                    {item.pendingOff > 0 && (
+                      <p className="text-[10px] font-semibold text-sky-600">{item.pendingOff} pending</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Potongan</p>
+                    <p className="font-mono text-[15px] font-bold text-blue-700">{formatRupiah(item.totalPenalty)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {error && (
@@ -521,6 +667,42 @@ export default function Absensi() {
                 <span className="mt-1 block text-[12px] font-semibold opacity-70">{shift.start_time}</span>
               </button>
             ))}
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-sky-600 ring-1 ring-sky-100">
+                <CalendarOff size={17} />
+              </span>
+              <div>
+                <h3 className="text-[14px] font-bold text-slate-950">Off / Libur</h3>
+                <p className="text-[11px] font-semibold text-slate-500">Request harus di-approve boss.</p>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[145px_minmax(0,1fr)]">
+              <input
+                type="date"
+                value={offDate}
+                onChange={(event) => setOffDate(event.target.value)}
+                className="h-10 rounded-xl border border-sky-100 bg-white px-3 text-[12px] font-semibold outline-none focus:border-sky-300"
+              />
+              <input
+                type="text"
+                value={offReason}
+                onChange={(event) => setOffReason(event.target.value)}
+                placeholder="Alasan libur / off"
+                className="h-10 rounded-xl border border-sky-100 bg-white px-3 text-[12px] font-semibold outline-none placeholder:text-slate-300 focus:border-sky-300"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={submitOffRequest}
+              disabled={requestingOff || offReason.trim().length < 3}
+              className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 text-[12px] font-bold text-white transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {requestingOff ? <Loader2 size={15} className="animate-spin" /> : <CalendarOff size={15} />}
+              Ajukan Off
+            </button>
           </div>
 
           <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -637,6 +819,61 @@ export default function Absensi() {
             </div>
           </div>
 
+          {pendingOffRequests.length > 0 && (
+            <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-sky-600 ring-1 ring-sky-100">
+                  <ClipboardCheck size={16} />
+                </span>
+                <div>
+                  <h3 className="text-[14px] font-bold text-slate-950">Approval Off / Libur</h3>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    {canManage ? 'Request pending dari staff.' : 'Request kamu masih menunggu approval.'}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {pendingOffRequests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-sky-100 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-bold text-slate-950">
+                          {request.staff.name}
+                        </p>
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {formatDate(request.attendance_date)} · {request.reason}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-amber-100">
+                        Pending
+                      </span>
+                    </div>
+                    {canManage && (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => reviewOff(request, 'rejected')}
+                          disabled={reviewingOffId === request.id}
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 text-[12px] font-bold text-white disabled:bg-rose-300"
+                        >
+                          <XCircle size={14} /> Tolak
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => reviewOff(request, 'approved')}
+                          disabled={reviewingOffId === request.id}
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-[12px] font-bold text-white disabled:bg-emerald-300"
+                        >
+                          <ShieldCheck size={14} /> Approve
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex min-h-[260px] items-center justify-center">
               <Loader2 size={26} className="animate-spin text-slate-300" />
@@ -648,6 +885,51 @@ export default function Absensi() {
           ) : (
             <div className="space-y-3">
               {attendanceItems.map((item) => {
+                if (item.type === 'off') {
+                  const { offRequest } = item;
+                  return (
+                    <div key={item.key} className="grid gap-3 rounded-2xl border border-sky-100 bg-sky-50/70 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
+                      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-2xl bg-white text-sky-500 ring-1 ring-sky-100">
+                        <CalendarOff size={28} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {offRequest.staff.avatar_url ? (
+                              <img
+                                src={offRequest.staff.avatar_url}
+                                alt={offRequest.staff.name}
+                                className="h-9 w-9 rounded-full object-cover"
+                                style={avatarImageStyle(offRequest.staff)}
+                              />
+                            ) : (
+                              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-[12px] font-bold text-white">
+                                {offRequest.staff.initials}
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-[14px] font-bold text-slate-950">{offRequest.staff.name}</p>
+                              <p className="text-[11px] font-semibold text-slate-500">{offRequest.staff.role}</p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-bold text-sky-700 ring-1 ring-sky-200">
+                            Libur / Off
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-[12px] font-semibold text-slate-600 sm:grid-cols-2">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock3 size={13} /> {formatDate(offRequest.attendance_date)}
+                          </span>
+                          <span className="text-sky-700">Approved boss</span>
+                          <span className="text-slate-600">{offRequest.reason}</span>
+                          <span className="text-emerald-700">Potongan Rp 0</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 if (item.type === 'absence') {
                   const { absence } = item;
                   return (

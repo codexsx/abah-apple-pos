@@ -8,12 +8,15 @@ import {
   DEFAULT_ATTENDANCE_RETENTION_DAYS,
   DEFAULT_ATTENDANCE_SHIFTS,
   DEFAULT_ATTENDANCE_TOLERANCE_MINUTES,
+  attendanceDateKey,
   calculateAbsencePenalty,
   calculateDistanceMeters,
   isWithinRadius,
   listAttendanceDates,
   normalizeShifts,
+  shouldCountAbsenceForDate,
   type AttendanceLocation,
+  type AttendanceOffStatus,
   type AttendanceShift,
 } from '@/services/attendanceCore';
 
@@ -80,6 +83,21 @@ export interface AttendanceAbsence {
   staff: AttendanceStaff;
 }
 
+export interface AttendanceOffRequest {
+  id: string;
+  staff_id: string;
+  attendance_date: string;
+  reason: string;
+  status: AttendanceOffStatus;
+  requested_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+  staff: AttendanceStaff;
+}
+
 interface RawSettingsRow {
   id: 'default';
   store_name: string | null;
@@ -119,6 +137,20 @@ interface RawAttendanceRow {
   verified_by: string | null;
   verified_at: string | null;
   created_at: string;
+}
+
+interface RawAttendanceOffRow {
+  id: string;
+  staff_id: string;
+  attendance_date: string;
+  reason: string;
+  status: AttendanceOffStatus;
+  requested_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface RawStaffRow {
@@ -175,6 +207,15 @@ function normalizeRecord(row: RawAttendanceRow, staff: AttendanceStaff, photoUrl
     latitude: toNumber(row.latitude, 0),
     longitude: toNumber(row.longitude, 0),
     accuracy_meters: row.accuracy_meters == null ? null : toNumber(row.accuracy_meters, 0),
+    staff,
+  };
+}
+
+function normalizeOffRequest(row: RawAttendanceOffRow, staff: AttendanceStaff): AttendanceOffRequest {
+  return {
+    ...row,
+    attendance_date: String(row.attendance_date),
+    reason: row.reason || '',
     staff,
   };
 }
@@ -397,8 +438,14 @@ export async function getAttendanceAbsences(input: {
   endDate: string;
   settings: AttendanceSettings;
   records: AttendanceRecord[];
+  offRequests?: AttendanceOffRequest[];
+  latestClosedDate?: string;
 }): Promise<AttendanceAbsence[]> {
-  const dates = listAttendanceDates(input.startDate, input.endDate, previousPontianakDate());
+  const dates = listAttendanceDates(
+    input.startDate,
+    input.endDate,
+    input.latestClosedDate ?? previousPontianakDate(),
+  );
   if (dates.length === 0) return [];
 
   const staff = await getAttendanceExpectedStaff({
@@ -408,11 +455,21 @@ export async function getAttendanceAbsences(input: {
   if (staff.length === 0) return [];
 
   const checkedIn = new Set(
-    input.records.map((record) => `${record.staff_id}:${record.attendance_date}`),
+    input.records.map((record) => attendanceDateKey(record.staff_id, record.attendance_date)),
+  );
+  const approvedOff = new Set(
+    (input.offRequests ?? [])
+      .filter((request) => request.status === 'approved')
+      .map((request) => attendanceDateKey(request.staff_id, request.attendance_date)),
   );
 
   return staff.flatMap((member) => dates
-    .filter((date) => !checkedIn.has(`${member.id}:${date}`))
+    .filter((date) => shouldCountAbsenceForDate({
+      staffId: member.id,
+      date,
+      checkedInKeys: checkedIn,
+      approvedOffKeys: approvedOff,
+    }))
     .map((date) => ({
       id: `absence-${member.id}-${date}`,
       staff_id: member.id,
@@ -420,6 +477,95 @@ export async function getAttendanceAbsences(input: {
       penalty_amount: calculateAbsencePenalty(false, input.settings.absence_penalty_amount),
       staff: member,
     })));
+}
+
+export async function getAttendanceOffRequests(input: {
+  currentUserId: string;
+  canManage: boolean;
+  startDate: string;
+  endDate: string;
+}): Promise<AttendanceOffRequest[]> {
+  let query = supabase
+    .from('attendance_off_requests')
+    .select('*')
+    .gte('attendance_date', input.startDate)
+    .lte('attendance_date', input.endDate)
+    .order('attendance_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (!input.canManage) query = query.eq('staff_id', input.currentUserId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = (data ?? []) as RawAttendanceOffRow[];
+  if (rows.length === 0) return [];
+
+  const staffIds = Array.from(new Set(rows.map((row) => row.staff_id)));
+  const { data: staffRows, error: staffError } = await supabase
+    .rpc('get_attendance_staff', { p_staff_ids: staffIds });
+  if (staffError) throw staffError;
+
+  const staffMap = new Map(
+    ((staffRows ?? []) as RawStaffRow[]).map((row) => [row.id, row]),
+  );
+
+  return rows.map((row) => normalizeOffRequest(
+    row,
+    normalizeStaff(staffMap.get(row.staff_id), row.staff_id),
+  ));
+}
+
+export async function requestAttendanceOff(input: {
+  staffId: string;
+  attendanceDate: string;
+  reason: string;
+}): Promise<AttendanceOffRequest> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error('Alasan libur wajib diisi.');
+
+  const { data, error } = await supabase
+    .from('attendance_off_requests')
+    .insert({
+      staff_id: input.staffId,
+      attendance_date: input.attendanceDate,
+      reason,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Request libur untuk tanggal ini sudah ada.');
+    throw error;
+  }
+
+  return normalizeOffRequest(
+    data as RawAttendanceOffRow,
+    normalizeStaff(undefined, input.staffId),
+  );
+}
+
+export async function reviewAttendanceOffRequest(input: {
+  id: string;
+  status: Extract<AttendanceOffStatus, 'approved' | 'rejected'>;
+  reviewerId: string;
+  note?: string;
+}): Promise<AttendanceOffRequest> {
+  const { data, error } = await supabase
+    .from('attendance_off_requests')
+    .update({
+      status: input.status,
+      reviewed_by: input.reviewerId,
+      reviewed_at: new Date().toISOString(),
+      review_note: input.note?.trim() || null,
+    })
+    .eq('id', input.id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  const row = data as RawAttendanceOffRow;
+  return normalizeOffRequest(row, normalizeStaff(undefined, row.staff_id));
 }
 
 export async function verifyAttendanceRecord(input: {

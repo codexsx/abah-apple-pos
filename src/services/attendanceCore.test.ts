@@ -8,6 +8,8 @@ import {
   isWithinRadius,
   listAttendanceDates,
   normalizeShifts,
+  shouldCountAbsenceForDate,
+  summarizeAttendanceByStaff,
 } from './attendanceCore';
 
 describe('attendanceCore', () => {
@@ -63,6 +65,75 @@ describe('attendanceCore', () => {
     expect(normalizeShifts(null)).toHaveLength(3);
     expect(normalizeShifts([{ id: 'custom', name: 'Custom', start_time: '11:30' }])).toEqual([
       { id: 'custom', name: 'Custom', start_time: '11:30' },
+    ]);
+  });
+
+  it('does not count an absence when a staff has an approved off request for that date', () => {
+    expect(shouldCountAbsenceForDate({
+      staffId: 'staff-1',
+      date: '2026-07-01',
+      checkedInKeys: new Set(),
+      approvedOffKeys: new Set(['staff-1:2026-07-01']),
+    })).toBe(false);
+
+    expect(shouldCountAbsenceForDate({
+      staffId: 'staff-1',
+      date: '2026-07-01',
+      checkedInKeys: new Set(),
+      approvedOffKeys: new Set(),
+    })).toBe(true);
+  });
+
+  it('summarizes attendance deductions per staff including approved off days', () => {
+    const summaries = summarizeAttendanceByStaff({
+      staff: [
+        { id: 'staff-1', name: 'Bella', role: 'KASIR', initials: 'BE' },
+        { id: 'staff-2', name: 'Regga', role: 'KASIR', initials: 'RE' },
+      ],
+      records: [
+        {
+          staff_id: 'staff-1',
+          late_minutes: 4,
+          penalty_amount: 50_000,
+          status: 'pending',
+        },
+        {
+          staff_id: 'staff-2',
+          late_minutes: 0,
+          penalty_amount: 0,
+          status: 'approved',
+        },
+      ],
+      absences: [
+        { staff_id: 'staff-1', penalty_amount: 150_000 },
+      ],
+      offRequests: [
+        { staff_id: 'staff-2', status: 'approved' },
+        { staff_id: 'staff-1', status: 'pending' },
+      ],
+    });
+
+    expect(summaries).toEqual([
+      expect.objectContaining({
+        staff_id: 'staff-1',
+        staff_name: 'Bella',
+        attended: 1,
+        late: 1,
+        absent: 1,
+        approvedOff: 0,
+        pendingOff: 1,
+        totalPenalty: 200_000,
+      }),
+      expect.objectContaining({
+        staff_id: 'staff-2',
+        staff_name: 'Regga',
+        attended: 1,
+        late: 0,
+        absent: 0,
+        approvedOff: 1,
+        pendingOff: 0,
+        totalPenalty: 0,
+      }),
     ]);
   });
 });

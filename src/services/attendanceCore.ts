@@ -9,6 +9,47 @@ export interface AttendanceLocation {
   longitude: number;
 }
 
+export type AttendanceOffStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AttendanceSummaryStaff {
+  id: string;
+  name: string;
+  role: string;
+  initials: string;
+}
+
+export interface AttendanceSummaryRecord {
+  staff_id: string;
+  late_minutes: number;
+  penalty_amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+export interface AttendanceSummaryAbsence {
+  staff_id: string;
+  penalty_amount: number;
+}
+
+export interface AttendanceSummaryOffRequest {
+  staff_id: string;
+  status: AttendanceOffStatus;
+}
+
+export interface AttendanceStaffSummary {
+  staff_id: string;
+  staff_name: string;
+  role: string;
+  initials: string;
+  attended: number;
+  pending: number;
+  late: number;
+  absent: number;
+  approvedOff: number;
+  pendingOff: number;
+  rejectedOff: number;
+  totalPenalty: number;
+}
+
 export const DEFAULT_ATTENDANCE_SHIFTS: AttendanceShift[] = [
   { id: 'pagi', name: 'Pagi', start_time: '10:00' },
   { id: 'middle', name: 'Middle', start_time: '12:00' },
@@ -121,4 +162,84 @@ export function normalizeShifts(value: unknown): AttendanceShift[] {
     .filter((row): row is AttendanceShift => row !== null);
 
   return parsed.length > 0 ? parsed : DEFAULT_ATTENDANCE_SHIFTS;
+}
+
+export function attendanceDateKey(staffId: string, date: string): string {
+  return `${staffId}:${date}`;
+}
+
+export function shouldCountAbsenceForDate(input: {
+  staffId: string;
+  date: string;
+  checkedInKeys: ReadonlySet<string>;
+  approvedOffKeys: ReadonlySet<string>;
+}): boolean {
+  const key = attendanceDateKey(input.staffId, input.date);
+  return !input.checkedInKeys.has(key) && !input.approvedOffKeys.has(key);
+}
+
+export function summarizeAttendanceByStaff(input: {
+  staff: AttendanceSummaryStaff[];
+  records: AttendanceSummaryRecord[];
+  absences: AttendanceSummaryAbsence[];
+  offRequests: AttendanceSummaryOffRequest[];
+}): AttendanceStaffSummary[] {
+  const summaries = new Map<string, AttendanceStaffSummary>();
+
+  const ensure = (member: AttendanceSummaryStaff): AttendanceStaffSummary => {
+    const existing = summaries.get(member.id);
+    if (existing) return existing;
+    const next: AttendanceStaffSummary = {
+      staff_id: member.id,
+      staff_name: member.name,
+      role: member.role,
+      initials: member.initials,
+      attended: 0,
+      pending: 0,
+      late: 0,
+      absent: 0,
+      approvedOff: 0,
+      pendingOff: 0,
+      rejectedOff: 0,
+      totalPenalty: 0,
+    };
+    summaries.set(member.id, next);
+    return next;
+  };
+
+  const fallbackStaff = (staffId: string): AttendanceSummaryStaff => ({
+    id: staffId,
+    name: 'Staff',
+    role: 'STAFF',
+    initials: 'ST',
+  });
+
+  for (const member of input.staff) ensure(member);
+
+  for (const record of input.records) {
+    const summary = summaries.get(record.staff_id) ?? ensure(fallbackStaff(record.staff_id));
+    summary.attended += 1;
+    if (record.status === 'pending') summary.pending += 1;
+    if (record.late_minutes > 0) summary.late += 1;
+    summary.totalPenalty += Math.max(0, Math.floor(record.penalty_amount));
+  }
+
+  for (const absence of input.absences) {
+    const summary = summaries.get(absence.staff_id) ?? ensure(fallbackStaff(absence.staff_id));
+    summary.absent += 1;
+    summary.totalPenalty += Math.max(0, Math.floor(absence.penalty_amount));
+  }
+
+  for (const request of input.offRequests) {
+    const summary = summaries.get(request.staff_id) ?? ensure(fallbackStaff(request.staff_id));
+    if (request.status === 'approved') summary.approvedOff += 1;
+    else if (request.status === 'pending') summary.pendingOff += 1;
+    else summary.rejectedOff += 1;
+  }
+
+  return Array.from(summaries.values()).sort((a, b) => {
+    const penaltyDiff = b.totalPenalty - a.totalPenalty;
+    if (penaltyDiff !== 0) return penaltyDiff;
+    return a.staff_name.localeCompare(b.staff_name);
+  });
 }
