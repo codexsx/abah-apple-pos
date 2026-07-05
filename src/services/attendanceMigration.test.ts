@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import migrationSql from '../../supabase/migrations/20260702152618_attendance_off_requests.sql?raw';
 import controlsMigrationSql from '../../supabase/migrations/20260705070013_attendance_search_controls.sql?raw';
 import revisionMigrationSql from '../../supabase/migrations/20260705082945_attendance_revision_requests.sql?raw';
+import managerRevisionMigrationSql from '../../supabase/migrations/20260705100643_allow_manager_attendance_revision_requests.sql?raw';
 
 describe('attendance off request migration', () => {
   it('creates off requests with RLS and manager approval policy', () => {
@@ -40,5 +41,13 @@ describe('attendance revision request migration', () => {
     expect(revisionMigrationSql).toContain('r.id = attendance_revision_requests.attendance_record_id');
     expect(revisionMigrationSql).toContain('r.staff_id = attendance_revision_requests.staff_id');
     expect(revisionMigrationSql).toContain('and staff_id = v_request.staff_id');
+  });
+
+  it('allows managers to request shift revisions for staff records with audit ownership', () => {
+    expect(managerRevisionMigrationSql).toContain('drop policy if exists "Users create own pending attendance revisions"');
+    expect(managerRevisionMigrationSql).toContain("(select private.has_permission('manage_users'))");
+    expect(managerRevisionMigrationSql).toContain('requested_by = (select auth.uid())');
+    expect(managerRevisionMigrationSql).toContain('r.id = attendance_revision_requests.attendance_record_id');
+    expect(managerRevisionMigrationSql).toContain('r.staff_id = attendance_revision_requests.staff_id');
   });
 });

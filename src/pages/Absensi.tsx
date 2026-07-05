@@ -655,7 +655,7 @@ export default function Absensi() {
   }
 
   async function submitRevision(record: AttendanceRecord) {
-    if (!settings) return;
+    if (!settings || !user?.id) return;
     const draftState = revisionDrafts[record.id] ?? { shiftId: record.shift_id, reason: '' };
     const requestedShift = settings.shifts.find((shift) => shift.id === draftState.shiftId);
     if (!requestedShift) {
@@ -673,6 +673,7 @@ export default function Absensi() {
       await requestAttendanceRevision({
         attendanceRecordId: record.id,
         staffId: record.staff_id,
+        requestedBy: user.id,
         currentShiftId: record.shift_id,
         currentShiftName: record.shift_name,
         currentStartTime: record.scheduled_start_time,

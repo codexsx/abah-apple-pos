@@ -756,6 +756,7 @@ export async function getAttendanceRevisionRequests(input: {
 export async function requestAttendanceRevision(input: {
   attendanceRecordId: string;
   staffId: string;
+  requestedBy: string;
   currentShiftId: string;
   currentShiftName: string;
   currentStartTime: string;
@@ -770,6 +771,7 @@ export async function requestAttendanceRevision(input: {
     .insert({
       attendance_record_id: input.attendanceRecordId,
       staff_id: input.staffId,
+      requested_by: input.requestedBy,
       current_shift_id: input.currentShiftId,
       current_shift_name: input.currentShiftName,
       current_start_time: input.currentStartTime,

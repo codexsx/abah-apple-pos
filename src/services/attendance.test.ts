@@ -261,6 +261,7 @@ describe('attendance service', () => {
     await requestAttendanceRevision({
       attendanceRecordId: 'record-1',
       staffId: 'staff-1',
+      requestedBy: 'boss-1',
       currentShiftId: 'pagi',
       currentShiftName: 'Pagi',
       currentStartTime: '10:00',
@@ -272,6 +273,7 @@ describe('attendance service', () => {
     expect(mocks.insert).toHaveBeenCalledWith({
       attendance_record_id: 'record-1',
       staff_id: 'staff-1',
+      requested_by: 'boss-1',
       current_shift_id: 'pagi',
       current_shift_name: 'Pagi',
       current_start_time: '10:00',
