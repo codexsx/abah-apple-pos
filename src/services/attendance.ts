@@ -100,6 +100,31 @@ export interface AttendanceOffRequest {
   staff: AttendanceStaff;
 }
 
+export interface AttendanceRevisionRequest {
+  id: string;
+  attendance_record_id: string;
+  staff_id: string;
+  attendance_date: string | null;
+  check_in_at: string | null;
+  current_shift_id: string;
+  current_shift_name: string;
+  current_start_time: string;
+  requested_shift_id: string;
+  requested_shift_name: string;
+  requested_start_time: string;
+  reason: string;
+  status: AttendanceOffStatus;
+  requested_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+  late_minutes: number;
+  penalty_amount: number;
+  staff: AttendanceStaff;
+}
+
 export interface AttendanceAutoOffDate {
   attendance_date: string;
   label: string;
@@ -162,6 +187,34 @@ interface RawAttendanceOffRow {
   review_note: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface RawRevisionRecordRow {
+  attendance_date?: string | null;
+  check_in_at?: string | null;
+  late_minutes?: number | null;
+  penalty_amount?: number | null;
+}
+
+interface RawAttendanceRevisionRow {
+  id: string;
+  attendance_record_id: string;
+  staff_id: string;
+  current_shift_id: string;
+  current_shift_name: string;
+  current_start_time: string;
+  requested_shift_id: string;
+  requested_shift_name: string;
+  requested_start_time: string;
+  reason: string;
+  status: AttendanceOffStatus;
+  requested_by: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+  attendance_record?: RawRevisionRecordRow | RawRevisionRecordRow[] | null;
 }
 
 interface RawStaffRow {
@@ -238,6 +291,27 @@ function normalizeOffRequest(row: RawAttendanceOffRow, staff: AttendanceStaff): 
     ...row,
     attendance_date: String(row.attendance_date),
     reason: row.reason || '',
+    staff,
+  };
+}
+
+function normalizeJoinedRevisionRecord(row: RawAttendanceRevisionRow): RawRevisionRecordRow | null {
+  const record = row.attendance_record;
+  if (Array.isArray(record)) return record[0] ?? null;
+  return record ?? null;
+}
+
+function normalizeRevisionRequest(row: RawAttendanceRevisionRow, staff: AttendanceStaff): AttendanceRevisionRequest {
+  const record = normalizeJoinedRevisionRecord(row);
+  return {
+    ...row,
+    attendance_date: record?.attendance_date ? String(record.attendance_date) : null,
+    check_in_at: record?.check_in_at ?? null,
+    current_start_time: String(row.current_start_time ?? '').slice(0, 5),
+    requested_start_time: String(row.requested_start_time ?? '').slice(0, 5),
+    reason: row.reason || '',
+    late_minutes: record?.late_minutes ?? 0,
+    penalty_amount: record?.penalty_amount ?? 0,
     staff,
   };
 }
@@ -642,6 +716,94 @@ export async function requestAttendanceOff(input: {
     data as RawAttendanceOffRow,
     normalizeStaff(undefined, input.staffId),
   );
+}
+
+export async function getAttendanceRevisionRequests(input: {
+  currentUserId: string;
+  canManage: boolean;
+  startDate: string;
+  endDate: string;
+}): Promise<AttendanceRevisionRequest[]> {
+  let query = supabase
+    .from('attendance_revision_requests')
+    .select('*, attendance_record:attendance_records!inner(attendance_date, check_in_at, late_minutes, penalty_amount)')
+    .gte('attendance_record.attendance_date', input.startDate)
+    .lte('attendance_record.attendance_date', input.endDate);
+
+  if (!input.canManage) query = query.eq('staff_id', input.currentUserId);
+
+  const { data, error } = await query.order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []) as RawAttendanceRevisionRow[];
+  if (rows.length === 0) return [];
+
+  const staffIds = Array.from(new Set(rows.map((row) => row.staff_id)));
+  const { data: staffRows, error: staffError } = await supabase
+    .rpc('get_attendance_staff', { p_staff_ids: staffIds });
+  if (staffError) throw staffError;
+
+  const staffMap = new Map(
+    ((staffRows ?? []) as RawStaffRow[]).map((row) => [row.id, row]),
+  );
+
+  return rows.map((row) => normalizeRevisionRequest(
+    row,
+    normalizeStaff(staffMap.get(row.staff_id), row.staff_id),
+  ));
+}
+
+export async function requestAttendanceRevision(input: {
+  attendanceRecordId: string;
+  staffId: string;
+  currentShiftId: string;
+  currentShiftName: string;
+  currentStartTime: string;
+  requestedShift: AttendanceShift;
+  reason: string;
+}): Promise<AttendanceRevisionRequest> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error('Alasan revisi shift wajib diisi.');
+
+  const { data, error } = await supabase
+    .from('attendance_revision_requests')
+    .insert({
+      attendance_record_id: input.attendanceRecordId,
+      staff_id: input.staffId,
+      current_shift_id: input.currentShiftId,
+      current_shift_name: input.currentShiftName,
+      current_start_time: input.currentStartTime,
+      requested_shift_id: input.requestedShift.id,
+      requested_shift_name: input.requestedShift.name,
+      requested_start_time: input.requestedShift.start_time,
+      reason,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Request revisi shift untuk absen ini masih pending.');
+    throw error;
+  }
+
+  return normalizeRevisionRequest(
+    data as RawAttendanceRevisionRow,
+    normalizeStaff(undefined, input.staffId),
+  );
+}
+
+export async function reviewAttendanceRevisionRequest(input: {
+  id: string;
+  status: Extract<AttendanceOffStatus, 'approved' | 'rejected'>;
+  note?: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc('review_attendance_revision_request', {
+    p_request_id: input.id,
+    p_status: input.status,
+    p_review_note: input.note?.trim() || null,
+  });
+
+  if (error) throw error;
 }
 
 export async function reviewAttendanceOffRequest(input: {

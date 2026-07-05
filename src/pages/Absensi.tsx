@@ -10,6 +10,7 @@ import {
   FlipHorizontal2,
   Loader2,
   MapPin,
+  PenLine,
   Printer,
   RefreshCw,
   Save,
@@ -33,10 +34,13 @@ import {
   getAttendanceExpectedStaff,
   getAttendanceOffRequests,
   getAttendanceRecords,
+  getAttendanceRevisionRequests,
   getAttendanceSettings,
   getAttendanceStaffDirectory,
   pontianakDate,
   requestAttendanceOff,
+  requestAttendanceRevision,
+  reviewAttendanceRevisionRequest,
   reviewAttendanceOffRequest,
   saveAttendanceSettings,
   updateAttendanceStaffRequirement,
@@ -45,6 +49,7 @@ import {
   type AttendanceAutoOffDate,
   type AttendanceOffRequest,
   type AttendanceRecord,
+  type AttendanceRevisionRequest,
   type AttendanceSettings,
   type AttendanceStaff,
   type AttendanceStatus,
@@ -177,6 +182,7 @@ export default function Absensi() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [absences, setAbsences] = useState<AttendanceAbsence[]>([]);
   const [offRequests, setOffRequests] = useState<AttendanceOffRequest[]>([]);
+  const [revisionRequests, setRevisionRequests] = useState<AttendanceRevisionRequest[]>([]);
   const [autoOffDates, setAutoOffDates] = useState<AttendanceAutoOffDate[]>([]);
   const [expectedStaff, setExpectedStaff] = useState<AttendanceStaff[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<AttendanceStaff[]>([]);
@@ -189,6 +195,9 @@ export default function Absensi() {
   const [lateReason, setLateReason] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyStatus, setHistoryStatus] = useState<AttendanceSearchStatus>('all');
+  const [activeRevisionRecordId, setActiveRevisionRecordId] = useState<string | null>(null);
+  const [revisionDrafts, setRevisionDrafts] = useState<Record<string, { shiftId: string; reason: string }>>({});
+  const [revisionReviewNotes, setRevisionReviewNotes] = useState<Record<string, string>>({});
   const [autoOffDate, setAutoOffDate] = useState(pontianakDate());
   const [autoOffLabel, setAutoOffLabel] = useState('Libur toko');
   const [loading, setLoading] = useState(true);
@@ -200,6 +209,8 @@ export default function Absensi() {
   const [submitting, setSubmitting] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [reviewingOffId, setReviewingOffId] = useState<string | null>(null);
+  const [requestingRevisionId, setRequestingRevisionId] = useState<string | null>(null);
+  const [reviewingRevisionId, setReviewingRevisionId] = useState<string | null>(null);
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [mirrorCamera, setMirrorCamera] = useState(true);
@@ -254,6 +265,15 @@ export default function Absensi() {
     () => offRequests.filter((request) => request.status === 'pending'),
     [offRequests],
   );
+
+  const pendingRevisionRequests = useMemo(
+    () => revisionRequests.filter((request) => request.status === 'pending'),
+    [revisionRequests],
+  );
+
+  const pendingRevisionByRecordId = useMemo(() => new Map(
+    pendingRevisionRequests.map((request) => [request.attendance_record_id, request]),
+  ), [pendingRevisionRequests]);
 
   const attendanceItems = useMemo<AttendanceListItem[]>(() => {
     return [
@@ -383,12 +403,19 @@ export default function Absensi() {
         startDate,
         endDate,
       });
+      const loadedRevisionRequests = await getAttendanceRevisionRequests({
+        currentUserId: user.id,
+        canManage,
+        startDate,
+        endDate,
+      });
       const loadedAutoOffDates = await getAttendanceAutoOffDates({
         startDate,
         endDate,
       });
       setRecords(loadedRecords);
       setOffRequests(loadedOffRequests);
+      setRevisionRequests(loadedRevisionRequests);
       setAutoOffDates(loadedAutoOffDates);
       setAbsences(await getAttendanceAbsences({
         currentUserId: user.id,
@@ -613,6 +640,80 @@ export default function Absensi() {
       setError(err instanceof Error ? err.message : 'Request libur tidak dapat diproses.');
     } finally {
       setReviewingOffId(null);
+    }
+  }
+
+  function updateRevisionDraft(recordId: string, patch: Partial<{ shiftId: string; reason: string }>) {
+    setRevisionDrafts((current) => ({
+      ...current,
+      [recordId]: {
+        shiftId: current[recordId]?.shiftId ?? '',
+        reason: current[recordId]?.reason ?? '',
+        ...patch,
+      },
+    }));
+  }
+
+  async function submitRevision(record: AttendanceRecord) {
+    if (!settings) return;
+    const draftState = revisionDrafts[record.id] ?? { shiftId: record.shift_id, reason: '' };
+    const requestedShift = settings.shifts.find((shift) => shift.id === draftState.shiftId);
+    if (!requestedShift) {
+      setError('Pilih shift revisi dulu.');
+      return;
+    }
+    if (requestedShift.id === record.shift_id && requestedShift.start_time === record.scheduled_start_time) {
+      setError('Shift revisi masih sama dengan data absen saat ini.');
+      return;
+    }
+
+    setRequestingRevisionId(record.id);
+    setError('');
+    try {
+      await requestAttendanceRevision({
+        attendanceRecordId: record.id,
+        staffId: record.staff_id,
+        currentShiftId: record.shift_id,
+        currentShiftName: record.shift_name,
+        currentStartTime: record.scheduled_start_time,
+        requestedShift,
+        reason: draftState.reason,
+      });
+      setActiveRevisionRecordId(null);
+      setRevisionDrafts((current) => {
+        const next = { ...current };
+        delete next[record.id];
+        return next;
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] revision request error:', err);
+      setError(err instanceof Error ? err.message : 'Request revisi shift tidak dapat disimpan.');
+    } finally {
+      setRequestingRevisionId(null);
+    }
+  }
+
+  async function reviewRevision(request: AttendanceRevisionRequest, status: 'approved' | 'rejected') {
+    setReviewingRevisionId(request.id);
+    setError('');
+    try {
+      await reviewAttendanceRevisionRequest({
+        id: request.id,
+        status,
+        note: revisionReviewNotes[request.id],
+      });
+      setRevisionReviewNotes((current) => {
+        const next = { ...current };
+        delete next[request.id];
+        return next;
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] revision review error:', err);
+      setError(err instanceof Error ? err.message : 'Request revisi shift tidak dapat diproses.');
+    } finally {
+      setReviewingRevisionId(null);
     }
   }
 
@@ -1072,6 +1173,79 @@ export default function Absensi() {
             </div>
           )}
 
+          {pendingRevisionRequests.length > 0 && (
+            <div className="mb-4 rounded-2xl border border-violet-100 bg-violet-50/70 p-3">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-violet-600 ring-1 ring-violet-100">
+                  <PenLine size={16} />
+                </span>
+                <div>
+                  <h3 className="text-[14px] font-bold text-slate-950">Approval Revisi Shift</h3>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    {canManage ? 'Cek request koreksi shift sebelum data absen berubah.' : 'Request revisi shift kamu masih menunggu approval.'}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {pendingRevisionRequests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-violet-100 bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-bold text-slate-950">
+                          {request.staff.name}
+                        </p>
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {request.attendance_date ? formatDate(request.attendance_date) : 'Tanggal absen'} - {formatTime(request.check_in_at ?? request.created_at)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-amber-100">
+                        Pending
+                      </span>
+                    </div>
+                    <div className="mt-3 rounded-xl bg-violet-50 px-3 py-2 text-[12px] font-semibold text-violet-800">
+                      {request.current_shift_name} {request.current_start_time} &rarr; {request.requested_shift_name} {request.requested_start_time}
+                    </div>
+                    <p className="mt-2 text-[12px] font-semibold text-slate-600">
+                      Alasan: {request.reason}
+                    </p>
+                    {canManage && (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={revisionReviewNotes[request.id] ?? ''}
+                          onChange={(event) => setRevisionReviewNotes((current) => ({
+                            ...current,
+                            [request.id]: event.target.value,
+                          }))}
+                          maxLength={300}
+                          placeholder="Catatan approval opsional"
+                          className="min-h-[64px] w-full resize-none rounded-xl border border-violet-100 bg-white px-3 py-2 text-[12px] font-semibold outline-none placeholder:text-slate-300 focus:border-violet-300"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => reviewRevision(request, 'rejected')}
+                            disabled={reviewingRevisionId === request.id}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-rose-600 px-3 text-[12px] font-bold text-white disabled:bg-rose-300"
+                          >
+                            <XCircle size={14} /> Tolak
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => reviewRevision(request, 'approved')}
+                            disabled={reviewingRevisionId === request.id}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 text-[12px] font-bold text-white disabled:bg-emerald-300"
+                          >
+                            <ShieldCheck size={14} /> Approve
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex min-h-[260px] items-center justify-center">
               <Loader2 size={26} className="animate-spin text-slate-300" />
@@ -1173,6 +1347,16 @@ export default function Absensi() {
                 }
 
                 const { record } = item;
+                const pendingRevision = pendingRevisionByRecordId.get(record.id);
+                const revisionDraft = revisionDrafts[record.id] ?? {
+                  shiftId: record.shift_id,
+                  reason: '',
+                };
+                const requestedShift = settings?.shifts.find((shift) => shift.id === revisionDraft.shiftId) ?? null;
+                const isSameRevisionShift = requestedShift
+                  ? requestedShift.id === record.shift_id && requestedShift.start_time === record.scheduled_start_time
+                  : true;
+                const canRequestRevision = Boolean(settings && (canManage || record.staff_id === user?.id));
                 return (
                 <div key={item.key} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
                   <AttendancePhoto record={record} />
@@ -1220,6 +1404,70 @@ export default function Absensi() {
                         </span>
                       )}
                     </div>
+
+                    {pendingRevision ? (
+                      <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-violet-800">
+                        Revisi shift pending: {pendingRevision.current_shift_name} {pendingRevision.current_start_time} &rarr; {pendingRevision.requested_shift_name} {pendingRevision.requested_start_time}
+                        <span className="mt-1 block text-violet-700">Alasan: {pendingRevision.reason}</span>
+                      </div>
+                    ) : canRequestRevision ? (
+                      <div className="mt-3">
+                        {activeRevisionRecordId === record.id ? (
+                          <div className="rounded-2xl border border-violet-100 bg-white p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-[12px] font-bold text-slate-950">Ajukan revisi shift</p>
+                              <button
+                                type="button"
+                                onClick={() => setActiveRevisionRecordId(null)}
+                                className="text-[11px] font-bold text-slate-400 hover:text-slate-600"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)]">
+                              <select
+                                value={revisionDraft.shiftId}
+                                onChange={(event) => updateRevisionDraft(record.id, { shiftId: event.target.value })}
+                                className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-violet-300"
+                              >
+                                {(settings?.shifts ?? DEFAULT_ATTENDANCE_SHIFTS).map((shift) => (
+                                  <option key={shift.id} value={shift.id}>
+                                    {shift.name} - {shift.start_time}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                value={revisionDraft.reason}
+                                onChange={(event) => updateRevisionDraft(record.id, { reason: event.target.value })}
+                                maxLength={300}
+                                placeholder="Alasan revisi, contoh: salah pilih shift"
+                                className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none placeholder:text-slate-300 focus:border-violet-300"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => submitRevision(record)}
+                              disabled={requestingRevisionId === record.id || revisionDraft.reason.trim().length < 3 || isSameRevisionShift}
+                              className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                            >
+                              {requestingRevisionId === record.id ? <Loader2 size={14} className="animate-spin" /> : <PenLine size={14} />}
+                              Kirim Revisi Shift
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveRevisionRecordId(record.id);
+                              updateRevisionDraft(record.id, { shiftId: record.shift_id });
+                            }}
+                            className="inline-flex h-9 items-center gap-2 rounded-full border border-violet-100 bg-white px-3 text-[12px] font-bold text-violet-700 hover:bg-violet-50"
+                          >
+                            <PenLine size={14} /> Revisi Shift
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
 
                     {canManage && (
                       <div className="mt-3 flex flex-wrap gap-2">

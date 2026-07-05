@@ -26,7 +26,10 @@ vi.mock('@/lib/supabase', () => ({
 import {
   createAttendanceAutoOffDate,
   getAttendanceAbsences,
+  getAttendanceRevisionRequests,
   requestAttendanceOff,
+  requestAttendanceRevision,
+  reviewAttendanceRevisionRequest,
   reviewAttendanceOffRequest,
   updateAttendanceStaffRequirement,
   type AttendanceSettings,
@@ -252,6 +255,103 @@ describe('attendance service', () => {
       review_note: 'OK libur',
     });
     expect(mocks.eq).toHaveBeenCalledWith('id', 'off-1');
+  });
+
+  it('creates a pending shift revision request with trimmed reason', async () => {
+    await requestAttendanceRevision({
+      attendanceRecordId: 'record-1',
+      staffId: 'staff-1',
+      currentShiftId: 'pagi',
+      currentShiftName: 'Pagi',
+      currentStartTime: '10:00',
+      requestedShift: { id: 'middle', name: 'Middle', start_time: '12:00' },
+      reason: '  Salah pilih shift  ',
+    });
+
+    expect(mocks.from).toHaveBeenCalledWith('attendance_revision_requests');
+    expect(mocks.insert).toHaveBeenCalledWith({
+      attendance_record_id: 'record-1',
+      staff_id: 'staff-1',
+      current_shift_id: 'pagi',
+      current_shift_name: 'Pagi',
+      current_start_time: '10:00',
+      requested_shift_id: 'middle',
+      requested_shift_name: 'Middle',
+      requested_start_time: '12:00',
+      reason: 'Salah pilih shift',
+    });
+  });
+
+  it('loads revision requests for the manager review list', async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      order: vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'revision-1',
+            attendance_record_id: 'record-1',
+            staff_id: 'staff-1',
+            current_shift_id: 'pagi',
+            current_shift_name: 'Pagi',
+            current_start_time: '10:00',
+            requested_shift_id: 'middle',
+            requested_shift_name: 'Middle',
+            requested_start_time: '12:00',
+            reason: 'Salah pilih shift',
+            status: 'pending',
+            requested_by: 'staff-1',
+            reviewed_by: null,
+            reviewed_at: null,
+            review_note: null,
+            created_at: '2026-07-01T00:00:00.000Z',
+            updated_at: '2026-07-01T00:00:00.000Z',
+            attendance_record: {
+              attendance_date: '2026-07-01',
+              check_in_at: '2026-07-01T03:01:00.000Z',
+              late_minutes: 0,
+              penalty_amount: 0,
+            },
+          },
+        ],
+        error: null,
+      }),
+    };
+    mocks.from.mockReturnValueOnce(query);
+
+    const result = await getAttendanceRevisionRequests({
+      currentUserId: 'boss-1',
+      canManage: true,
+      startDate: '2026-07-01',
+      endDate: '2026-07-31',
+    });
+
+    expect(mocks.from).toHaveBeenCalledWith('attendance_revision_requests');
+    expect(query.select).toHaveBeenCalledWith('*, attendance_record:attendance_records!inner(attendance_date, check_in_at, late_minutes, penalty_amount)');
+    expect(result[0]).toMatchObject({
+      id: 'revision-1',
+      attendance_date: '2026-07-01',
+      current_shift_name: 'Pagi',
+      requested_shift_name: 'Middle',
+      staff: { name: 'Bella' },
+    });
+  });
+
+  it('reviews a shift revision through the database approval RPC', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: null });
+
+    await reviewAttendanceRevisionRequest({
+      id: 'revision-1',
+      status: 'approved',
+      note: '  OK revisi  ',
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('review_attendance_revision_request', {
+      p_request_id: 'revision-1',
+      p_status: 'approved',
+      p_review_note: 'OK revisi',
+    });
   });
 
   it('creates an active auto-off date with a trimmed label', async () => {
