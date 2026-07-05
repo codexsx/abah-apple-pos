@@ -8,6 +8,7 @@ import {
   isWithinRadius,
   listAttendanceDates,
   normalizeShifts,
+  filterAttendanceSearchItems,
   shouldCountAbsenceForDate,
   summarizeAttendanceByStaff,
 } from './attendanceCore';
@@ -74,6 +75,7 @@ describe('attendanceCore', () => {
       date: '2026-07-01',
       checkedInKeys: new Set(),
       approvedOffKeys: new Set(['staff-1:2026-07-01']),
+      autoOffDates: new Set(),
     })).toBe(false);
 
     expect(shouldCountAbsenceForDate({
@@ -81,7 +83,58 @@ describe('attendanceCore', () => {
       date: '2026-07-01',
       checkedInKeys: new Set(),
       approvedOffKeys: new Set(),
+      autoOffDates: new Set(),
     })).toBe(true);
+  });
+
+  it('does not count an absence on manager configured auto-off dates', () => {
+    expect(shouldCountAbsenceForDate({
+      staffId: 'staff-1',
+      date: '2026-07-05',
+      checkedInKeys: new Set(),
+      approvedOffKeys: new Set(),
+      autoOffDates: new Set(['2026-07-05']),
+    })).toBe(false);
+  });
+
+  it('filters attendance rows by staff name, status, date, and notes', () => {
+    const rows = filterAttendanceSearchItems([
+      {
+        type: 'record',
+        staffId: 'staff-1',
+        staffName: 'Bella',
+        staffRole: 'KASIR',
+        date: '2026-07-01',
+        status: 'late',
+        searchableText: 'Macet hujan',
+      },
+      {
+        type: 'absence',
+        staffId: 'staff-2',
+        staffName: 'Regga Prayuda',
+        staffRole: 'KASIR',
+        date: '2026-07-02',
+        status: 'absence',
+        searchableText: '',
+      },
+      {
+        type: 'off',
+        staffId: 'staff-3',
+        staffName: 'Rendi',
+        staffRole: 'TEKNISI',
+        date: '2026-07-03',
+        status: 'off',
+        searchableText: 'Libur toko',
+      },
+    ], {
+      query: 'bella macet',
+      status: 'late',
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ staffId: 'staff-1', status: 'late' });
+
+    expect(filterAttendanceSearchItems(rows, { query: '2026-07-01', status: 'all' })).toHaveLength(1);
   });
 
   it('summarizes attendance deductions per staff including approved off days', () => {

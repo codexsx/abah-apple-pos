@@ -13,8 +13,10 @@ import {
   Printer,
   RefreshCw,
   Save,
+  Search,
   Settings2,
   ShieldCheck,
+  Trash2,
   XCircle,
 } from 'lucide-react';
 
@@ -23,18 +25,24 @@ import { avatarImageStyle } from '@/services/avatarCrop';
 import { effectivePermission } from '@/services/permissionsCore';
 import {
   captureVideoFrameToWebp,
+  createAttendanceAutoOffDate,
   createAttendanceRecord,
+  deleteAttendanceAutoOffDate,
   getAttendanceAbsences,
+  getAttendanceAutoOffDates,
   getAttendanceExpectedStaff,
   getAttendanceOffRequests,
   getAttendanceRecords,
   getAttendanceSettings,
+  getAttendanceStaffDirectory,
   pontianakDate,
   requestAttendanceOff,
   reviewAttendanceOffRequest,
   saveAttendanceSettings,
+  updateAttendanceStaffRequirement,
   verifyAttendanceRecord,
   type AttendanceAbsence,
+  type AttendanceAutoOffDate,
   type AttendanceOffRequest,
   type AttendanceRecord,
   type AttendanceSettings,
@@ -49,10 +57,13 @@ import {
 } from '@/services/attendanceReport';
 import {
   DEFAULT_ATTENDANCE_SHIFTS,
+  calculateLateMinutes,
   calculateDistanceMeters,
+  filterAttendanceSearchItems,
   isWithinRadius,
   summarizeAttendanceByStaff,
   type AttendanceLocation,
+  type AttendanceSearchStatus,
   type AttendanceShift,
 } from '@/services/attendanceCore';
 
@@ -166,21 +177,30 @@ export default function Absensi() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [absences, setAbsences] = useState<AttendanceAbsence[]>([]);
   const [offRequests, setOffRequests] = useState<AttendanceOffRequest[]>([]);
+  const [autoOffDates, setAutoOffDates] = useState<AttendanceAutoOffDate[]>([]);
   const [expectedStaff, setExpectedStaff] = useState<AttendanceStaff[]>([]);
+  const [staffDirectory, setStaffDirectory] = useState<AttendanceStaff[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState(DEFAULT_ATTENDANCE_SHIFTS[0].id);
   const [position, setPosition] = useState<(AttendanceLocation & { accuracy?: number | null; distance: number; ok: boolean }) | null>(null);
   const [startDate, setStartDate] = useState(range.startDate);
   const [endDate, setEndDate] = useState(range.endDate);
   const [offDate, setOffDate] = useState(pontianakDate());
   const [offReason, setOffReason] = useState('');
+  const [lateReason, setLateReason] = useState('');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyStatus, setHistoryStatus] = useState<AttendanceSearchStatus>('all');
+  const [autoOffDate, setAutoOffDate] = useState(pontianakDate());
+  const [autoOffLabel, setAutoOffLabel] = useState('Libur toko');
   const [loading, setLoading] = useState(true);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [requestingOff, setRequestingOff] = useState(false);
+  const [savingAutoOff, setSavingAutoOff] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [reviewingOffId, setReviewingOffId] = useState<string | null>(null);
+  const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [mirrorCamera, setMirrorCamera] = useState(true);
   const [error, setError] = useState('');
@@ -188,6 +208,16 @@ export default function Absensi() {
   const selectedShift = useMemo(() => (
     settings?.shifts.find((shift) => shift.id === selectedShiftId) ?? settings?.shifts[0]
   ), [settings?.shifts, selectedShiftId]);
+
+  const estimatedLateMinutes = useMemo(() => {
+    if (!settings || !selectedShift) return 0;
+    return calculateLateMinutes({
+      attendanceDate: pontianakDate(),
+      startTime: selectedShift.start_time,
+      checkInAt: new Date().toISOString(),
+      toleranceMinutes: settings.tolerance_minutes,
+    });
+  }, [selectedShift, settings]);
 
   const todayRecord = useMemo(() => {
     const today = pontianakDate();
@@ -257,6 +287,65 @@ export default function Absensi() {
     });
   }, [absences, offRequests, records]);
 
+  const filteredAttendanceItems = useMemo(() => (
+    attendanceItems
+      .map((item) => {
+        if (item.type === 'record') {
+          const { record } = item;
+          return {
+            item,
+            search: {
+              type: 'record' as const,
+              staffId: record.staff_id,
+              staffName: record.staff.name,
+              staffRole: record.staff.role,
+              date: record.attendance_date,
+              status: record.late_minutes > 0 ? 'late' as const : 'present' as const,
+              searchableText: [
+                record.shift_name,
+                record.scheduled_start_time,
+                record.late_reason ?? '',
+                record.late_minutes > 0 ? 'telat terlambat' : 'hadir masuk',
+              ].join(' '),
+            },
+          };
+        }
+        if (item.type === 'absence') {
+          const { absence } = item;
+          return {
+            item,
+            search: {
+              type: 'absence' as const,
+              staffId: absence.staff_id,
+              staffName: absence.staff.name,
+              staffRole: absence.staff.role,
+              date: absence.attendance_date,
+              status: 'absence' as const,
+              searchableText: 'tidak absen alfa tanpa check in',
+            },
+          };
+        }
+        const { offRequest } = item;
+        return {
+          item,
+          search: {
+            type: 'off' as const,
+            staffId: offRequest.staff_id,
+            staffName: offRequest.staff.name,
+            staffRole: offRequest.staff.role,
+            date: offRequest.attendance_date,
+            status: 'off' as const,
+            searchableText: `libur off ${offRequest.reason}`,
+          },
+        };
+      })
+      .filter(({ search }) => filterAttendanceSearchItems([search], {
+        query: historyQuery,
+        status: historyStatus,
+      }).length > 0)
+      .map(({ item }) => item)
+  ), [attendanceItems, historyQuery, historyStatus]);
+
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -281,6 +370,7 @@ export default function Absensi() {
         canManage,
       });
       setExpectedStaff(loadedStaff);
+      setStaffDirectory(canManage ? await getAttendanceStaffDirectory() : loadedStaff);
       const loadedRecords = await getAttendanceRecords({
         currentUserId: user.id,
         canManage,
@@ -293,8 +383,13 @@ export default function Absensi() {
         startDate,
         endDate,
       });
+      const loadedAutoOffDates = await getAttendanceAutoOffDates({
+        startDate,
+        endDate,
+      });
       setRecords(loadedRecords);
       setOffRequests(loadedOffRequests);
+      setAutoOffDates(loadedAutoOffDates);
       setAbsences(await getAttendanceAbsences({
         currentUserId: user.id,
         canManage,
@@ -303,6 +398,7 @@ export default function Absensi() {
         settings: loadedSettings,
         records: loadedRecords,
         offRequests: loadedOffRequests,
+        autoOffDates: loadedAutoOffDates,
       }));
     } catch (err) {
       console.error('[Absensi] load error:', err);
@@ -401,7 +497,9 @@ export default function Absensi() {
         shift: selectedShift,
         location: position,
         photoBlob,
+        lateReason,
       });
+      setLateReason('');
       stopCamera();
       await loadData();
     } catch (err) {
@@ -425,6 +523,57 @@ export default function Absensi() {
       setError(err instanceof Error ? err.message : 'Setting absensi tidak dapat disimpan.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitAutoOffDate() {
+    if (!user?.id) return;
+    setSavingAutoOff(true);
+    setError('');
+    try {
+      await createAttendanceAutoOffDate({
+        attendanceDate: autoOffDate,
+        label: autoOffLabel,
+        createdBy: user.id,
+      });
+      setAutoOffLabel('Libur toko');
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] auto off error:', err);
+      setError(err instanceof Error ? err.message : 'Tanggal auto-off tidak dapat disimpan.');
+    } finally {
+      setSavingAutoOff(false);
+    }
+  }
+
+  async function removeAutoOffDate(attendanceDate: string) {
+    setSavingAutoOff(true);
+    setError('');
+    try {
+      await deleteAttendanceAutoOffDate(attendanceDate);
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] auto off delete error:', err);
+      setError(err instanceof Error ? err.message : 'Tanggal auto-off tidak dapat dihapus.');
+    } finally {
+      setSavingAutoOff(false);
+    }
+  }
+
+  async function toggleAttendanceRequirement(staff: AttendanceStaff) {
+    setTogglingStaffId(staff.id);
+    setError('');
+    try {
+      await updateAttendanceStaffRequirement({
+        staffId: staff.id,
+        required: !staff.attendance_required,
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] staff attendance toggle error:', err);
+      setError(err instanceof Error ? err.message : 'Status wajib absen staff tidak dapat diubah.');
+    } finally {
+      setTogglingStaffId(null);
     }
   }
 
@@ -487,8 +636,8 @@ export default function Absensi() {
   }
 
   function exportCsvReport() {
-    if (!canManage || attendanceItems.length === 0) return;
-    const csv = buildAttendanceCsv(attendanceItems);
+    if (!canManage || filteredAttendanceItems.length === 0) return;
+    const csv = buildAttendanceCsv(filteredAttendanceItems);
     const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -501,13 +650,13 @@ export default function Absensi() {
   }
 
   function printPhotoReport() {
-    if (!canManage || attendanceItems.length === 0) return;
+    if (!canManage || filteredAttendanceItems.length === 0) return;
     const html = buildAttendancePhotoReportHtml({
       title: `Report Absensi ${settings?.store_name ?? 'Toko'}`,
       startDate,
       endDate,
       generatedAt: new Date(),
-      items: attendanceItems,
+      items: filteredAttendanceItems,
     });
 
     const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
@@ -536,7 +685,7 @@ export default function Absensi() {
               Absen toko
             </h1>
             <p className="mt-1 text-[13px] font-medium text-slate-500">
-              {settings?.store_name ?? 'Abah Apple Pontianak'} · {pontianakDate()}
+              {settings?.store_name ?? 'Abah Apple Pontianak'} - {pontianakDate()}
             </p>
           </div>
           <button
@@ -599,6 +748,16 @@ export default function Absensi() {
                   <div className="min-w-0">
                     <p className="truncate text-[14px] font-bold text-slate-950">{item.staff_name}</p>
                     <p className="text-[11px] font-semibold text-slate-500">{item.role}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryQuery(item.staff_name);
+                        setHistoryStatus('all');
+                      }}
+                      className="mt-1 text-[11px] font-bold text-blue-600 hover:text-blue-700"
+                    >
+                      Lihat detail
+                    </button>
                   </div>
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">Hadir</p>
@@ -745,10 +904,26 @@ export default function Absensi() {
               'mb-4 rounded-2xl border px-4 py-3 text-[13px] font-semibold ' +
               (position.ok ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-rose-100 bg-rose-50 text-rose-700')
             }>
-              {position.ok ? 'Lokasi valid' : 'Di luar radius'} · {position.distance}m
-              {position.accuracy ? ` · akurasi ${Math.round(position.accuracy)}m` : ''}
+              {position.ok ? 'Lokasi valid' : 'Di luar radius'} - {position.distance}m
+              {position.accuracy ? ` - akurasi ${Math.round(position.accuracy)}m` : ''}
             </div>
           )}
+
+          <div className="mb-4 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Keterangan Telat</span>
+              <span className={estimatedLateMinutes > 0 ? 'text-[11px] font-bold text-rose-600' : 'text-[11px] font-bold text-emerald-600'}>
+                Estimasi {estimatedLateMinutes} menit
+              </span>
+            </div>
+            <textarea
+              value={lateReason}
+              onChange={(event) => setLateReason(event.target.value)}
+              maxLength={300}
+              placeholder={estimatedLateMinutes > 0 ? 'Contoh: macet, hujan, antar keluarga...' : 'Opsional jika ada catatan'}
+              className="min-h-[72px] w-full resize-none rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold outline-none placeholder:text-slate-300 focus:border-blue-300"
+            />
+          </div>
 
           <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-950">
             <video
@@ -780,6 +955,29 @@ export default function Absensi() {
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:items-end">
+              <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_150px]">
+                <label className="relative block">
+                  <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={historyQuery}
+                    onChange={(event) => setHistoryQuery(event.target.value)}
+                    placeholder="Cari staff / tanggal / alasan..."
+                    className="h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-[12px] font-semibold outline-none placeholder:text-slate-300 focus:border-blue-300"
+                  />
+                </label>
+                <select
+                  value={historyStatus}
+                  onChange={(event) => setHistoryStatus(event.target.value as AttendanceSearchStatus)}
+                  className="h-10 rounded-xl border border-slate-200 px-3 text-[12px] font-semibold outline-none focus:border-blue-300"
+                >
+                  <option value="all">Semua</option>
+                  <option value="late">Telat</option>
+                  <option value="absence">Tidak absen</option>
+                  <option value="off">Off</option>
+                  <option value="present">Hadir</option>
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
                   type="date"
@@ -799,7 +997,7 @@ export default function Absensi() {
                   <button
                     type="button"
                     onClick={exportCsvReport}
-                    disabled={attendanceItems.length === 0}
+                    disabled={filteredAttendanceItems.length === 0}
                     className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <Download size={14} />
@@ -808,7 +1006,7 @@ export default function Absensi() {
                   <button
                     type="button"
                     onClick={printPhotoReport}
-                    disabled={attendanceItems.length === 0}
+                    disabled={filteredAttendanceItems.length === 0}
                     className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-slate-950 px-3 text-[12px] font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
                     <Printer size={14} />
@@ -841,7 +1039,7 @@ export default function Absensi() {
                           {request.staff.name}
                         </p>
                         <p className="text-[11px] font-semibold text-slate-500">
-                          {formatDate(request.attendance_date)} · {request.reason}
+                          {formatDate(request.attendance_date)} - {request.reason}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700 ring-1 ring-amber-100">
@@ -878,13 +1076,13 @@ export default function Absensi() {
             <div className="flex min-h-[260px] items-center justify-center">
               <Loader2 size={26} className="animate-spin text-slate-300" />
             </div>
-          ) : attendanceItems.length === 0 ? (
+          ) : filteredAttendanceItems.length === 0 ? (
             <div className="flex min-h-[260px] items-center justify-center rounded-2xl bg-slate-50 text-[13px] font-semibold text-slate-400">
-              Belum ada absensi
+              Tidak ada data sesuai filter
             </div>
           ) : (
             <div className="space-y-3">
-              {attendanceItems.map((item) => {
+              {filteredAttendanceItems.map((item) => {
                 if (item.type === 'off') {
                   const { offRequest } = item;
                   return (
@@ -1005,17 +1203,22 @@ export default function Absensi() {
 
                     <div className="mt-3 grid gap-2 text-[12px] font-semibold text-slate-600 sm:grid-cols-2">
                       <span className="inline-flex items-center gap-1.5">
-                        <Clock3 size={13} /> {formatDate(record.attendance_date)} · {formatTime(record.check_in_at)}
+                        <Clock3 size={13} /> {formatDate(record.attendance_date)} - {formatTime(record.check_in_at)}
                       </span>
                       <span className="inline-flex items-center gap-1.5">
-                        <CalendarCheck size={13} /> {record.shift_name} · {record.scheduled_start_time}
+                        <CalendarCheck size={13} /> {record.shift_name} - {record.scheduled_start_time}
                       </span>
                       <span className={record.within_radius ? 'text-emerald-700' : 'text-rose-700'}>
                         GPS {record.distance_meters}m
                       </span>
                       <span className={record.late_minutes > 0 ? 'text-rose-700' : 'text-emerald-700'}>
-                        Telat {record.late_minutes} menit · {formatRupiah(record.penalty_amount)}
+                        Telat {record.late_minutes} menit - {formatRupiah(record.penalty_amount)}
                       </span>
+                      {record.late_reason && (
+                        <span className="text-slate-700 sm:col-span-2">
+                          Keterangan: {record.late_reason}
+                        </span>
+                      )}
                     </div>
 
                     {canManage && (
@@ -1142,6 +1345,110 @@ export default function Absensi() {
                 className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-[13px] font-semibold outline-none focus:border-blue-300"
               />
             </label>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4">
+              <div className="mb-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-sky-600">Auto-Off</p>
+                <h3 className="text-[15px] font-bold text-slate-950">Tanggal libur otomatis</h3>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[145px_minmax(0,1fr)]">
+                <input
+                  type="date"
+                  value={autoOffDate}
+                  onChange={(event) => setAutoOffDate(event.target.value)}
+                  className="h-10 rounded-xl border border-sky-100 bg-white px-3 text-[12px] font-semibold outline-none focus:border-sky-300"
+                />
+                <input
+                  value={autoOffLabel}
+                  onChange={(event) => setAutoOffLabel(event.target.value)}
+                  placeholder="Label libur"
+                  className="h-10 rounded-xl border border-sky-100 bg-white px-3 text-[12px] font-semibold outline-none placeholder:text-slate-300 focus:border-sky-300"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={submitAutoOffDate}
+                disabled={savingAutoOff || !autoOffDate}
+                className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 text-[12px] font-bold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {savingAutoOff ? <Loader2 size={15} className="animate-spin" /> : <CalendarOff size={15} />}
+                Simpan tanggal
+              </button>
+
+              <div className="mt-3 space-y-2">
+                {autoOffDates.length === 0 ? (
+                  <p className="rounded-xl bg-white/70 px-3 py-2 text-[12px] font-semibold text-slate-400">
+                    Belum ada tanggal auto-off di periode ini.
+                  </p>
+                ) : autoOffDates.map((date) => (
+                  <div key={date.attendance_date} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-sky-100">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px] font-bold text-slate-950">{date.label}</p>
+                      <p className="text-[11px] font-semibold text-slate-500">{formatDate(date.attendance_date)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAutoOffDate(date.attendance_date)}
+                      disabled={savingAutoOff}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                      aria-label={`Hapus auto-off ${date.attendance_date}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="mb-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Staff Absensi</p>
+                <h3 className="text-[15px] font-bold text-slate-950">Wajib absen</h3>
+              </div>
+              <div className="space-y-2">
+                {staffDirectory.length === 0 ? (
+                  <p className="rounded-xl bg-white px-3 py-2 text-[12px] font-semibold text-slate-400">
+                    Belum ada staff.
+                  </p>
+                ) : staffDirectory.map((staff) => (
+                  <div key={staff.id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {staff.avatar_url ? (
+                        <img
+                          src={staff.avatar_url}
+                          alt={staff.name}
+                          className="h-9 w-9 rounded-full object-cover"
+                          style={avatarImageStyle(staff)}
+                        />
+                      ) : (
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
+                          {staff.initials}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-bold text-slate-950">{staff.name}</p>
+                        <p className="text-[11px] font-semibold text-slate-500">{staff.role}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleAttendanceRequirement(staff)}
+                      disabled={togglingStaffId === staff.id}
+                      className={
+                        'inline-flex h-9 shrink-0 items-center justify-center rounded-full px-3 text-[11px] font-bold transition-colors disabled:opacity-60 ' +
+                        (staff.attendance_required
+                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
+                          : 'bg-slate-100 text-slate-500 ring-1 ring-slate-200')
+                      }
+                    >
+                      {togglingStaffId === staff.id ? '...' : staff.attendance_required ? 'Aktif' : 'Nonaktif'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="mt-4">

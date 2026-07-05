@@ -44,6 +44,7 @@ export interface AttendanceStaff extends AvatarCrop {
   role: string;
   initials: string;
   avatar_url: string | null;
+  attendance_required: boolean;
 }
 
 export interface AttendanceRecord {
@@ -67,6 +68,7 @@ export interface AttendanceRecord {
   within_radius: boolean;
   late_minutes: number;
   penalty_amount: number;
+  late_reason: string | null;
   status: AttendanceStatus;
   verification_note: string | null;
   verified_by: string | null;
@@ -96,6 +98,14 @@ export interface AttendanceOffRequest {
   created_at: string;
   updated_at: string;
   staff: AttendanceStaff;
+}
+
+export interface AttendanceAutoOffDate {
+  attendance_date: string;
+  label: string;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
 }
 
 interface RawSettingsRow {
@@ -132,6 +142,7 @@ interface RawAttendanceRow {
   within_radius: boolean;
   late_minutes: number;
   penalty_amount: number;
+  late_reason?: string | null;
   status: AttendanceStatus;
   verification_note: string | null;
   verified_by: string | null;
@@ -162,6 +173,15 @@ interface RawStaffRow {
   avatar_crop_x?: number | string | null;
   avatar_crop_y?: number | string | null;
   avatar_zoom?: number | string | null;
+  attendance_required?: boolean | null;
+}
+
+interface RawAttendanceAutoOffRow {
+  attendance_date: string;
+  label: string | null;
+  active: boolean | null;
+  created_by: string | null;
+  created_at: string | null;
 }
 
 function toNumber(value: unknown, fallback: number): number {
@@ -193,6 +213,7 @@ function normalizeStaff(row: RawStaffRow | undefined, fallbackId: string): Atten
     role: row?.role || 'STAFF',
     initials: row?.initials || name.slice(0, 2).toUpperCase(),
     avatar_url: row?.avatar_url ?? null,
+    attendance_required: row?.attendance_required ?? true,
     ...normalizeAvatarCrop(row ?? null),
   };
 }
@@ -207,6 +228,7 @@ function normalizeRecord(row: RawAttendanceRow, staff: AttendanceStaff, photoUrl
     latitude: toNumber(row.latitude, 0),
     longitude: toNumber(row.longitude, 0),
     accuracy_meters: row.accuracy_meters == null ? null : toNumber(row.accuracy_meters, 0),
+    late_reason: row.late_reason?.trim() || null,
     staff,
   };
 }
@@ -217,6 +239,16 @@ function normalizeOffRequest(row: RawAttendanceOffRow, staff: AttendanceStaff): 
     attendance_date: String(row.attendance_date),
     reason: row.reason || '',
     staff,
+  };
+}
+
+function normalizeAutoOffDate(row: RawAttendanceAutoOffRow): AttendanceAutoOffDate {
+  return {
+    attendance_date: String(row.attendance_date),
+    label: row.label?.trim() || 'Libur toko',
+    active: row.active ?? true,
+    created_by: row.created_by ?? null,
+    created_at: row.created_at ?? new Date().toISOString(),
   };
 }
 
@@ -312,6 +344,7 @@ export async function createAttendanceRecord(input: {
   shift: AttendanceShift;
   location: AttendanceLocation & { accuracy?: number | null };
   photoBlob: Blob;
+  lateReason?: string;
 }): Promise<AttendanceRecord> {
   const attendanceDate = pontianakDate();
   const store = {
@@ -357,6 +390,7 @@ export async function createAttendanceRecord(input: {
       accuracy_meters: input.location.accuracy ?? null,
       distance_meters: distanceMeters,
       within_radius: withinRadius,
+      late_reason: input.lateReason?.trim() || null,
     })
     .select('*')
     .single();
@@ -387,6 +421,12 @@ export async function getAttendanceExpectedStaff(input: {
   const rows = ((data ?? []) as RawStaffRow[])
     .filter((row) => input.canManage || row.id === input.currentUserId);
   return rows.map((row) => normalizeStaff(row, row.id));
+}
+
+export async function getAttendanceStaffDirectory(): Promise<AttendanceStaff[]> {
+  const { data, error } = await supabase.rpc('get_attendance_staff_directory');
+  if (error) throw error;
+  return ((data ?? []) as RawStaffRow[]).map((row) => normalizeStaff(row, row.id));
 }
 
 export async function getAttendanceRecords(input: {
@@ -439,6 +479,7 @@ export async function getAttendanceAbsences(input: {
   settings: AttendanceSettings;
   records: AttendanceRecord[];
   offRequests?: AttendanceOffRequest[];
+  autoOffDates?: AttendanceAutoOffDate[];
   latestClosedDate?: string;
 }): Promise<AttendanceAbsence[]> {
   const dates = listAttendanceDates(
@@ -462,6 +503,11 @@ export async function getAttendanceAbsences(input: {
       .filter((request) => request.status === 'approved')
       .map((request) => attendanceDateKey(request.staff_id, request.attendance_date)),
   );
+  const autoOffDates = new Set(
+    (input.autoOffDates ?? [])
+      .filter((date) => date.active)
+      .map((date) => date.attendance_date),
+  );
 
   return staff.flatMap((member) => dates
     .filter((date) => shouldCountAbsenceForDate({
@@ -469,6 +515,7 @@ export async function getAttendanceAbsences(input: {
       date,
       checkedInKeys: checkedIn,
       approvedOffKeys: approvedOff,
+      autoOffDates,
     }))
     .map((date) => ({
       id: `absence-${member.id}-${date}`,
@@ -477,6 +524,58 @@ export async function getAttendanceAbsences(input: {
       penalty_amount: calculateAbsencePenalty(false, input.settings.absence_penalty_amount),
       staff: member,
     })));
+}
+
+export async function getAttendanceAutoOffDates(input: {
+  startDate: string;
+  endDate: string;
+}): Promise<AttendanceAutoOffDate[]> {
+  const { data, error } = await supabase
+    .from('attendance_auto_off_dates')
+    .select('*')
+    .gte('attendance_date', input.startDate)
+    .lte('attendance_date', input.endDate)
+    .order('attendance_date', { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as RawAttendanceAutoOffRow[]).map(normalizeAutoOffDate);
+}
+
+export async function createAttendanceAutoOffDate(input: {
+  attendanceDate: string;
+  label: string;
+  createdBy: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_auto_off_dates')
+    .upsert({
+      attendance_date: input.attendanceDate,
+      label: input.label.trim() || 'Libur toko',
+      active: true,
+      created_by: input.createdBy,
+    }, { onConflict: 'attendance_date' });
+
+  if (error) throw error;
+}
+
+export async function deleteAttendanceAutoOffDate(attendanceDate: string): Promise<void> {
+  const { error } = await supabase
+    .from('attendance_auto_off_dates')
+    .delete()
+    .eq('attendance_date', attendanceDate);
+
+  if (error) throw error;
+}
+
+export async function updateAttendanceStaffRequirement(input: {
+  staffId: string;
+  required: boolean;
+}): Promise<void> {
+  const { error } = await supabase.rpc('set_staff_attendance_required', {
+    p_staff_id: input.staffId,
+    p_required: input.required,
+  });
+  if (error) throw error;
 }
 
 export async function getAttendanceOffRequests(input: {

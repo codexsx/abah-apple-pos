@@ -10,6 +10,17 @@ export interface AttendanceLocation {
 }
 
 export type AttendanceOffStatus = 'pending' | 'approved' | 'rejected';
+export type AttendanceSearchStatus = 'all' | 'present' | 'late' | 'absence' | 'off';
+
+export interface AttendanceSearchItem {
+  type: 'record' | 'absence' | 'off';
+  staffId: string;
+  staffName: string;
+  staffRole: string;
+  date: string;
+  status: Exclude<AttendanceSearchStatus, 'all'>;
+  searchableText?: string | null;
+}
 
 export interface AttendanceSummaryStaff {
   id: string;
@@ -173,9 +184,38 @@ export function shouldCountAbsenceForDate(input: {
   date: string;
   checkedInKeys: ReadonlySet<string>;
   approvedOffKeys: ReadonlySet<string>;
+  autoOffDates?: ReadonlySet<string>;
 }): boolean {
   const key = attendanceDateKey(input.staffId, input.date);
-  return !input.checkedInKeys.has(key) && !input.approvedOffKeys.has(key);
+  return !input.checkedInKeys.has(key)
+    && !input.approvedOffKeys.has(key)
+    && !input.autoOffDates?.has(input.date);
+}
+
+function normalizeSearch(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+export function filterAttendanceSearchItems(
+  items: AttendanceSearchItem[],
+  filters: { query: string; status: AttendanceSearchStatus },
+): AttendanceSearchItem[] {
+  const query = normalizeSearch(filters.query);
+  const terms = query ? query.split(' ') : [];
+
+  return items.filter((item) => {
+    if (filters.status !== 'all' && item.status !== filters.status) return false;
+    if (terms.length === 0) return true;
+
+    const haystack = normalizeSearch([
+      item.staffName,
+      item.staffRole,
+      item.date,
+      item.status,
+      item.searchableText ?? '',
+    ].join(' '));
+    return terms.every((term) => haystack.includes(term));
+  });
 }
 
 export function summarizeAttendanceByStaff(input: {

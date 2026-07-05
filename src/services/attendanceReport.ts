@@ -15,6 +15,7 @@ const CSV_HEADERS = [
   'Jadwal',
   'Telat Menit',
   'Potongan',
+  'Keterangan',
   'GPS Meter',
   'Akurasi Meter',
   'Foto URL',
@@ -61,6 +62,7 @@ function recordRow(record: AttendanceRecord): Array<string | number | null> {
     record.scheduled_start_time,
     record.late_minutes,
     record.penalty_amount,
+    record.late_reason,
     record.distance_meters,
     record.accuracy_meters,
     record.photo_url,
@@ -81,6 +83,7 @@ function absenceRow(absence: AttendanceAbsence): Array<string | number | null> {
     '',
     '',
     '',
+    '',
   ];
 }
 
@@ -95,6 +98,7 @@ function offRow(offRequest: AttendanceOffRequest): Array<string | number | null>
     '',
     '',
     0,
+    offRequest.reason,
     '',
     '',
     '',
@@ -166,6 +170,7 @@ function photoBlock(item: AttendanceReportItem): string {
         <p>${escapeHtml(record.shift_name)} - Jadwal ${escapeHtml(record.scheduled_start_time)}</p>
         <span class="badge">${escapeHtml(statusLabel(record.status))}</span>
         <strong>${escapeHtml(record.late_minutes)} menit - ${escapeHtml(rupiah(record.penalty_amount))}</strong>
+        ${record.late_reason ? `<p>${escapeHtml(record.late_reason)}</p>` : ''}
         <small>GPS ${escapeHtml(record.distance_meters)}m${record.accuracy_meters == null ? '' : ` - akurasi ${escapeHtml(record.accuracy_meters)}m`}</small>
       </div>
     </article>

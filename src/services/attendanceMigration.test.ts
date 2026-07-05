@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import migrationSql from '../../supabase/migrations/20260702152618_attendance_off_requests.sql?raw';
+import controlsMigrationSql from '../../supabase/migrations/20260705070013_attendance_search_controls.sql?raw';
 
 describe('attendance off request migration', () => {
   it('creates off requests with RLS and manager approval policy', () => {
@@ -9,5 +10,19 @@ describe('attendance off request migration', () => {
     expect(migrationSql).toContain('alter table public.attendance_off_requests enable row level security');
     expect(migrationSql).toContain('Managers review attendance off requests');
     expect(migrationSql).toContain("status in ('pending', 'approved', 'rejected')");
+  });
+});
+
+describe('attendance search controls migration', () => {
+  it('adds staff attendance activation, auto-off dates, and late reason support', () => {
+    expect(controlsMigrationSql).toContain('add column if not exists attendance_required boolean not null default true');
+    expect(controlsMigrationSql).toContain('add column if not exists late_reason text');
+    expect(controlsMigrationSql).toContain('create table if not exists public.attendance_auto_off_dates');
+    expect(controlsMigrationSql).toContain('alter table public.attendance_auto_off_dates enable row level security');
+    expect(controlsMigrationSql).toContain('grant select, insert, update, delete on public.attendance_auto_off_dates to authenticated');
+    expect(controlsMigrationSql).toContain('drop function if exists private.get_attendance_expected_staff()');
+    expect(controlsMigrationSql).toContain('create or replace function public.set_staff_attendance_required');
+    expect(controlsMigrationSql).toContain('coalesce(p.attendance_required, true) = true');
+    expect(controlsMigrationSql).toContain('revoke all on function public.get_attendance_staff_directory() from public, anon, authenticated');
   });
 });

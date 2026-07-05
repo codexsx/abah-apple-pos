@@ -5,10 +5,15 @@ const mocks = vi.hoisted(() => {
   const rpc = vi.fn();
   const insert = vi.fn();
   const update = vi.fn();
+  const upsert = vi.fn();
+  const remove = vi.fn();
   const eq = vi.fn();
+  const gte = vi.fn();
+  const lte = vi.fn();
+  const order = vi.fn();
   const select = vi.fn();
   const single = vi.fn();
-  return { eq, from, insert, rpc, select, single, update };
+  return { eq, from, gte, insert, lte, order, remove, rpc, select, single, update, upsert };
 });
 
 vi.mock('@/lib/supabase', () => ({
@@ -19,10 +24,13 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
+  createAttendanceAutoOffDate,
   getAttendanceAbsences,
   requestAttendanceOff,
   reviewAttendanceOffRequest,
+  updateAttendanceStaffRequirement,
   type AttendanceSettings,
+  type AttendanceAutoOffDate,
   type AttendanceOffRequest,
 } from './attendance';
 import { DEFAULT_ATTENDANCE_SHIFTS } from './attendanceCore';
@@ -45,7 +53,12 @@ beforeEach(() => {
   mocks.from.mockReset();
   mocks.insert.mockReset();
   mocks.update.mockReset();
+  mocks.upsert.mockReset();
+  mocks.remove.mockReset();
   mocks.eq.mockReset();
+  mocks.gte.mockReset();
+  mocks.lte.mockReset();
+  mocks.order.mockReset();
   mocks.select.mockReset();
   mocks.single.mockReset();
   mocks.rpc.mockReset();
@@ -65,9 +78,13 @@ beforeEach(() => {
   mocks.from.mockReturnValue({
     insert: mocks.insert,
     update: mocks.update,
+    upsert: mocks.upsert,
+    delete: mocks.remove,
   });
   mocks.insert.mockReturnValue({ select: mocks.select });
+  mocks.upsert.mockReturnValue({ select: mocks.select });
   mocks.update.mockReturnValue({ eq: mocks.eq });
+  mocks.remove.mockReturnValue({ eq: mocks.eq });
   mocks.eq.mockReturnValue({ select: mocks.select });
   mocks.select.mockReturnValue({ single: mocks.single });
   mocks.single.mockResolvedValue({
@@ -112,6 +129,7 @@ describe('attendance service', () => {
           avatar_crop_x: 50,
           avatar_crop_y: 50,
           avatar_zoom: 1,
+          attendance_required: true,
         },
       },
     ];
@@ -153,6 +171,7 @@ describe('attendance service', () => {
           avatar_crop_x: 50,
           avatar_crop_y: 50,
           avatar_zoom: 1,
+          attendance_required: true,
         },
       },
     ];
@@ -174,6 +193,32 @@ describe('attendance service', () => {
       attendance_date: '2026-07-01',
       penalty_amount: 150_000,
     });
+  });
+
+  it('excludes manager configured auto-off dates from generated absence penalties', async () => {
+    const autoOffDates: AttendanceAutoOffDate[] = [
+      {
+        attendance_date: '2026-07-01',
+        label: 'Libur toko',
+        active: true,
+        created_by: 'boss-1',
+        created_at: '2026-07-01T00:00:00.000Z',
+      },
+    ];
+
+    const absences = await getAttendanceAbsences({
+      currentUserId: 'boss-1',
+      canManage: true,
+      startDate: '2026-07-01',
+      endDate: '2026-07-01',
+      settings,
+      records: [],
+      offRequests: [],
+      autoOffDates,
+      latestClosedDate: '2026-07-01',
+    });
+
+    expect(absences).toEqual([]);
   });
 
   it('creates a pending off request with trimmed reason', async () => {
@@ -207,5 +252,33 @@ describe('attendance service', () => {
       review_note: 'OK libur',
     });
     expect(mocks.eq).toHaveBeenCalledWith('id', 'off-1');
+  });
+
+  it('creates an active auto-off date with a trimmed label', async () => {
+    await createAttendanceAutoOffDate({
+      attendanceDate: '2026-07-17',
+      label: '  Libur toko  ',
+      createdBy: 'boss-1',
+    });
+
+    expect(mocks.from).toHaveBeenCalledWith('attendance_auto_off_dates');
+    expect(mocks.upsert).toHaveBeenCalledWith({
+      attendance_date: '2026-07-17',
+      label: 'Libur toko',
+      active: true,
+      created_by: 'boss-1',
+    }, { onConflict: 'attendance_date' });
+  });
+
+  it('updates whether a staff member is required to use attendance', async () => {
+    await updateAttendanceStaffRequirement({
+      staffId: 'staff-1',
+      required: false,
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('set_staff_attendance_required', {
+      p_staff_id: 'staff-1',
+      p_required: false,
+    });
   });
 });

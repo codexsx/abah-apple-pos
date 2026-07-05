@@ -15,6 +15,7 @@ const staff = {
   avatar_crop_x: 50,
   avatar_crop_y: 50,
   avatar_zoom: 1,
+  attendance_required: true,
 };
 
 const recordItem: AttendanceReportItem = {
@@ -43,6 +44,7 @@ const recordItem: AttendanceReportItem = {
     within_radius: true,
     late_minutes: 5,
     penalty_amount: 50_000,
+    late_reason: 'Macet hujan',
     status: 'approved',
     verification_note: null,
     verified_by: null,
@@ -107,6 +109,7 @@ describe('attendance report helpers', () => {
     expect(csv).toContain('Bella Staff,KASIR,2026-07-01,Tidak Absen');
     expect(csv).toContain('150000');
     expect(csv).toContain('Bella Staff,KASIR,2026-07-02,Libur / Off');
+    expect(csv).toContain('Macet hujan');
   });
 
   it('builds a print-ready photo report that includes signed attendance photos', () => {
@@ -125,6 +128,7 @@ describe('attendance report helpers', () => {
     expect(html).toContain('Tidak Absen');
     expect(html).toContain('Bella Staff');
     expect(html).toContain('Libur / Off');
+    expect(html).toContain('Macet hujan');
   });
 
   it('creates a stable filename for attendance exports', () => {
