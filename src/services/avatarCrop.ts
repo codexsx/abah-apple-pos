@@ -12,7 +12,7 @@ export const DEFAULT_AVATAR_CROP: AvatarCrop = {
   avatar_zoom: 1,
 };
 
-type AvatarCropInput = Partial<Record<keyof AvatarCrop, unknown>>;
+export type AvatarCropInput = Partial<Record<keyof AvatarCrop, unknown>>;
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   if (value == null || value === '') return fallback;

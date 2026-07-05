@@ -13,8 +13,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { CroppedAvatar } from '@/components/CroppedAvatar';
 import { useAuth } from '@/contexts/AuthContext';
-import { avatarImageStyle } from '@/services/avatarCrop';
 import { WEB_CAPTURE_IMAGE_ACCEPT } from '@/services/mediaCore';
 import {
   addStoryComment,
@@ -62,11 +62,11 @@ function StoryAvatar({
       >
         <span className="flex h-full w-full items-center justify-center rounded-full bg-white p-[3px]">
           {author.avatar_url ? (
-            <img
+            <CroppedAvatar
               src={author.avatar_url}
               alt={author.name}
-              className="h-full w-full rounded-full object-cover"
-              style={avatarImageStyle(author)}
+              crop={author}
+              className="h-full w-full rounded-full"
             />
           ) : (
             <span className="flex h-full w-full items-center justify-center rounded-full bg-blue-600 text-[13px] font-bold text-white">
@@ -415,11 +415,11 @@ export default function StoreStories() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     {activeGroup.author.avatar_url ? (
-                      <img
+                      <CroppedAvatar
                         src={activeGroup.author.avatar_url}
                         alt={activeGroup.author.name}
-                        className="h-10 w-10 rounded-full object-cover ring-1 ring-white/30"
-                        style={avatarImageStyle(activeGroup.author)}
+                        crop={activeGroup.author}
+                        className="h-10 w-10 rounded-full ring-1 ring-white/30"
                       />
                     ) : (
                       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-[13px] font-bold text-white ring-1 ring-white/30">
@@ -523,11 +523,11 @@ export default function StoreStories() {
                       return (
                         <div key={comment.id} className="flex gap-3">
                           {comment.author.avatar_url ? (
-                            <img
+                            <CroppedAvatar
                               src={comment.author.avatar_url}
                               alt={comment.author.name}
-                              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20"
-                              style={avatarImageStyle(comment.author)}
+                              crop={comment.author}
+                              className="h-9 w-9 rounded-full ring-1 ring-white/20"
                             />
                           ) : (
                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white ring-1 ring-white/20">

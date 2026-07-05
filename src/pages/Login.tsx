@@ -34,6 +34,7 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react';
+import { CroppedAvatar } from '@/components/CroppedAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCompanyProfile } from '@/services/companySettings';
 import {
@@ -44,7 +45,6 @@ import {
   getLoginAccounts,
   type LoginAccount,
 } from '@/services/loginDirectory';
-import { avatarImageStyle } from '@/services/avatarCrop';
 import { applyDocumentBrand } from '@/services/documentBrand';
 
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -142,6 +142,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 function CompanyLogo({ companyProfile }: { companyProfile: CompanyProfile }) {
   if (companyProfile.logo_url) {
     return (
@@ -166,11 +170,11 @@ function AccountAvatar({ account, size = 'lg' }: { account: LoginAccount; size?:
 
   if (account.avatar_url && !imageFailed) {
     return (
-      <img
+      <CroppedAvatar
         src={account.avatar_url}
         alt={account.name}
-        className={`${dimension} shrink-0 rounded-[16px] object-cover shadow-sm ring-1 ring-white/70 sm:rounded-[18px]`}
-        style={avatarImageStyle(account)}
+        crop={account}
+        className={`${dimension} rounded-[16px] shadow-sm ring-1 ring-white/70 sm:rounded-[18px]`}
         onError={() => setImageFailed(true)}
       />
     );
@@ -392,12 +396,12 @@ export default function Login() {
         setAccounts(nextAccounts);
         setSelectedAccountId(nextAccounts[0]?.id ?? null);
         setDirectoryError('');
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
         setCompanyProfile(DEFAULT_COMPANY_PROFILE);
         setAccounts([]);
         setSelectedAccountId(null);
-        setDirectoryError(err?.message || 'Daftar akun belum bisa dimuat.');
+        setDirectoryError(errorMessage(err, 'Daftar akun belum bisa dimuat.'));
       } finally {
         if (mounted) setIsDirectoryLoading(false);
       }
@@ -474,8 +478,8 @@ export default function Login() {
     try {
       await signIn(loginIdentifier, password);
       navigate('/', { replace: true });
-    } catch (err: any) {
-      setError(err?.message || 'Password salah atau akun belum aktif.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'Password salah atau akun belum aktif.'));
     } finally {
       setIsLoading(false);
     }

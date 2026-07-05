@@ -43,9 +43,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { CroppedAvatar } from '@/components/CroppedAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanyProfile } from '@/contexts/useCompanyProfile';
-import { avatarImageStyle } from '@/services/avatarCrop';
 import { effectivePermission } from '@/services/permissionsCore';
 import { canAccessPath } from '@/services/routePermissions';
 import ProfilePhotoDialog from '@/components/ProfilePhotoDialog';
@@ -349,11 +349,11 @@ export default function Navbar() {
           {/* User Profile Pill */}
           <div className="flex items-center gap-2.5 rounded-full bg-white border border-slate-200 pl-1.5 pr-2 py-1 shadow-sm">
             {profile?.avatar_url ? (
-              <img
+              <CroppedAvatar
                 src={profile.avatar_url}
                 alt={profile.name || 'User'}
-                className="h-8 w-8 rounded-full object-cover"
-                style={avatarImageStyle(profile)}
+                crop={profile}
+                className="h-8 w-8 rounded-full"
               />
             ) : (
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold font-body">

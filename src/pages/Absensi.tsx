@@ -20,8 +20,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { CroppedAvatar } from '@/components/CroppedAvatar';
 import { useAuth } from '@/contexts/AuthContext';
-import { avatarImageStyle } from '@/services/avatarCrop';
 import { effectivePermission } from '@/services/permissionsCore';
 import {
   captureVideoFrameToWebp,
@@ -1094,11 +1094,11 @@ export default function Absensi() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-2">
                             {offRequest.staff.avatar_url ? (
-                              <img
+                              <CroppedAvatar
                                 src={offRequest.staff.avatar_url}
                                 alt={offRequest.staff.name}
-                                className="h-9 w-9 rounded-full object-cover"
-                                style={avatarImageStyle(offRequest.staff)}
+                                crop={offRequest.staff}
+                                className="h-9 w-9 rounded-full"
                               />
                             ) : (
                               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-[12px] font-bold text-white">
@@ -1139,11 +1139,11 @@ export default function Absensi() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex min-w-0 items-center gap-2">
                             {absence.staff.avatar_url ? (
-                              <img
+                              <CroppedAvatar
                                 src={absence.staff.avatar_url}
                                 alt={absence.staff.name}
-                                className="h-9 w-9 rounded-full object-cover"
-                                style={avatarImageStyle(absence.staff)}
+                                crop={absence.staff}
+                                className="h-9 w-9 rounded-full"
                               />
                             ) : (
                               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-600 text-[12px] font-bold text-white">
@@ -1180,11 +1180,11 @@ export default function Absensi() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
                         {record.staff.avatar_url ? (
-                          <img
+                          <CroppedAvatar
                             src={record.staff.avatar_url}
                             alt={record.staff.name}
-                            className="h-9 w-9 rounded-full object-cover"
-                            style={avatarImageStyle(record.staff)}
+                            crop={record.staff}
+                            className="h-9 w-9 rounded-full"
                           />
                         ) : (
                           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
@@ -1416,11 +1416,11 @@ export default function Absensi() {
                   <div key={staff.id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100">
                     <div className="flex min-w-0 items-center gap-2">
                       {staff.avatar_url ? (
-                        <img
+                        <CroppedAvatar
                           src={staff.avatar_url}
                           alt={staff.name}
-                          className="h-9 w-9 rounded-full object-cover"
-                          style={avatarImageStyle(staff)}
+                          crop={staff}
+                          className="h-9 w-9 rounded-full"
                         />
                       ) : (
                         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
