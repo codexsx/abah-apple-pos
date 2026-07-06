@@ -19,6 +19,7 @@ import {
 import AccountPicker from '@/components/AccountPicker';
 import AgentDefectImportDialog from '@/components/AgentDefectImportDialog';
 import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
+import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
 import {
   getAccountPickerData,
   type AccountWithBalance,
@@ -104,15 +105,7 @@ const phoneModels = [
 
 const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
-const conditions = [
-  'Second iBox',
-  'Second Bea Cukai',
-  'Second Inter Unlock',
-  'Second Inter SimLock',
-  'Second Inter Unlock Minus',
-  'Baru iBox',
-  'Baru Inter',
-];
+const conditions = UNIT_CONDITION_OPTIONS;
 
 const colorMap: Record<string, string[]> = {
   'iPhone 11': ['Black', 'White', 'Red', 'Green', 'Yellow', 'Purple'],

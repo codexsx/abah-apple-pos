@@ -77,6 +77,7 @@ import {
   buildServiceCostPayload,
   validateServiceCostDraft,
 } from '@/services/serviceCosts';
+import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
 
 /* ------------------------------------------------------------------ */
 /*  DB -> UI service record mapper                                     */
@@ -187,15 +188,7 @@ const phoneModels = [
   'iPhone SE Gen 3', 'iPhone SE Gen 2',
 ];
 const capacities = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
-const conditions = [
-  'Second iBox',
-  'Second Bea Cukai',
-  'Second Inter',
-  'Second Ex-Inter',
-  'Second Bid',
-  'Baru iBox',
-  'Baru Inter',
-];
+const conditions = UNIT_CONDITION_OPTIONS;
 const colors = ['Deep Purple', 'Space Black', 'Silver', 'Gold', 'Midnight', 'Starlight', 'Blue', 'Green', 'Red', 'Pink', 'Natural Titanium'];
 
 /* ------------------------------------------------------------------ */

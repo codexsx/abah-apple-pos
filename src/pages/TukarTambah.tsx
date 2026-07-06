@@ -43,6 +43,7 @@ import {
   validatePaymentSelection,
 } from '@/services/paymentPosting';
 import { recordTukarTambahWithPostings } from '@/services/postings';
+import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
 
 /* ──────────────────────────────── easing tokens */
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -110,15 +111,7 @@ const TIPE_OPTIONS = [
 
 const KAPASITAS_OPTIONS = ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'];
 
-const KONDISI_OPTIONS = [
-  'Second iBox',
-  'Second Bea Cukai',
-  'Second Inter',
-  'Second Ex-Inter',
-  'Second Bid',
-  'Baru iBox',
-  'Baru Inter',
-];
+const KONDISI_OPTIONS = UNIT_CONDITION_OPTIONS;
 
 const WARNA_MAP: Record<string, string[]> = {
   'iPhone 11': ['Black', 'White', 'Green', 'Yellow', 'Purple', 'Red'],
