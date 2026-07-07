@@ -35,6 +35,7 @@ export interface FinanceTxLike {
   type: string;
   amount: number | null;
   created_at: string;
+  detail?: string | null;
 }
 
 /** Minimal stock-unit shape consumed for inventory valuation + COGS (Req 4.1). */
@@ -80,6 +81,31 @@ export interface FinanceSummary {
 function toAmount(value: number | null | undefined): number {
   if (value == null || Number.isNaN(value)) return 0;
   return value;
+}
+
+function parseTradeInOutgoingPrice(detail: string | null | undefined): number {
+  if (!detail) return 0;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(detail);
+  } catch {
+    return 0;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 0;
+  const root = parsed as Record<string, unknown>;
+  const hpKeluar = root.hpKeluar;
+  if (!hpKeluar || typeof hpKeluar !== 'object' || Array.isArray(hpKeluar)) return 0;
+
+  const row = hpKeluar as Record<string, unknown>;
+  const value = row.price ?? row.sellingPrice ?? row.selling_price ?? row.hargaJual;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^\d.-]/g, '');
+    return Number(normalized) || 0;
+  }
+  return 0;
 }
 
 // ---------- Period filtering ----------
@@ -133,7 +159,15 @@ export function sumByTypes(
 
 /** Revenue = Σ amounts of REVENUE_TYPES transactions (Req 1.1). */
 export function computeRevenue(txs: FinanceTxLike[]): number {
-  return sumByTypes(txs, REVENUE_TYPES);
+  return txs.reduce((sum, tx) => {
+    if (REVENUE_TYPES.includes(tx.type as never)) {
+      return sum + toAmount(tx.amount);
+    }
+    if (tx.type === 'Tukar Tambah') {
+      return sum + (parseTradeInOutgoingPrice(tx.detail) || toAmount(tx.amount));
+    }
+    return sum;
+  }, 0);
 }
 
 /** COGS = Σ amounts of COST_TYPES transactions; purchases proxy (Req 1.2). */

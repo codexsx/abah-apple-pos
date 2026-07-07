@@ -96,7 +96,15 @@ describe('getFinanceSummary', () => {
       tx({ type: 'Pemasukan Lain', amount: 50_000 }),
       tx({ type: 'Pembelian', amount: 600_000 }),
       tx({ type: 'Pengeluaran', amount: 150_000 }),
-      tx({ type: 'Tukar Tambah', amount: 999_999 }), // excluded from all roll-ups
+      tx({
+        type: 'Tukar Tambah',
+        amount: 500_000,
+        detail: JSON.stringify({
+          hpKeluar: { model: 'iPhone 14', capacity: '128GB', price: 4_500_000 },
+          hpMasuk: { tipe: 'iPhone 11', kapasitas: '128GB', appraisal: 4_000_000 },
+          selisih: 500_000,
+        }),
+      }),
     ]);
 
     vi.mocked(getAccounts).mockResolvedValue([
@@ -122,13 +130,13 @@ describe('getFinanceSummary', () => {
 
     const summary = await getFinanceSummary();
 
-    // Revenue = 1_000_000 + 200_000 + 50_000
-    expect(summary.revenue).toBe(1_250_000);
+    // Revenue = Penjualan + Servis + Pemasukan Lain + HP keluar Tukar Tambah
+    expect(summary.revenue).toBe(5_750_000);
     // COGS now comes from sold units' cost_price, not Pembelian transactions.
     expect(summary.cogs).toBe(3_000_000);
     expect(summary.expenses).toBe(150_000);
-    // Net profit = 1_250_000 - 3_000_000 - 150_000
-    expect(summary.netProfit).toBe(-1_900_000);
+    // Net profit = 5_750_000 - 3_000_000 - 150_000
+    expect(summary.netProfit).toBe(2_600_000);
 
     expect(summary.cashBankTotal).toBe(5_000_000);
     expect(summary.inventoryValue).toBe(3_500_000); // READY only

@@ -37,7 +37,7 @@ function formatRupiah(n: number) {
 const NOTES: string[] = [
   'HPP dihitung dari total harga modal (cost_price × jumlah) unit berstatus TERJUAL, bukan dari total Pembelian per periode.',
   'Nilai persediaan dihitung dari harga jual × jumlah untuk unit berstatus READY.',
-  'Pengeluaran termasuk biaya operasional dan upah servis. Tukar Tambah tidak dimasukkan ke laba.',
+  'Tukar Tambah masuk penjualan memakai harga HP keluar; selisih bayarnya tetap menjadi arus kas/bank.',
   'Pembelian Pelengkap mengurangi kas/bank dan menambah stok pelengkap; biayanya masuk HPP saat pelengkap dipakai di penjualan.',
 ];
 

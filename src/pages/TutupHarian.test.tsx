@@ -15,6 +15,10 @@ vi.mock('@/services/transactions', () => ({
   getTransactions: (...args: unknown[]) => getTransactionsMock(...args),
   getTransactionsWithStockDetailsByType: (...args: unknown[]) =>
     getTransactionsWithStockDetailsByTypeMock(...args),
+  getTransactionsWithStockDetailsByTypes: (...args: unknown[]) =>
+    getTransactionsWithStockDetailsByTypeMock(...args),
+  getRecognizedSalesAmount: (tx: { amount: number | null }) => tx.amount ?? 0,
+  getRecognizedSalesUnitCount: () => 1,
 }));
 
 vi.mock('@/services/accounts', () => ({

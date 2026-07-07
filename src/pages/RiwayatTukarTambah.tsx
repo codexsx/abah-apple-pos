@@ -344,11 +344,11 @@ export default function RiwayatTukarTambah() {
                       className="bg-white rounded-2xl border border-slate-200 shadow-card p-4 sm:p-5 cursor-pointer transition-shadow duration-200 hover:shadow-card-elevated"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-start gap-3">
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
                           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-teal-50 text-teal-600 shrink-0">
                             <ArrowLeftRight size={18} />
                           </div>
-                          <div>
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[15px] font-semibold text-slate-900">
                                 {item.description}

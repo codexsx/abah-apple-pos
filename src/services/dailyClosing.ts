@@ -9,7 +9,10 @@
 // transaction amount counts as 0.
 
 import { supabase } from '@/lib/supabase';
-import { getTransactions } from '@/services/transactions';
+import {
+  getRecognizedSalesAmount,
+  getTransactions,
+} from '@/services/transactions';
 import { getAccounts } from '@/services/accounts';
 import {
   REVENUE_TYPES,
@@ -99,6 +102,8 @@ export async function computeTodayClosing(): Promise<DailyClosingSummary> {
     const amount = toAmount(tx.amount);
     if ((REVENUE_TYPES as readonly string[]).includes(tx.type)) {
       revenue += amount;
+    } else if (tx.type === 'Tukar Tambah') {
+      revenue += getRecognizedSalesAmount(tx);
     } else if ((COST_TYPES as readonly string[]).includes(tx.type)) {
       cogs += amount;
     } else if ((EXPENSE_TYPES as readonly string[]).includes(tx.type)) {

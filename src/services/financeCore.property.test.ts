@@ -73,7 +73,7 @@ describe('Property 1: Type classification sums only matching types', () => {
     fc.assert(
       fc.property(fc.array(txArb), (txs) => {
         const expectedRevenue = txs
-          .filter((tx) => REVENUE_TYPES.includes(tx.type as never))
+          .filter((tx) => REVENUE_TYPES.includes(tx.type as never) || tx.type === 'Tukar Tambah')
           .reduce((sum, tx) => sum + toAmt(tx.amount), 0);
         const expectedCOGS = txs
           .filter((tx) => COST_TYPES.includes(tx.type as never))
@@ -88,6 +88,23 @@ describe('Property 1: Type classification sums only matching types', () => {
       }),
       RUNS,
     );
+  });
+
+  it('uses HP keluar price as Tukar Tambah revenue when detail is available', () => {
+    expect(
+      computeRevenue([
+        {
+          type: 'Tukar Tambah',
+          amount: 2_700_000,
+          created_at: '2026-07-07T12:00:00.000Z',
+          detail: JSON.stringify({
+            hpKeluar: { model: 'iPhone 14', capacity: '256GB', price: 5_700_000 },
+            hpMasuk: { tipe: 'iPhone 11 Pro Max', kapasitas: '512GB', appraisal: 3_000_000 },
+            selisih: 2_700_000,
+          }),
+        },
+      ]),
+    ).toBe(5_700_000);
   });
 });
 

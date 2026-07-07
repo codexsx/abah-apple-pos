@@ -39,7 +39,14 @@ import { buildDashboardInventorySummary } from '@/services/dashboardInventory';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
 import { getStockItems, type StockItem } from '@/services/stock';
 import { getServiceRecords, type ServiceRecord } from '@/services/services';
-import { getTransactions, getTransactionDisplayDetail, type Transaction } from '@/services/transactions';
+import {
+  getRecognizedSalesAmount,
+  getRecognizedSalesUnitCount,
+  getTransactions,
+  getTransactionDisplayDetail,
+  isRecognizedSalesTransaction,
+  type Transaction,
+} from '@/services/transactions';
 import { getAccountPickerData, type AccountWithBalance } from '@/services/accounts';
 import { canAccessPath } from '@/services/routePermissions';
 import { getOwnStaffPerformance, type StaffPerformance } from '@/services/staffPerformance';
@@ -962,7 +969,17 @@ export default function Home() {
     const countToday = (type: Transaction['type']) =>
       transactions.filter((t) => t.type === type && isSameLocalDay(t.created_at, today)).length;
 
-    const penjualanToday = sum('Penjualan');
+    const salesTodayTransactions = transactions.filter(
+      (t) => isRecognizedSalesTransaction(t) && isSameLocalDay(t.created_at, today),
+    );
+    const penjualanToday = salesTodayTransactions.reduce(
+      (acc, t) => acc + getRecognizedSalesAmount(t),
+      0,
+    );
+    const penjualanUnitToday = salesTodayTransactions.reduce(
+      (acc, t) => acc + getRecognizedSalesUnitCount(t),
+      0,
+    );
     const pembelianToday = sum('Pembelian');
     const pengeluaranToday = sum('Pengeluaran') + sum('Upah Servis');
 
@@ -977,7 +994,7 @@ export default function Home() {
     const totalSaldo = accounts.reduce((acc, a) => acc + (a.current_balance ?? 0), 0);
 
     const miniStatsLive: MiniStat[] = [
-      { label: 'Penjualan', icon: 'TrendingUp', value: countToday('Penjualan'), unit: 'Hari Ini', color: '#14B8A6' },
+      { label: 'Penjualan', icon: 'TrendingUp', value: penjualanUnitToday, unit: 'Hari Ini', color: '#14B8A6' },
       { label: 'Pembelian', icon: 'ShoppingBag', value: countToday('Pembelian'), unit: 'Hari Ini', color: '#D4A574' },
       { label: 'Servis Aktif', icon: 'Wrench', value: servisAktif, unit: 'Dalam Proses', color: '#8B5CF6' },
       { label: 'Stok Ready', icon: 'Package', value: readyUnits, unit: 'Unit', color: '#10B981' },

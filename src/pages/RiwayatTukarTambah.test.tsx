@@ -105,6 +105,50 @@ describe('RiwayatTukarTambah — integration', () => {
     expect(screen.getByText('Rp 9.000.000')).toBeInTheDocument();
   });
 
+  it('formats serialized tukar tambah detail instead of rendering raw JSON', async () => {
+    mockedGetByType.mockResolvedValueOnce([
+      makeTransaction({
+        id: 'TT-JSON',
+        description: 'iPhone 11 Pro Max 512GB -> iPhone 14 256GB',
+        detail: JSON.stringify({
+          konsumen: { nama: 'Fibri', whatsapp: '085822054928' },
+          tanggal: '2026-07-07',
+          hpMasuk: {
+            tipe: 'iPhone 11 Pro Max',
+            kapasitas: '512GB',
+            kondisi: 'Second Inter Unlock Minus',
+            warna: 'Space Gray',
+            imei: '353893100506451',
+            batteryHealth: 97,
+            appraisal: 3_000_000,
+          },
+          hpKeluar: {
+            model: 'iPhone 14',
+            capacity: '256GB',
+            condition: 'Second Inter SimLock',
+            color: 'Blue',
+            imei: '353557670537275',
+            price: 5_700_000,
+          },
+          garansi: '90 Hari',
+          kelengkapan: ['Paperbag'],
+          payment: { cash: 0, transfer: 2_700_000 },
+          selisih: 2_700_000,
+        }),
+        amount: 2_700_000,
+      }),
+    ]);
+
+    render(<RiwayatTukarTambah />);
+
+    expect(await screen.findByText(/Customer: Fibri/i)).toBeInTheDocument();
+    expect(screen.getByText(/Keluar: iPhone 14 256GB Second Inter SimLock Blue/i)).toBeInTheDocument();
+    expect(screen.getByText(/Masuk: iPhone 11 Pro Max 512GB Second Inter Unlock Minus Space Gray/i)).toBeInTheDocument();
+    expect(screen.getByText(/Selisih Rp 2.700.000/i)).toBeInTheDocument();
+    expect(screen.queryByText(/"konsumen"/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/"hpKeluar"/i)).not.toBeInTheDocument();
+  });
+
   it('renders the empty-state message when no transactions are returned', async () => {
     mockedGetByType.mockResolvedValueOnce([]);
 

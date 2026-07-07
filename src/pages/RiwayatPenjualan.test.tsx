@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import type { TransactionWithStockDetails } from '@/services/transactions';
 
-// Mock the transactions service so we control getTransactionsWithStockDetailsByType.
+// Mock the transactions service so we control the sales-recognition fetch.
 vi.mock('@/services/transactions', async () => {
   const actual = await vi.importActual<typeof import('@/services/transactions')>(
     '@/services/transactions',
@@ -10,6 +10,7 @@ vi.mock('@/services/transactions', async () => {
   return {
     ...actual,
     getTransactionsWithStockDetailsByType: vi.fn(),
+    getTransactionsWithStockDetailsByTypes: vi.fn(),
   };
 });
 
@@ -21,12 +22,12 @@ vi.mock('@/services/technicians', () => ({
   getTechnicians: vi.fn(),
 }));
 
-import { getTransactionsWithStockDetailsByType } from '@/services/transactions';
+import { getTransactionsWithStockDetailsByTypes } from '@/services/transactions';
 import { recordServiceWithStockStatus } from '@/services/services';
 import { getTechnicians } from '@/services/technicians';
 import RiwayatPenjualan from './RiwayatPenjualan';
 
-const mockedGetByType = vi.mocked(getTransactionsWithStockDetailsByType);
+const mockedGetByTypes = vi.mocked(getTransactionsWithStockDetailsByTypes);
 const mockedRecordServiceWithStockStatus = vi.mocked(recordServiceWithStockStatus);
 const mockedGetTechnicians = vi.mocked(getTechnicians);
 
@@ -63,7 +64,7 @@ describe('RiwayatPenjualan — integration', () => {
     mockedRecordServiceWithStockStatus.mockResolvedValue('srv-claim-1');
   });
 
-  it('fetches Penjualan transactions on mount and renders them after loading', async () => {
+  it('fetches Penjualan and Tukar Tambah transactions on mount and renders them after loading', async () => {
     const txns: TransactionWithStockDetails[] = [
       makeTransaction({
         id: 'TRX-001',
@@ -77,13 +78,13 @@ describe('RiwayatPenjualan — integration', () => {
         created_at: RECENT_DATE,
       }),
     ];
-    mockedGetByType.mockResolvedValueOnce(txns);
+    mockedGetByTypes.mockResolvedValueOnce(txns);
 
     render(<RiwayatPenjualan />);
 
     // Called with the correct transaction type on mount.
-    expect(mockedGetByType).toHaveBeenCalledTimes(1);
-    expect(mockedGetByType).toHaveBeenCalledWith('Penjualan');
+    expect(mockedGetByTypes).toHaveBeenCalledTimes(1);
+    expect(mockedGetByTypes).toHaveBeenCalledWith(['Penjualan', 'Tukar Tambah']);
 
     // Descriptions render after the async load resolves.
     expect(await screen.findByText('iPhone 13 Pro')).toBeInTheDocument();
@@ -119,7 +120,7 @@ describe('RiwayatPenjualan — integration', () => {
         ],
       }),
     ];
-    mockedGetByType.mockResolvedValueOnce(txns);
+    mockedGetByTypes.mockResolvedValueOnce(txns);
 
     render(<RiwayatPenjualan />);
 
@@ -131,7 +132,7 @@ describe('RiwayatPenjualan — integration', () => {
   });
 
   it('formats serialized sale detail instead of rendering raw JSON', async () => {
-    mockedGetByType.mockResolvedValueOnce([
+    mockedGetByTypes.mockResolvedValueOnce([
       makeTransaction({
         id: 'TRX-JSON',
         description: 'Penjualan 1 unit untuk Adam test beli 2',
@@ -169,8 +170,51 @@ describe('RiwayatPenjualan — integration', () => {
     expect(screen.queryByText(/"units"/i)).not.toBeInTheDocument();
   });
 
+  it('includes tukar tambah rows as sales history using HP keluar value', async () => {
+    mockedGetByTypes.mockResolvedValueOnce([
+      makeTransaction({
+        id: 'TT-SALE-001',
+        type: 'Tukar Tambah',
+        description: 'iPhone 11 Pro Max 512GB -> iPhone 14 256GB',
+        amount: 2_700_000,
+        detail: JSON.stringify({
+          konsumen: { nama: 'Fibri', whatsapp: '085822054928' },
+          hpMasuk: {
+            tipe: 'iPhone 11 Pro Max',
+            kapasitas: '512GB',
+            kondisi: 'Second Inter Unlock Minus',
+            warna: 'Space Gray',
+            imei: '353893100506451',
+            batteryHealth: 97,
+            appraisal: 3_000_000,
+          },
+          hpKeluar: {
+            model: 'iPhone 14',
+            capacity: '256GB',
+            condition: 'Second Inter SimLock',
+            color: 'Blue',
+            imei: '353557670537275',
+            price: 5_700_000,
+          },
+          payment: { cash: 0, transfer: 2_700_000 },
+          selisih: 2_700_000,
+        }),
+        stock_items: [],
+      }),
+    ]);
+
+    render(<RiwayatPenjualan />);
+
+    expect(
+      await screen.findByText('iPhone 11 Pro Max 512GB -> iPhone 14 256GB'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Rp 5.700.000').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Keluar: iPhone 14 256GB Second Inter SimLock Blue/i)).toBeInTheDocument();
+    expect(screen.queryByText(/"hpKeluar"/i)).not.toBeInTheDocument();
+  });
+
   it('records a customer warranty claim from a sold stock unit and sends it to service', async () => {
-    mockedGetByType.mockResolvedValue([
+    mockedGetByTypes.mockResolvedValue([
       makeTransaction({
         id: '44448314-a33b-4c51-b3ae-81b159339dfe',
         description: 'Penjualan 1 unit untuk Adam test beli 2',
@@ -255,7 +299,7 @@ describe('RiwayatPenjualan — integration', () => {
   });
 
   it('renders the empty-state message when no transactions are returned', async () => {
-    mockedGetByType.mockResolvedValueOnce([]);
+    mockedGetByTypes.mockResolvedValueOnce([]);
 
     render(<RiwayatPenjualan />);
 
@@ -265,7 +309,7 @@ describe('RiwayatPenjualan — integration', () => {
   });
 
   it('renders the error state with a retry button when the fetch rejects', async () => {
-    mockedGetByType.mockRejectedValueOnce(new Error('Network down'));
+    mockedGetByTypes.mockRejectedValueOnce(new Error('Network down'));
 
     render(<RiwayatPenjualan />);
 
@@ -275,12 +319,12 @@ describe('RiwayatPenjualan — integration', () => {
     expect(retryButton).toBeInTheDocument();
 
     // Retrying calls the service again; second call succeeds and renders data.
-    mockedGetByType.mockResolvedValueOnce([
+    mockedGetByTypes.mockResolvedValueOnce([
       makeTransaction({ id: 'TRX-003', description: 'Xiaomi 13', amount: 5_000_000 }),
     ]);
     fireEvent.click(retryButton);
 
-    await waitFor(() => expect(mockedGetByType).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedGetByTypes).toHaveBeenCalledTimes(2));
     expect(await screen.findByText('Xiaomi 13')).toBeInTheDocument();
   });
 });

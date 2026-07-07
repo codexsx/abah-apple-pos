@@ -24,8 +24,10 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+  getRecognizedSalesAmount,
+  getRecognizedSalesUnitCount,
   getTransactions,
-  getTransactionsWithStockDetailsByType,
+  getTransactionsWithStockDetailsByTypes,
   type Transaction,
   type TransactionWithStockDetails,
 } from '@/services/transactions';
@@ -159,10 +161,12 @@ function computeSoldCostToday(sales: TransactionWithStockDetails[], ref: Date): 
     .reduce(
       (txSum, tx) =>
         txSum +
-        tx.stock_items.reduce(
-          (itemSum, item) => itemSum + (item.cost_price || 0) * (item.count || 1),
-          0,
-        ),
+        tx.stock_items
+          .filter((item) => item.status === 'TERJUAL')
+          .reduce(
+            (itemSum, item) => itemSum + (item.cost_price || 0) * (item.count || 1),
+            0,
+          ),
       0,
     );
 }
@@ -202,6 +206,9 @@ function computeTodayFigures(
     now.toISOString(),
   );
 
+  const salesTx = todayTx.filter(
+    (tx) => tx.type === 'Penjualan' || tx.type === 'Tukar Tambah',
+  );
   const revenue = computeRevenue(todayTx);
   const cogs = computeSoldCostToday(saleTransactions, now);
   const expenses = computeExpenses(todayTx);
@@ -216,8 +223,8 @@ function computeTodayFigures(
     cashBankTotal,
     cashStoreTotal,
     txCount: todayTx.length,
-    salesCount: countToday(todayTx, 'Penjualan'),
-    salesTotal: sumToday(todayTx, 'Penjualan'),
+    salesCount: salesTx.reduce((sum, tx) => sum + getRecognizedSalesUnitCount(tx), 0),
+    salesTotal: salesTx.reduce((sum, tx) => sum + getRecognizedSalesAmount(tx), 0),
     serviceCount: countToday(todayTx, 'Servis'),
     serviceTotal: sumToday(todayTx, 'Servis'),
     purchaseCount: countToday(todayTx, 'Pembelian'),
@@ -292,7 +299,7 @@ export default function TutupHarian() {
     try {
       const [txs, sales, stock, accounts, closings] = await Promise.all([
         getTransactions(),
-        getTransactionsWithStockDetailsByType('Penjualan'),
+        getTransactionsWithStockDetailsByTypes(['Penjualan', 'Tukar Tambah']),
         getStockItems(),
         getAccounts(),
         getDailyClosings(),

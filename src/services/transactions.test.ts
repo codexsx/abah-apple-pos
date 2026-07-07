@@ -3,6 +3,8 @@ import {
   getTransactionStaffName,
   getTransactionStaffRole,
   getTransactionDisplayDetail,
+  getRecognizedSalesAmount,
+  getRecognizedSalesUnitCount,
   hydrateTransactionStockDetails,
   type TransactionWithStockDetails,
 } from './transactions';
@@ -260,6 +262,45 @@ describe('getTransactionDisplayDetail', () => {
     expect(detail).not.toContain('"items"');
   });
 
+  it('formats tukar tambah detail without leaking raw JSON', () => {
+    const detail = getTransactionDisplayDetail({
+      type: 'Tukar Tambah',
+      detail: JSON.stringify({
+        konsumen: { nama: 'Fibri', whatsapp: '085822054928' },
+        tanggal: '2026-07-07',
+        hpMasuk: {
+          tipe: 'iPhone 11 Pro Max',
+          kapasitas: '512GB',
+          kondisi: 'Second Inter Unlock Minus',
+          warna: 'Space Gray',
+          imei: '353893100506451',
+          batteryHealth: 97,
+          appraisal: 3_000_000,
+        },
+        hpKeluar: {
+          model: 'iPhone 14',
+          capacity: '256GB',
+          condition: 'Second Inter SimLock',
+          color: 'Blue',
+          imei: '353557670537275',
+          price: 5_700_000,
+        },
+        garansi: '90 Hari',
+        kelengkapan: ['Paperbag'],
+        payment: { cash: 0, transfer: 2_700_000 },
+        selisih: 2_700_000,
+      }),
+    });
+
+    expect(detail).toContain('Customer: Fibri');
+    expect(detail).toContain('Keluar: iPhone 14 256GB Second Inter SimLock Blue');
+    expect(detail).toContain('Masuk: iPhone 11 Pro Max 512GB Second Inter Unlock Minus Space Gray');
+    expect(detail).toContain('IMEI masuk 353893100506451');
+    expect(detail).toContain('Selisih Rp 2.700.000');
+    expect(detail).not.toContain('"konsumen"');
+    expect(detail).not.toContain('"hpKeluar"');
+  });
+
   it('formats legacy expense JSON detail without leaking raw keys', () => {
     const detail = getTransactionDisplayDetail({
       type: 'Pengeluaran',
@@ -302,6 +343,71 @@ describe('getTransactionDisplayDetail', () => {
     expect(
       getTransactionDisplayDetail(makeTx({ detail: 'iPhone 14 Pro 128GB Second iBox' })),
     ).toBe('iPhone 14 Pro 128GB Second iBox');
+  });
+});
+
+describe('sales recognition helpers', () => {
+  it('recognizes tukar tambah as one sold unit using HP keluar price, not selisih', () => {
+    const tx = makeTx({
+      type: 'Tukar Tambah',
+      amount: 2_700_000,
+      detail: JSON.stringify({
+        hpKeluar: {
+          model: 'iPhone 14',
+          capacity: '256GB',
+          price: 5_700_000,
+        },
+        hpMasuk: {
+          tipe: 'iPhone 11 Pro Max',
+          kapasitas: '512GB',
+          appraisal: 3_000_000,
+        },
+        selisih: 2_700_000,
+      }),
+    });
+
+    expect(getRecognizedSalesAmount(tx)).toBe(5_700_000);
+    expect(getRecognizedSalesUnitCount(tx)).toBe(1);
+  });
+
+  it('recognizes multi-unit Penjualan from serialized sale detail', () => {
+    const tx = makeTx({
+      amount: 9_000_000,
+      detail: serializeSaleDetail(
+        toSaleDetail({
+          units: [
+            {
+              imei: '',
+              model: 'iPhone 11',
+              capacity: '128GB',
+              condition: 'Second Inter',
+              color: 'Black',
+              sellingPrice: 4_500_000,
+            },
+            {
+              imei: '',
+              model: 'iPhone 11',
+              capacity: '128GB',
+              condition: 'Second Inter',
+              color: 'White',
+              sellingPrice: 4_500_000,
+            },
+          ],
+          manualSalePrice: 0,
+          imeiActivationPrice: 0,
+          items: [],
+          bonuses: [],
+          warranty: null,
+          customerName: null,
+          customerPhone: null,
+          payment: { cash: 9_000_000, transfer: 0 },
+          discount: 0,
+        }),
+      ),
+    });
+
+    expect(getRecognizedSalesAmount(tx)).toBe(9_000_000);
+    expect(getRecognizedSalesUnitCount(tx)).toBe(2);
   });
 });
 

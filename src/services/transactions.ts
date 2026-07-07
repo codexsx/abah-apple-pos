@@ -105,7 +105,23 @@ function asString(value: unknown): string {
 }
 
 function asNumber(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^\d.-]/g, '');
+    return Number(normalized) || 0;
+  }
   return Number(value) || 0;
+}
+
+function parseJsonRecord(rawDetail: string): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawDetail);
+  } catch {
+    return null;
+  }
+
+  return asRecord(parsed);
 }
 
 function formatPurchaseDisplayDetail(rawDetail: string): string | null {
@@ -201,6 +217,78 @@ function formatAccessoryPurchaseDisplayDetail(rawDetail: string): string | null 
 
   const total = asNumber(root.total);
   if (total > 0) sections.push(`Total ${formatIdr(total)}`);
+
+  return sections.length > 0 ? sections.join(' - ') : null;
+}
+
+function formatTukarTambahDisplayDetail(rawDetail: string): string | null {
+  const root = parseJsonRecord(rawDetail);
+  if (!root) return null;
+
+  const customer = asRecord(root.konsumen) ?? asRecord(root.customer);
+  const hpMasuk = asRecord(root.hpMasuk);
+  const hpKeluar = asRecord(root.hpKeluar);
+  if (!hpMasuk && !hpKeluar) return null;
+
+  const outgoingLabel = hpKeluar
+    ? compactParts([
+        asString(hpKeluar.model) || asString(hpKeluar.tipe),
+        asString(hpKeluar.capacity) || asString(hpKeluar.kapasitas),
+        asString(hpKeluar.condition) || asString(hpKeluar.kondisi),
+        asString(hpKeluar.color) || asString(hpKeluar.warna),
+      ])
+    : '';
+  const incomingLabel = hpMasuk
+    ? compactParts([
+        asString(hpMasuk.tipe) || asString(hpMasuk.model),
+        asString(hpMasuk.kapasitas) || asString(hpMasuk.capacity),
+        asString(hpMasuk.kondisi) || asString(hpMasuk.condition),
+        asString(hpMasuk.warna) || asString(hpMasuk.color),
+      ])
+    : '';
+
+  const sections: string[] = [];
+  const customerName = asString(customer?.nama) || asString(customer?.name);
+  if (customerName) sections.push(`Customer: ${customerName}`);
+
+  const outgoingParts: string[] = [];
+  if (outgoingLabel) outgoingParts.push(`Keluar: ${outgoingLabel}`);
+  const outgoingImei = asString(hpKeluar?.imei);
+  if (outgoingImei) outgoingParts.push(`IMEI keluar ${outgoingImei}`);
+  const outgoingPrice = asNumber(hpKeluar?.price ?? hpKeluar?.sellingPrice);
+  if (outgoingPrice > 0) outgoingParts.push(`Jual ${formatIdr(outgoingPrice)}`);
+  if (outgoingParts.length > 0) sections.push(outgoingParts.join(' - '));
+
+  const incomingParts: string[] = [];
+  if (incomingLabel) incomingParts.push(`Masuk: ${incomingLabel}`);
+  const incomingImei = asString(hpMasuk?.imei);
+  if (incomingImei) incomingParts.push(`IMEI masuk ${incomingImei}`);
+  const batteryHealth = asNumber(hpMasuk?.batteryHealth ?? hpMasuk?.battery_health ?? hpMasuk?.bh);
+  if (batteryHealth > 0) incomingParts.push(`BH ${batteryHealth}%`);
+  const appraisal = asNumber(hpMasuk?.appraisal ?? hpMasuk?.price ?? hpMasuk?.modal);
+  if (appraisal > 0) incomingParts.push(`Appraisal ${formatIdr(appraisal)}`);
+  if (incomingParts.length > 0) sections.push(incomingParts.join(' - '));
+
+  const warranty = asString(root.garansi) || asString(root.warranty);
+  if (warranty) sections.push(`Garansi ${warranty}`);
+
+  const accessories = Array.isArray(root.kelengkapan)
+    ? root.kelengkapan
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : [];
+  if (accessories.length > 0) sections.push(`Kelengkapan: ${accessories.join(', ')}`);
+
+  const payment = asRecord(root.payment);
+  const cash = asNumber(payment?.cash);
+  const transfer = asNumber(payment?.transfer);
+  const paymentParts: string[] = [];
+  if (cash > 0) paymentParts.push(`Cash ${formatIdr(cash)}`);
+  if (transfer > 0) paymentParts.push(`Transfer ${formatIdr(transfer)}`);
+  if (paymentParts.length > 0) sections.push(paymentParts.join(' + '));
+
+  const selisih = asNumber(root.selisih);
+  if (selisih !== 0) sections.push(`Selisih ${formatIdr(Math.abs(selisih))}`);
 
   return sections.length > 0 ? sections.join(' - ') : null;
 }
@@ -309,6 +397,10 @@ export function getTransactionDisplayDetail(
     return formatAccessoryPurchaseDisplayDetail(rawDetail) ?? rawDetail;
   }
 
+  if (tx.type === 'Tukar Tambah') {
+    return formatTukarTambahDisplayDetail(rawDetail) ?? rawDetail;
+  }
+
   if (tx.type !== 'Penjualan') {
     return formatJsonKindDisplayDetail(rawDetail)
       ?? formatLegacyTransactionJsonDetail(tx.type, rawDetail)
@@ -340,6 +432,58 @@ export function getTransactionDisplayDetail(
       ?? formatLegacyTransactionJsonDetail(tx.type, rawDetail)
       ?? rawDetail;
   }
+}
+
+function getTukarTambahOutgoingPrice(rawDetail: string): number {
+  const root = parseJsonRecord(rawDetail);
+  if (!root) return 0;
+
+  const hpKeluar = asRecord(root.hpKeluar);
+  if (!hpKeluar) return 0;
+
+  return asNumber(
+    hpKeluar.price
+      ?? hpKeluar.sellingPrice
+      ?? hpKeluar.selling_price
+      ?? hpKeluar.hargaJual,
+  );
+}
+
+function getSaleDetailUnitCount(rawDetail: string): number {
+  try {
+    const detail = deserializeSaleDetail(rawDetail);
+    return detail.units.length > 0 ? detail.units.length : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function getRecognizedSalesAmount(
+  tx: Pick<Transaction, 'type' | 'detail' | 'amount'>,
+): number {
+  if (tx.type === 'Tukar Tambah') {
+    return getTukarTambahOutgoingPrice(tx.detail) || (tx.amount ?? 0);
+  }
+
+  if (tx.type === 'Penjualan') {
+    return tx.amount ?? 0;
+  }
+
+  return 0;
+}
+
+export function getRecognizedSalesUnitCount(
+  tx: Pick<Transaction, 'type' | 'detail'>,
+): number {
+  if (tx.type === 'Tukar Tambah') return 1;
+  if (tx.type === 'Penjualan') return getSaleDetailUnitCount(tx.detail);
+  return 0;
+}
+
+export function isRecognizedSalesTransaction(
+  tx: Pick<Transaction, 'type'>,
+): boolean {
+  return tx.type === 'Penjualan' || tx.type === 'Tukar Tambah';
 }
 
 /**
