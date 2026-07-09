@@ -217,6 +217,8 @@ export default function Keuangan() {
           </div>
           <div className="divide-y divide-slate-100">
             <SummaryRow label="Pendapatan" value={summary.revenue} />
+            <SummaryRow label="Penjualan HP" value={summary.salesRevenue} />
+            <SummaryRow label="Aktivasi IMEI" value={summary.imeiActivationRevenue} />
             <SummaryRow label="HPP / Pembelian" value={summary.cogs} />
             <SummaryRow label="Pengeluaran" value={summary.expenses} />
           </div>

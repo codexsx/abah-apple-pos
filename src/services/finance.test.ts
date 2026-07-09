@@ -91,18 +91,42 @@ beforeEach(() => {
 describe('getFinanceSummary', () => {
   it('wires sub-totals correctly across all underlying services', async () => {
     vi.mocked(getTransactions).mockResolvedValue([
-      tx({ type: 'Penjualan', amount: 1_000_000 }),
+      tx({
+        type: 'Penjualan',
+        amount: 1_170_000,
+        detail: JSON.stringify({
+          units: [
+            {
+              imei: '353535353535353',
+              sellingPrice: 1_000_000,
+              model: 'iPhone 8 Plus',
+              capacity: '64GB',
+              condition: 'Second Inter Unlock',
+              color: 'Space Gray',
+            },
+          ],
+          manualSalePrice: 0,
+          imeiActivationPrice: 170_000,
+          items: [],
+          bonuses: [],
+          warranty: '30 Hari',
+          payment: { cash: 0, transfer: 1_170_000 },
+          customer: { name: 'Adam', phone: null },
+          discount: 0,
+        }),
+      }),
       tx({ type: 'Servis', amount: 200_000 }),
       tx({ type: 'Pemasukan Lain', amount: 50_000 }),
       tx({ type: 'Pembelian', amount: 600_000 }),
       tx({ type: 'Pengeluaran', amount: 150_000 }),
       tx({
         type: 'Tukar Tambah',
-        amount: 500_000,
+        amount: 670_000,
         detail: JSON.stringify({
           hpKeluar: { model: 'iPhone 14', capacity: '128GB', price: 4_500_000 },
           hpMasuk: { tipe: 'iPhone 11', kapasitas: '128GB', appraisal: 4_000_000 },
-          selisih: 500_000,
+          aktivasiImei: 170_000,
+          selisih: 670_000,
         }),
       }),
     ]);
@@ -130,13 +154,15 @@ describe('getFinanceSummary', () => {
 
     const summary = await getFinanceSummary();
 
-    // Revenue = Penjualan + Servis + Pemasukan Lain + HP keluar Tukar Tambah
-    expect(summary.revenue).toBe(5_750_000);
+    expect(summary.salesRevenue).toBe(5_500_000);
+    expect(summary.imeiActivationRevenue).toBe(340_000);
+    // Revenue = Penjualan HP + Aktivasi IMEI + Servis + Pemasukan Lain + HP keluar Tukar Tambah
+    expect(summary.revenue).toBe(6_090_000);
     // COGS now comes from sold units' cost_price, not Pembelian transactions.
     expect(summary.cogs).toBe(3_000_000);
     expect(summary.expenses).toBe(150_000);
-    // Net profit = 5_750_000 - 3_000_000 - 150_000
-    expect(summary.netProfit).toBe(2_600_000);
+    // Net profit = 6_090_000 - 3_000_000 - 150_000
+    expect(summary.netProfit).toBe(2_940_000);
 
     expect(summary.cashBankTotal).toBe(5_000_000);
     expect(summary.inventoryValue).toBe(3_500_000); // READY only

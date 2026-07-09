@@ -25,7 +25,9 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   getRecognizedSalesAmount,
+  getRecognizedSalesNetOfImeiActivation,
   getRecognizedSalesUnitCount,
+  getTransactionImeiActivationAmount,
   getTransactions,
   getTransactionsWithStockDetailsByTypes,
   type Transaction,
@@ -97,6 +99,8 @@ function readNumber(summary: Record<string, unknown>, key: string): number {
 interface TodayFigures {
   date: string; // YYYY-MM-DD (local)
   revenue: number;
+  salesRevenue: number;
+  imeiActivationRevenue: number;
   cogs: number;
   expenses: number;
   netProfit: number;
@@ -105,6 +109,7 @@ interface TodayFigures {
   txCount: number;
   salesCount: number;
   salesTotal: number;
+  imeiActivationCount: number;
   serviceCount: number;
   serviceTotal: number;
   purchaseCount: number;
@@ -210,6 +215,17 @@ function computeTodayFigures(
     (tx) => tx.type === 'Penjualan' || tx.type === 'Tukar Tambah',
   );
   const revenue = computeRevenue(todayTx);
+  const salesRevenue = salesTx.reduce(
+    (sum, tx) => sum + getRecognizedSalesNetOfImeiActivation(tx),
+    0,
+  );
+  const imeiActivationRevenue = salesTx.reduce(
+    (sum, tx) => sum + getTransactionImeiActivationAmount(tx),
+    0,
+  );
+  const imeiActivationCount = salesTx.filter(
+    (tx) => getTransactionImeiActivationAmount(tx) > 0,
+  ).length;
   const cogs = computeSoldCostToday(saleTransactions, now);
   const expenses = computeExpenses(todayTx);
   const netProfit = computeNetProfit(revenue, cogs, expenses);
@@ -217,6 +233,8 @@ function computeTodayFigures(
   return {
     date: toLocalDateString(now),
     revenue,
+    salesRevenue,
+    imeiActivationRevenue,
     cogs,
     expenses,
     netProfit,
@@ -225,6 +243,7 @@ function computeTodayFigures(
     txCount: todayTx.length,
     salesCount: salesTx.reduce((sum, tx) => sum + getRecognizedSalesUnitCount(tx), 0),
     salesTotal: salesTx.reduce((sum, tx) => sum + getRecognizedSalesAmount(tx), 0),
+    imeiActivationCount,
     serviceCount: countToday(todayTx, 'Servis'),
     serviceTotal: sumToday(todayTx, 'Servis'),
     purchaseCount: countToday(todayTx, 'Pembelian'),
@@ -257,6 +276,8 @@ interface SummaryCard {
 
 const summaryCards: SummaryCard[] = [
   { label: 'Pendapatan', value: (f) => f.revenue, format: 'money', icon: TrendingUp, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-100' },
+  { label: 'Penjualan HP', value: (f) => f.salesRevenue, format: 'money', icon: ShoppingBag, color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-100' },
+  { label: 'Aktivasi IMEI', value: (f) => f.imeiActivationRevenue, format: 'money', icon: Banknote, color: 'text-cyan-600', bg: 'bg-cyan-50', border: 'border-cyan-100' },
   { label: 'HPP Unit Terjual', value: (f) => f.cogs, format: 'money', icon: ShoppingBag, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
   { label: 'Pengeluaran', value: (f) => f.expenses, format: 'money', icon: Receipt, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100' },
   { label: 'Laba Bersih', value: (f) => f.netProfit, format: 'money', icon: Wallet, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100', signed: true },
@@ -470,6 +491,8 @@ export default function TutupHarian() {
     try {
       const summary: ClosingSummary = {
         revenue: figures.revenue,
+        salesRevenue: figures.salesRevenue,
+        imeiActivationRevenue: figures.imeiActivationRevenue,
         cogs: figures.cogs,
         expenses: figures.expenses,
         netProfit: figures.netProfit,
@@ -478,6 +501,7 @@ export default function TutupHarian() {
         txCount: figures.txCount,
         salesCount: figures.salesCount,
         salesTotal: figures.salesTotal,
+        imeiActivationCount: figures.imeiActivationCount,
         serviceCount: figures.serviceCount,
         serviceTotal: figures.serviceTotal,
         purchaseCount: figures.purchaseCount,
@@ -648,9 +672,10 @@ export default function TutupHarian() {
               <Receipt size={16} className="text-teal-600" />
               <h2 className="text-[16px] font-semibold text-slate-900">Breakdown Transaksi</h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               {[
-                { label: 'Penjualan', count: figures.salesCount, total: figures.salesTotal },
+                { label: 'Penjualan HP', count: figures.salesCount, total: figures.salesRevenue },
+                { label: 'Aktivasi IMEI', count: figures.imeiActivationCount, total: figures.imeiActivationRevenue },
                 { label: 'Servis', count: figures.serviceCount, total: figures.serviceTotal },
                 { label: 'Pembelian HP', count: figures.purchaseCount, total: figures.purchaseTotal },
                 { label: 'Tukar Tambah', count: figures.tradeCount, total: figures.tradeTotal },

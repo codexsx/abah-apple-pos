@@ -6,6 +6,8 @@ import {
   EXPENSE_TYPES,
   SOLD_STATUS,
   computeRevenue,
+  computeSalesRevenue,
+  computeImeiActivationRevenue,
   computeCOGS,
   computeCOGSFromSoldItems,
   computeExpenses,
@@ -90,21 +92,49 @@ describe('Property 1: Type classification sums only matching types', () => {
     );
   });
 
-  it('uses HP keluar price as Tukar Tambah revenue when detail is available', () => {
-    expect(
-      computeRevenue([
-        {
-          type: 'Tukar Tambah',
-          amount: 2_700_000,
-          created_at: '2026-07-07T12:00:00.000Z',
-          detail: JSON.stringify({
-            hpKeluar: { model: 'iPhone 14', capacity: '256GB', price: 5_700_000 },
-            hpMasuk: { tipe: 'iPhone 11 Pro Max', kapasitas: '512GB', appraisal: 3_000_000 },
-            selisih: 2_700_000,
-          }),
-        },
-      ]),
-    ).toBe(5_700_000);
+  it('separates IMEI activation from HP sales while keeping total revenue all-in', () => {
+    const txs: FinanceTxLike[] = [
+      {
+        type: 'Penjualan',
+        amount: 3_670_000,
+        created_at: '2026-07-07T12:00:00.000Z',
+        detail: JSON.stringify({
+          units: [
+            {
+              imei: '353535353535353',
+              sellingPrice: 3_500_000,
+              model: 'iPhone 8 Plus',
+              capacity: '64GB',
+              condition: 'Second Inter Unlock',
+              color: 'Space Gray',
+            },
+          ],
+          manualSalePrice: 0,
+          imeiActivationPrice: 170_000,
+          items: [],
+          bonuses: [],
+          warranty: '30 Hari',
+          payment: { cash: 0, transfer: 3_670_000 },
+          customer: { name: 'Adam', phone: null },
+          discount: 0,
+        }),
+      },
+      {
+        type: 'Tukar Tambah',
+        amount: 2_870_000,
+        created_at: '2026-07-07T12:00:00.000Z',
+        detail: JSON.stringify({
+          hpKeluar: { model: 'iPhone 14', capacity: '256GB', price: 5_700_000 },
+          hpMasuk: { tipe: 'iPhone 11 Pro Max', kapasitas: '512GB', appraisal: 3_000_000 },
+          aktivasiImei: 170_000,
+          selisih: 2_870_000,
+        }),
+      },
+    ];
+
+    expect(computeSalesRevenue(txs)).toBe(9_200_000);
+    expect(computeImeiActivationRevenue(txs)).toBe(340_000);
+    expect(computeRevenue(txs)).toBe(9_540_000);
   });
 });
 

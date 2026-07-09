@@ -279,6 +279,9 @@ function formatTukarTambahDisplayDetail(rawDetail: string): string | null {
     : [];
   if (accessories.length > 0) sections.push(`Kelengkapan: ${accessories.join(', ')}`);
 
+  const imeiActivation = getTukarTambahImeiActivationAmount(rawDetail);
+  if (imeiActivation > 0) sections.push(`Aktivasi IMEI ${formatIdr(imeiActivation)}`);
+
   const payment = asRecord(root.payment);
   const cash = asNumber(payment?.cash);
   const transfer = asNumber(payment?.transfer);
@@ -449,6 +452,27 @@ function getTukarTambahOutgoingPrice(rawDetail: string): number {
   );
 }
 
+function getTukarTambahImeiActivationAmount(rawDetail: string): number {
+  const root = parseJsonRecord(rawDetail);
+  if (!root) return 0;
+
+  return asNumber(
+    root.aktivasiImei
+      ?? root.imeiActivationPrice
+      ?? root.imeiActivation
+      ?? root.aktivasi_imei,
+  );
+}
+
+function getPenjualanImeiActivationAmount(rawDetail: string): number {
+  try {
+    const detail = deserializeSaleDetail(rawDetail);
+    return asNumber(detail.imeiActivationPrice);
+  } catch {
+    return 0;
+  }
+}
+
 function getSaleDetailUnitCount(rawDetail: string): number {
   try {
     const detail = deserializeSaleDetail(rawDetail);
@@ -462,7 +486,11 @@ export function getRecognizedSalesAmount(
   tx: Pick<Transaction, 'type' | 'detail' | 'amount'>,
 ): number {
   if (tx.type === 'Tukar Tambah') {
-    return getTukarTambahOutgoingPrice(tx.detail) || (tx.amount ?? 0);
+    const outgoingPrice = getTukarTambahOutgoingPrice(tx.detail);
+    if (outgoingPrice > 0) {
+      return outgoingPrice + getTukarTambahImeiActivationAmount(tx.detail);
+    }
+    return tx.amount ?? 0;
   }
 
   if (tx.type === 'Penjualan') {
@@ -470,6 +498,20 @@ export function getRecognizedSalesAmount(
   }
 
   return 0;
+}
+
+export function getTransactionImeiActivationAmount(
+  tx: Pick<Transaction, 'type' | 'detail'>,
+): number {
+  if (tx.type === 'Penjualan') return getPenjualanImeiActivationAmount(tx.detail);
+  if (tx.type === 'Tukar Tambah') return getTukarTambahImeiActivationAmount(tx.detail);
+  return 0;
+}
+
+export function getRecognizedSalesNetOfImeiActivation(
+  tx: Pick<Transaction, 'type' | 'detail' | 'amount'>,
+): number {
+  return Math.max(0, getRecognizedSalesAmount(tx) - getTransactionImeiActivationAmount(tx));
 }
 
 export function getRecognizedSalesUnitCount(

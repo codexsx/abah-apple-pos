@@ -10,7 +10,8 @@
 
 import { supabase } from '@/lib/supabase';
 import {
-  getRecognizedSalesAmount,
+  getRecognizedSalesNetOfImeiActivation,
+  getTransactionImeiActivationAmount,
   getTransactions,
 } from '@/services/transactions';
 import { getAccounts } from '@/services/accounts';
@@ -24,7 +25,9 @@ import {
 
 export interface DailyClosingSummary {
   date: string; // YYYY-MM-DD
-  revenue: number; // sum of REVENUE_TYPES today
+  revenue: number; // total income today, including IMEI activation
+  salesRevenue: number; // Penjualan/Tukar Tambah HP sales, excluding IMEI activation
+  imeiActivationRevenue: number; // IMEI activation income
   cogs: number; // sum of COST_TYPES (Pembelian) today
   expenses: number; // sum of EXPENSE_TYPES today
   netProfit: number; // revenue - cogs - expenses
@@ -96,14 +99,20 @@ export async function computeTodayClosing(): Promise<DailyClosingSummary> {
   );
 
   let revenue = 0;
+  let salesRevenue = 0;
+  let imeiActivationRevenue = 0;
   let cogs = 0;
   let expenses = 0;
   for (const tx of todayTx) {
     const amount = toAmount(tx.amount);
-    if ((REVENUE_TYPES as readonly string[]).includes(tx.type)) {
+    if (tx.type === 'Penjualan' || tx.type === 'Tukar Tambah') {
+      const salesNet = getRecognizedSalesNetOfImeiActivation(tx);
+      const imeiActivation = getTransactionImeiActivationAmount(tx);
+      salesRevenue += salesNet;
+      imeiActivationRevenue += imeiActivation;
+      revenue += salesNet + imeiActivation;
+    } else if ((REVENUE_TYPES as readonly string[]).includes(tx.type)) {
       revenue += amount;
-    } else if (tx.type === 'Tukar Tambah') {
-      revenue += getRecognizedSalesAmount(tx);
     } else if ((COST_TYPES as readonly string[]).includes(tx.type)) {
       cogs += amount;
     } else if ((EXPENSE_TYPES as readonly string[]).includes(tx.type)) {
@@ -127,6 +136,8 @@ export async function computeTodayClosing(): Promise<DailyClosingSummary> {
   return {
     date: toLocalDateString(now),
     revenue,
+    salesRevenue,
+    imeiActivationRevenue,
     cogs,
     expenses,
     netProfit,

@@ -608,7 +608,9 @@ export default function TukarTambah() {
   };
 
   /* ── derived values ── */
-  const selisih = (selectedHpKeluar?.price || 0) - hpMasuk.appraisal;
+  const aktivasiImeiNum = parseRupiahInput(aktivasiImei);
+  const hpKeluarTotal = (selectedHpKeluar?.price || 0) + aktivasiImeiNum;
+  const selisih = hpKeluarTotal - hpMasuk.appraisal;
   const absSelisih = Math.abs(selisih);
   const totalBayar = cash + transfer;
   // Selisih === 0 → no money moves, no payment/account required (Req 6.6, 7.8).
@@ -679,7 +681,7 @@ export default function TukarTambah() {
       garansi,
       kelengkapan: kelengkapanItems,
       klaimGaransiServis,
-      aktivasiImei: parseRupiahInput(aktivasiImei),
+      aktivasiImei: aktivasiImeiNum,
       accessoryItems,
       payment: { cash, transfer },
       selisih,
@@ -1253,7 +1255,7 @@ export default function TukarTambah() {
       >
         <h2 className="text-[18px] font-semibold text-slate-900 mb-1">Aktivasi IMEI & Aksesoris</h2>
         <p className="text-[13px] text-slate-500 mb-4">
-          Titipan (humpang lewat) — tampil di nota, tidak masuk keuangan toko & terpisah dari selisih.
+          Aktivasi IMEI ikut total selisih, tetapi laporan keuangan memisahkannya dari penjualan HP.
         </p>
 
         <motion.div
@@ -1426,6 +1428,27 @@ export default function TukarTambah() {
             </span>
             <span className="font-mono text-[16px] font-semibold text-slate-700">
               {formatPrice(selectedHpKeluar?.price || 0)}
+            </span>
+          </div>
+
+          {aktivasiImeiNum > 0 && (
+            <div className="flex items-center justify-between py-2">
+              <span className="text-[14px] text-slate-500 flex items-center gap-2">
+                <Banknote size={14} />
+                Aktivasi IMEI
+              </span>
+              <span className="font-mono text-[16px] font-semibold text-cyan-700">
+                {formatPrice(aktivasiImeiNum)}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between py-2">
+            <span className="text-[14px] font-semibold text-slate-600">
+              Total Keluar
+            </span>
+            <span className="font-mono text-[16px] font-bold text-slate-900">
+              {formatPrice(hpKeluarTotal)}
             </span>
           </div>
 

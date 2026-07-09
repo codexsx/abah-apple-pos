@@ -64,6 +64,8 @@ export interface TotalAssetInput {
 export interface FinanceSummary {
   period: FinancePeriod;
   revenue: number;
+  salesRevenue: number;
+  imeiActivationRevenue: number;
   cogs: number;
   expenses: number;
   netProfit: number;
@@ -106,6 +108,41 @@ function parseTradeInOutgoingPrice(detail: string | null | undefined): number {
     return Number(normalized) || 0;
   }
   return 0;
+}
+
+function parseJsonRecord(detail: string | null | undefined): Record<string, unknown> | null {
+  if (!detail) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(detail);
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  return parsed as Record<string, unknown>;
+}
+
+function parseNumberLike(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[^\d.-]/g, '');
+    return Number(normalized) || 0;
+  }
+  return 0;
+}
+
+function parseImeiActivationAmount(detail: string | null | undefined): number {
+  const root = parseJsonRecord(detail);
+  if (!root) return 0;
+
+  return parseNumberLike(
+    root.imeiActivationPrice
+      ?? root.aktivasiImei
+      ?? root.imeiActivation
+      ?? root.aktivasi_imei,
+  );
 }
 
 // ---------- Period filtering ----------
@@ -158,13 +195,43 @@ export function sumByTypes(
 }
 
 /** Revenue = Σ amounts of REVENUE_TYPES transactions (Req 1.1). */
-export function computeRevenue(txs: FinanceTxLike[]): number {
+export function computeSalesRevenue(txs: FinanceTxLike[]): number {
   return txs.reduce((sum, tx) => {
-    if (REVENUE_TYPES.includes(tx.type as never)) {
-      return sum + toAmount(tx.amount);
+    if (tx.type === 'Penjualan') {
+      return sum + Math.max(0, toAmount(tx.amount) - parseImeiActivationAmount(tx.detail));
     }
     if (tx.type === 'Tukar Tambah') {
       return sum + (parseTradeInOutgoingPrice(tx.detail) || toAmount(tx.amount));
+    }
+    return sum;
+  }, 0);
+}
+
+/** IMEI activation revenue, kept separate from HP sales in reports. */
+export function computeImeiActivationRevenue(txs: FinanceTxLike[]): number {
+  return txs.reduce((sum, tx) => {
+    if (tx.type === 'Penjualan' || tx.type === 'Tukar Tambah') {
+      return sum + parseImeiActivationAmount(tx.detail);
+    }
+    return sum;
+  }, 0);
+}
+
+/** Revenue = HP sales + IMEI activation + other revenue types. */
+export function computeRevenue(txs: FinanceTxLike[]): number {
+  return txs.reduce((sum, tx) => {
+    if (tx.type === 'Penjualan') {
+      return sum + toAmount(tx.amount);
+    }
+    if (tx.type === 'Tukar Tambah') {
+      const outgoingPrice = parseTradeInOutgoingPrice(tx.detail);
+      if (outgoingPrice > 0) {
+        return sum + outgoingPrice + parseImeiActivationAmount(tx.detail);
+      }
+      return sum + toAmount(tx.amount);
+    }
+    if (REVENUE_TYPES.includes(tx.type as never)) {
+      return sum + toAmount(tx.amount);
     }
     return sum;
   }, 0);
@@ -255,6 +322,8 @@ export function buildFinanceSummary(input: {
     input.period.to,
   );
 
+  const salesRevenue = computeSalesRevenue(filtered);
+  const imeiActivationRevenue = computeImeiActivationRevenue(filtered);
   const revenue = computeRevenue(filtered);
   const cogs = computeCOGSFromSoldItems(input.stockItems);
   const expenses = computeExpenses(filtered);
@@ -270,6 +339,8 @@ export function buildFinanceSummary(input: {
   return {
     period: input.period,
     revenue,
+    salesRevenue,
+    imeiActivationRevenue,
     cogs,
     expenses,
     netProfit,

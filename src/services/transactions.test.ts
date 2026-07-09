@@ -4,7 +4,9 @@ import {
   getTransactionStaffRole,
   getTransactionDisplayDetail,
   getRecognizedSalesAmount,
+  getRecognizedSalesNetOfImeiActivation,
   getRecognizedSalesUnitCount,
+  getTransactionImeiActivationAmount,
   hydrateTransactionStockDetails,
   type TransactionWithStockDetails,
 } from './transactions';
@@ -347,6 +349,39 @@ describe('getTransactionDisplayDetail', () => {
 });
 
 describe('sales recognition helpers', () => {
+  it('keeps Penjualan total all-in while separating IMEI activation from HP sales', () => {
+    const tx = makeTx({
+      amount: 3_670_000,
+      detail: serializeSaleDetail(
+        toSaleDetail({
+          units: [
+            {
+              imei: '353535353535353',
+              model: 'iPhone 8 Plus',
+              capacity: '64GB',
+              condition: 'Second Inter Unlock',
+              color: 'Space Gray',
+              sellingPrice: 3_500_000,
+            },
+          ],
+          manualSalePrice: 0,
+          imeiActivationPrice: 170_000,
+          items: [],
+          bonuses: [],
+          warranty: '30 Hari',
+          customerName: 'Adam',
+          customerPhone: null,
+          payment: { cash: 0, transfer: 3_670_000 },
+          discount: 0,
+        }),
+      ),
+    });
+
+    expect(getRecognizedSalesAmount(tx)).toBe(3_670_000);
+    expect(getTransactionImeiActivationAmount(tx)).toBe(170_000);
+    expect(getRecognizedSalesNetOfImeiActivation(tx)).toBe(3_500_000);
+  });
+
   it('recognizes tukar tambah as one sold unit using HP keluar price, not selisih', () => {
     const tx = makeTx({
       type: 'Tukar Tambah',
@@ -362,11 +397,14 @@ describe('sales recognition helpers', () => {
           kapasitas: '512GB',
           appraisal: 3_000_000,
         },
+        aktivasiImei: 170_000,
         selisih: 2_700_000,
       }),
     });
 
-    expect(getRecognizedSalesAmount(tx)).toBe(5_700_000);
+    expect(getRecognizedSalesAmount(tx)).toBe(5_870_000);
+    expect(getTransactionImeiActivationAmount(tx)).toBe(170_000);
+    expect(getRecognizedSalesNetOfImeiActivation(tx)).toBe(5_700_000);
     expect(getRecognizedSalesUnitCount(tx)).toBe(1);
   });
 

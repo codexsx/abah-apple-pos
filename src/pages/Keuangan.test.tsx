@@ -27,6 +27,8 @@ function makeSummary(overrides: Partial<FinanceSummary> = {}): FinanceSummary {
   return {
     period: { from: null, to: null },
     revenue: 3_000_000,
+    salesRevenue: 2_830_000,
+    imeiActivationRevenue: 170_000,
     cogs: 1_200_000,
     expenses: 300_000,
     netProfit: 500_000,
