@@ -14,11 +14,11 @@ import {
   HandCoins,
   ClipboardList,
   FileText,
+  FileSearch,
   Users,
   ArrowUpRight,
   PanelLeft,
   Calendar,
-  Clock,
   Smartphone,
   Loader2,
   Camera,
@@ -759,21 +759,29 @@ function LaporanWidget() {
       iconColor="text-indigo-600"
       delay={0.7}
       footer={
-        <button
-          onClick={() => navigate('/laporan/tutup-harian')}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2.5 text-[13px] font-semibold text-white hover:bg-indigo-700 transition-colors"
-        >
-          Tutup Harian <ArrowUpRight size={14} />
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => navigate('/laporan/rekonsiliasi-kas')}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-slate-950 py-2.5 text-[12px] font-semibold text-white hover:bg-slate-800 transition-colors"
+          >
+            Rekonsiliasi <ArrowUpRight size={14} />
+          </button>
+          <button
+            onClick={() => navigate('/laporan/tutup-harian')}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2.5 text-[12px] font-semibold text-white hover:bg-indigo-700 transition-colors"
+          >
+            Tutup Harian <ArrowUpRight size={14} />
+          </button>
+        </div>
       }
     >
       <div className="rounded-2xl bg-indigo-50 p-4">
         <div className="flex items-center gap-2 mb-2">
-          <Clock size={16} className="text-indigo-600" />
+          <FileSearch size={16} className="text-indigo-600" />
           <span className="text-[12px] font-medium text-indigo-700">Audit Harian</span>
         </div>
         <p className="text-[13px] text-indigo-600/80">
-          Catat fisik kas + stok harian untuk closing toko.
+          Cocokkan webapp, manual, dan mutasi bank sebelum closing.
         </p>
       </div>
     </WidgetCard>

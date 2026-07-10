@@ -13,6 +13,7 @@ import {
   Cpu,
   HandCoins,
   FileText,
+  FileSearch,
   PanelLeft,
   History,
   ChevronRight,
@@ -119,6 +120,7 @@ const sheetSections = [
     items: [
       { path: '/laporan/keuangan', label: 'Keuangan', icon: TrendingUp },
       { path: '/akun-kas', label: 'Akun & Kas', icon: Wallet },
+      { path: '/laporan/rekonsiliasi-kas', label: 'Rekonsiliasi Kas', icon: FileSearch },
       { path: '/laporan/tutup-harian', label: 'Tutup Harian', icon: FileText },
     ],
   },

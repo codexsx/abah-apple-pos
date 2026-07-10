@@ -8,6 +8,7 @@ describe('routePermissions', () => {
     expect(pathToPermission('/pemasukan-lain')).toBe('pengeluaran');
     expect(pathToPermission('/ambil-pelengkap')).toBe('stok');
     expect(pathToPermission('/laporan/tutup-harian')).toBe('finance');
+    expect(pathToPermission('/laporan/rekonsiliasi-kas')).toBe('finance');
     expect(pathToPermission('/pengaturan/perusahaan')).toBe('manage_users');
     expect(pathToPermission('/staff-performance')).toBe('manage_users');
     expect(pathToPermission('/approval/transaksi')).toBe('manage_users');
@@ -40,6 +41,7 @@ describe('routePermissions', () => {
     };
 
     expect(canAccessPath(financeAdmin, '/laporan/tutup-harian')).toBe(true);
+    expect(canAccessPath(financeAdmin, '/laporan/rekonsiliasi-kas')).toBe(true);
     expect(canAccessPath(financeAdmin, '/akun-kas')).toBe(true);
     expect(canAccessPath(financeAdmin, '/pengeluaran')).toBe(true);
     expect(canAccessPath(financeAdmin, '/pengaturan/users')).toBe(false);

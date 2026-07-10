@@ -54,6 +54,7 @@ const RiwayatPenjualan = lazyRoute(() => import('./pages/RiwayatPenjualan'));
 const RiwayatPengeluaran = lazyRoute(() => import('./pages/RiwayatPengeluaran'));
 const RiwayatTukarTambah = lazyRoute(() => import('./pages/RiwayatTukarTambah'));
 const TutupHarian = lazyRoute(() => import('./pages/TutupHarian'));
+const RekonsiliasiKas = lazyRoute(() => import('./pages/RekonsiliasiKas'));
 const Agen = lazyRoute(() => import('./pages/Agen'));
 const AgenDetail = lazyRoute(() => import('./pages/AgenDetail'));
 const AgenRiwayat = lazyRoute(() => import('./pages/AgenRiwayat'));
@@ -241,6 +242,16 @@ function AppRoutes() {
             <FinanceRoute>
               <Suspense fallback={<PageLoader />}>
                 <TutupHarian />
+              </Suspense>
+            </FinanceRoute>
+          }
+        />
+        <Route
+          path="/laporan/rekonsiliasi-kas"
+          element={
+            <FinanceRoute>
+              <Suspense fallback={<PageLoader />}>
+                <RekonsiliasiKas />
               </Suspense>
             </FinanceRoute>
           }

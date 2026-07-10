@@ -45,6 +45,7 @@ export function pathToPermission(path: string): PermissionKey | null {
     case '/laporan/keuangan':
     case '/akun-kas':
     case '/laporan/tutup-harian':
+    case '/laporan/rekonsiliasi-kas':
       return 'finance';
     case '/pengaturan/perusahaan':
     case '/pengaturan/users':

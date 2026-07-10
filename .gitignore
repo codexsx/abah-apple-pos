@@ -4,8 +4,8 @@ dist
 
 # Environment variables — NEVER commit these
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Supabase
 .supabase
@@ -27,9 +27,6 @@ pnpm-debug.log*
 Thumbs.db
 
 .vercel
-.env*
-!.env.example
-
 # Local planning, test artifacts, and generated reports
 .kiro
 .playwright-mcp
