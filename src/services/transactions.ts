@@ -6,6 +6,7 @@ export type TransactionType =
   | 'Penjualan'
   | 'Pembelian'
   | 'Pembelian Pelengkap'
+  | 'Buyback'
   | 'Servis'
   | 'Pengeluaran'
   | 'Tukar Tambah'
@@ -296,6 +297,52 @@ function formatTukarTambahDisplayDetail(rawDetail: string): string | null {
   return sections.length > 0 ? sections.join(' - ') : null;
 }
 
+function formatBuybackDisplayDetail(rawDetail: string): string | null {
+  const root = parseJsonRecord(rawDetail);
+  if (!root || root.kind !== 'buyback') return null;
+
+  const customer = asRecord(root.customer);
+  const unit = asRecord(root.unit);
+  if (!unit) return null;
+
+  const sections: string[] = [];
+  const customerName = asString(customer?.name);
+  if (customerName) sections.push(`Customer: ${customerName}`);
+
+  const unitLabel = compactParts([
+    asString(unit.model),
+    asString(unit.capacity),
+    asString(unit.condition),
+    asString(unit.color),
+  ]);
+  if (unitLabel) sections.push(`Masuk: ${unitLabel}`);
+
+  const imei = asString(unit.imei);
+  if (imei) sections.push(`IMEI ${imei}`);
+
+  const batteryHealth = asNumber(unit.batteryHealth ?? unit.battery_health ?? unit.bh);
+  if (batteryHealth > 0) sections.push(`BH ${batteryHealth}%`);
+
+  const defect = asString(unit.defectDescription ?? unit.defect_description ?? unit.minus);
+  if (defect) sections.push(`Minus: ${defect}`);
+
+  const status = asString(unit.status);
+  if (status) sections.push(`Status ${status}`);
+
+  const buybackPrice = asNumber(root.buybackPrice ?? root.buyback_price ?? unit.costPrice);
+  if (buybackPrice > 0) sections.push(`Buyback ${formatIdr(buybackPrice)}`);
+
+  const payment = asRecord(root.payment);
+  const cash = asNumber(payment?.cash);
+  const transfer = asNumber(payment?.transfer);
+  const paymentParts: string[] = [];
+  if (cash > 0) paymentParts.push(`Cash ${formatIdr(cash)}`);
+  if (transfer > 0) paymentParts.push(`Transfer ${formatIdr(transfer)}`);
+  if (paymentParts.length > 0) sections.push(paymentParts.join(' + '));
+
+  return sections.length > 0 ? sections.join(' - ') : null;
+}
+
 function formatJsonKindDisplayDetail(rawDetail: string): string | null {
   let parsed: unknown;
   try {
@@ -402,6 +449,10 @@ export function getTransactionDisplayDetail(
 
   if (tx.type === 'Tukar Tambah') {
     return formatTukarTambahDisplayDetail(rawDetail) ?? rawDetail;
+  }
+
+  if (tx.type === 'Buyback') {
+    return formatBuybackDisplayDetail(rawDetail) ?? rawDetail;
   }
 
   if (tx.type !== 'Penjualan') {

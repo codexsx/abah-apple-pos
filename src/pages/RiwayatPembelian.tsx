@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
   getTransactionDisplayDetail,
-  getTransactionsWithStockDetailsByType,
+  getTransactionsWithStockDetailsByTypes,
   type TransactionWithStockDetails,
 } from '@/services/transactions';
 import { TransactionStockDetails } from '@/components/TransactionStockDetails';
@@ -111,7 +111,7 @@ export default function RiwayatPembelian() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getTransactionsWithStockDetailsByType('Pembelian');
+      const data = await getTransactionsWithStockDetailsByTypes(['Pembelian', 'Buyback']);
       setTransactions(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data transaksi');
@@ -255,18 +255,26 @@ export default function RiwayatPembelian() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-[36px] sm:text-[40px] text-slate-900 leading-tight">
-              Riwayat Pembelian
+              Riwayat Pembelian & Buyback
             </h1>
             <p className="text-[13px] text-slate-500 mt-1">
               {totalUnit} transaksi · {formatRupiah(totalPembelian)}
             </p>
           </div>
-          <Link to="/pembelian">
-            <Button className="rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-semibold gap-1.5 shadow-card-elevated">
-              <Plus size={16} />
-              Input
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/buyback">
+              <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-card-elevated">
+                <RotateCcw size={16} />
+                Buyback
+              </Button>
+            </Link>
+            <Link to="/pembelian">
+              <Button className="rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-semibold gap-1.5 shadow-card-elevated">
+                <Plus size={16} />
+                Input
+              </Button>
+            </Link>
+          </div>
         </div>
       </motion.div>
 
@@ -355,7 +363,7 @@ export default function RiwayatPembelian() {
           <div className="flex items-center gap-2 mb-2">
             <Smartphone size={14} className="text-teal-500" />
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-[0.08em]">
-              Total Unit Dibeli
+              Total Transaksi Masuk
             </p>
           </div>
           <p className="font-mono text-[32px] font-bold text-slate-900 leading-none">
@@ -366,7 +374,7 @@ export default function RiwayatPembelian() {
           <div className="flex items-center gap-2 mb-2">
             <ShoppingBag size={14} className="text-teal-500" />
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-[0.08em]">
-              Total Pembelian
+              Total Pembelian & Buyback
             </p>
           </div>
           <p className="font-mono text-[32px] font-bold text-slate-900 leading-none">
@@ -478,7 +486,7 @@ export default function RiwayatPembelian() {
                               <TransactionStaffBadge transaction={item} />
                             </div>
                             <TransactionStockDetails items={item.stock_items} />
-                            {item.stock_items.length > 0 && (
+                            {item.type === 'Pembelian' && item.stock_items.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {item.stock_items.map((unit) => (
                                   <button
@@ -525,7 +533,7 @@ export default function RiwayatPembelian() {
           {transactions.length === 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
               <Smartphone size={48} className="mx-auto text-slate-300 mb-4" />
-              <p className="text-[15px] font-medium text-slate-500">Belum ada transaksi pembelian</p>
+              <p className="text-[15px] font-medium text-slate-500">Belum ada transaksi pembelian atau buyback</p>
               <p className="text-[12px] text-slate-400 mt-1">
                 Transaksi pembelian akan muncul di sini setelah dicatat
               </p>

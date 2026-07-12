@@ -4,6 +4,7 @@ const DELETE_SUPPORTED_TYPES = new Set([
   'Penjualan',
   'Pembelian',
   'Tukar Tambah',
+  'Buyback',
   'Pengeluaran',
   'Pemasukan Lain',
   'Upah Servis',
@@ -122,6 +123,10 @@ export function summarizeTransactionDetailForApproval(
   const units = asArray(root.units)
     .map(asRecord)
     .filter((unit): unit is Record<string, unknown> => unit !== null);
+  const buybackUnit = asRecord(root.unit);
+  if (buybackUnit) {
+    units.push(buybackUnit);
+  }
 
   units.forEach((unit, index) => {
     const unitLabel = compactParts([
@@ -166,6 +171,9 @@ export function summarizeTransactionDetailForApproval(
   const customer = asRecord(root.customer);
   const customerName = firstString(customer, ['name']);
   if (customerName) lines.push(`Customer: ${customerName}`);
+
+  const buybackPrice = firstNumber(root, ['buybackPrice', 'buyback_price']);
+  if (buybackPrice > 0) lines.push(`Buyback: ${formatIdr(buybackPrice)}`);
 
   const payment = asRecord(root.payment);
   const debt = firstNumber(payment, ['debt', 'hutang']);

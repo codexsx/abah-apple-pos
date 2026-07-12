@@ -15,6 +15,7 @@ import Pembelian from './pages/Pembelian';
 import Servis from './pages/Servis';
 import Pengeluaran from './pages/Pengeluaran';
 import TukarTambah from './pages/TukarTambah';
+import Buyback from './pages/Buyback';
 import Stok from './pages/Stok';
 
 const CHUNK_RELOAD_KEY = 'abah-pos:chunk-reload-attempted';
@@ -145,6 +146,7 @@ function AppRoutes() {
         <Route path="/servis" element={<PermissionRoute permission="servis"><Servis /></PermissionRoute>} />
         <Route path="/pengeluaran" element={<PermissionRoute permission="pengeluaran"><Pengeluaran /></PermissionRoute>} />
         <Route path="/tukar-tambah" element={<PermissionRoute permission="tukar_tambah"><TukarTambah /></PermissionRoute>} />
+        <Route path="/buyback" element={<PermissionRoute permission="pembelian"><Buyback /></PermissionRoute>} />
         <Route path="/stok" element={<PermissionRoute permission="stok"><Stok /></PermissionRoute>} />
         <Route
           path="/absensi"

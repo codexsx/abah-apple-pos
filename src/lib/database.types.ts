@@ -188,7 +188,7 @@ export type Database = {
       transactions: {
         Row: {
           id: string;
-          type: 'Penjualan' | 'Pembelian' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
+          type: 'Penjualan' | 'Pembelian' | 'Buyback' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
           description: string;
           detail: string;
           amount: number;
@@ -197,7 +197,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          type: 'Penjualan' | 'Pembelian' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
+          type: 'Penjualan' | 'Pembelian' | 'Buyback' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
           description?: string;
           detail?: string;
           amount?: number;
@@ -206,7 +206,7 @@ export type Database = {
         };
         Update: {
           id?: string;
-          type?: 'Penjualan' | 'Pembelian' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
+          type?: 'Penjualan' | 'Pembelian' | 'Buyback' | 'Servis' | 'Pengeluaran' | 'Tukar Tambah';
           description?: string;
           detail?: string;
           amount?: number;

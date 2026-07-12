@@ -23,6 +23,7 @@ import {
   Loader2,
   Camera,
   Store,
+  RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCompanyProfile } from '@/contexts/useCompanyProfile';
@@ -352,6 +353,15 @@ const actionWidgets: ActionWidgetData[] = [
     iconBg: 'rgba(6, 182, 212, 0.12)',
     route: '/tukar-tambah',
   },
+  {
+    title: 'Buyback',
+    description: 'Customer jual HP',
+    icon: RotateCcw,
+    accent: '#0D9488',
+    bgTint: 'rgba(13, 148, 136, 0.06)',
+    iconBg: 'rgba(13, 148, 136, 0.12)',
+    route: '/buyback',
+  },
 ];
 
 const operasiItems: RouteMenuItem[] = [
@@ -365,6 +375,7 @@ const riwayatItems: RouteMenuItem[] = [
   { label: 'Riwayat Penjualan', route: '/riwayat/penjualan' },
   { label: 'Riwayat Kas', route: '/riwayat/pengeluaran' },
   { label: 'Riwayat Tukar Tambah', route: '/riwayat/tukar-tambah' },
+  { label: 'Riwayat Buyback', route: '/riwayat/pembelian' },
 ];
 
 function ActionWidget({ card, index }: { card: ActionWidgetData; index: number }) {
@@ -795,6 +806,7 @@ const activityTypeStyles: Record<string, { bg: string; text: string }> = {
   'Servis': { bg: '#F5F3FF', text: '#7C3AED' },
   'Pengeluaran': { bg: '#F1F5F9', text: '#475569' },
   'Tukar Tambah': { bg: '#ECFEFF', text: '#0891B2' },
+  'Buyback': { bg: '#ECFDF5', text: '#0D9488' },
 };
 
 function formatActivityTime(iso: string) {
@@ -988,7 +1000,7 @@ export default function Home() {
       (acc, t) => acc + getRecognizedSalesUnitCount(t),
       0,
     );
-    const pembelianToday = sum('Pembelian');
+    const pembelianToday = sum('Pembelian') + sum('Buyback');
     const pengeluaranToday = sum('Pengeluaran') + sum('Upah Servis');
 
     const readyUnits = stock
@@ -1003,7 +1015,7 @@ export default function Home() {
 
     const miniStatsLive: MiniStat[] = [
       { label: 'Penjualan', icon: 'TrendingUp', value: penjualanUnitToday, unit: 'Hari Ini', color: '#14B8A6' },
-      { label: 'Pembelian', icon: 'ShoppingBag', value: countToday('Pembelian'), unit: 'Hari Ini', color: '#D4A574' },
+      { label: 'Pembelian', icon: 'ShoppingBag', value: countToday('Pembelian') + countToday('Buyback'), unit: 'Hari Ini', color: '#D4A574' },
       { label: 'Servis Aktif', icon: 'Wrench', value: servisAktif, unit: 'Dalam Proses', color: '#8B5CF6' },
       { label: 'Stok Ready', icon: 'Package', value: readyUnits, unit: 'Unit', color: '#10B981' },
     ];

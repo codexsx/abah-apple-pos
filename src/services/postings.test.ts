@@ -9,6 +9,7 @@ import {
   recordAgentPaymentWithPosting,
   recordPurchaseWithPostings,
   recordAccessoryPurchaseWithPostings,
+  recordBuybackWithPostings,
 } from './postings';
 import type { Posting } from '@/services/paymentPosting';
 
@@ -301,5 +302,58 @@ describe('recordAccessoryPurchaseWithPostings', () => {
         ],
       }),
     ).rejects.toBe(rpcError);
+  });
+});
+
+describe('recordBuybackWithPostings', () => {
+  it('passes payment postings and the reacquired unit to the buyback RPC', async () => {
+    rpcMock.mockResolvedValue({ data: 'tx-buyback', error: null });
+
+    const result = await recordBuybackWithPostings({
+      type: 'Buyback',
+      description: 'Buyback - 1 unit iPhone 13',
+      detail: '{"kind":"buyback"}',
+      amount: 4_800_000,
+      postings: [
+        { account_id: 'acc-cash', direction: 'money_out', amount: 800_000 },
+        { account_id: 'acc-bank', direction: 'money_out', amount: 4_000_000 },
+      ],
+      item: {
+        model: 'iPhone 13',
+        capacity: '128GB',
+        condition: 'Second Inter Unlock',
+        color: 'Midnight',
+        imei: '351234567890123',
+        status: 'READY',
+        price: 5_500_000,
+        cost_price: 4_800_000,
+        battery_health: 88,
+        defect_description: '',
+      },
+    });
+
+    expect(result).toBe('tx-buyback');
+    expect(rpcMock).toHaveBeenCalledWith('record_buyback_with_postings', {
+      p_type: 'Buyback',
+      p_description: 'Buyback - 1 unit iPhone 13',
+      p_detail: '{"kind":"buyback"}',
+      p_amount: 4_800_000,
+      p_postings: [
+        { account_id: 'acc-cash', direction: 'money_out', amount: 800_000, note: '' },
+        { account_id: 'acc-bank', direction: 'money_out', amount: 4_000_000, note: '' },
+      ],
+      p_item: {
+        model: 'iPhone 13',
+        capacity: '128GB',
+        condition: 'Second Inter Unlock',
+        color: 'Midnight',
+        imei: '351234567890123',
+        status: 'READY',
+        price: 5_500_000,
+        cost_price: 4_800_000,
+        battery_health: 88,
+        defect_description: '',
+      },
+    });
   });
 });

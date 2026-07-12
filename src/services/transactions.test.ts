@@ -303,6 +303,36 @@ describe('getTransactionDisplayDetail', () => {
     expect(detail).not.toContain('"hpKeluar"');
   });
 
+  it('formats buyback detail without leaking raw JSON', () => {
+    const detail = getTransactionDisplayDetail({
+      type: 'Buyback',
+      detail: JSON.stringify({
+        kind: 'buyback',
+        customer: { name: 'Adam', phone: '0812' },
+        unit: {
+          model: 'iPhone 13',
+          capacity: '128GB',
+          condition: 'Second Inter Unlock',
+          color: 'Midnight',
+          imei: '351234567890123',
+          batteryHealth: 88,
+          defectDescription: 'Kamera jamur',
+          status: 'READY',
+        },
+        buybackPrice: 4_800_000,
+        payment: { cash: 800_000, transfer: 4_000_000 },
+      }),
+    });
+
+    expect(detail).toContain('Customer: Adam');
+    expect(detail).toContain('Masuk: iPhone 13 128GB Second Inter Unlock Midnight');
+    expect(detail).toContain('IMEI 351234567890123');
+    expect(detail).toContain('BH 88%');
+    expect(detail).toContain('Minus: Kamera jamur');
+    expect(detail).toContain('Buyback Rp 4.800.000');
+    expect(detail).not.toContain('"kind"');
+  });
+
   it('formats legacy expense JSON detail without leaking raw keys', () => {
     const detail = getTransactionDisplayDetail({
       type: 'Pengeluaran',

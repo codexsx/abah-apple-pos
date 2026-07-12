@@ -5,6 +5,7 @@ describe('routePermissions', () => {
   it('maps operational and history routes to the same feature gates as their source pages', () => {
     expect(pathToPermission('/penjualan')).toBe('penjualan');
     expect(pathToPermission('/riwayat/penjualan')).toBe('penjualan');
+    expect(pathToPermission('/buyback')).toBe('pembelian');
     expect(pathToPermission('/pemasukan-lain')).toBe('pengeluaran');
     expect(pathToPermission('/ambil-pelengkap')).toBe('stok');
     expect(pathToPermission('/laporan/tutup-harian')).toBe('finance');

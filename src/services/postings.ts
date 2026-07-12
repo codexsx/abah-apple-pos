@@ -242,6 +242,48 @@ export async function recordTukarTambahWithPostings(
   return data as string;
 }
 
+export interface BuybackItemInput extends PurchaseItemInput {
+  battery_health?: number | null;
+}
+
+/**
+ * Records a Buyback as one atomic unit: transaction history, money_out ledger,
+ * and the re-acquired HP row in stock_items. A previously-sold IMEI may be
+ * re-entered, but an active duplicate IMEI is rejected by the database.
+ */
+export async function recordBuybackWithPostings(
+  input: RecordTransactionInput & {
+    item: BuybackItemInput;
+  },
+): Promise<string> {
+  const { data, error } = await supabase.rpc('record_buyback_with_postings', {
+    p_type: input.type,
+    p_description: input.description,
+    p_detail: input.detail,
+    p_amount: input.amount,
+    p_postings: input.postings.map((p) => ({
+      account_id: p.account_id,
+      direction: p.direction,
+      amount: p.amount,
+      note: '',
+    })),
+    p_item: {
+      model: input.item.model,
+      capacity: input.item.capacity,
+      condition: input.item.condition,
+      color: input.item.color,
+      imei: input.item.imei ?? null,
+      status: input.item.status ?? 'READY',
+      price: input.item.price,
+      cost_price: input.item.cost_price ?? input.item.price,
+      battery_health: input.item.battery_health ?? null,
+      defect_description: input.item.defect_description ?? '',
+    },
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export interface RecordAgentPaymentInput {
   agentId: string;
   amount: number;

@@ -72,6 +72,7 @@ describe('normalizeTransactionChangeRequest', () => {
     expect(isTransactionDeleteRequestSupported('Pemasukan Lain')).toBe(true);
     expect(isTransactionDeleteRequestSupported('Upah Servis')).toBe(true);
     expect(isTransactionDeleteRequestSupported('Tukar Tambah')).toBe(true);
+    expect(isTransactionDeleteRequestSupported('Buyback')).toBe(true);
   });
 });
 
@@ -131,5 +132,35 @@ describe('summarizeTransactionDetailForApproval', () => {
 
     expect(summarizeTransactionDetailForApproval(detail)).toContain('IMEI: 352914118821897');
     expect(summarizeTransactionDetailForApproval(detail)).toContain('Customer: Adam');
+  });
+
+  it('shows buyback unit identifiers and buyback price', () => {
+    const detail = JSON.stringify({
+      kind: 'buyback',
+      customer: { name: 'Adam' },
+      unit: {
+        model: 'iPhone 13',
+        capacity: '128GB',
+        condition: 'Second Inter Unlock',
+        color: 'Midnight',
+        imei: '351234567890123',
+        batteryHealth: 88,
+        defectDescription: 'Kamera jamur',
+        costPrice: 4_800_000,
+      },
+      buybackPrice: 4_800_000,
+      payment: { cash: 800_000, transfer: 4_000_000 },
+    });
+
+    const lines = summarizeTransactionDetailForApproval(detail);
+
+    expect(lines).toEqual(expect.arrayContaining([
+      'Customer: Adam',
+      'Unit 1: iPhone 13 128GB Second Inter Unlock Midnight',
+      'IMEI: 351234567890123',
+      'BH: 88%',
+      'Minus: Kamera jamur',
+      'Buyback: Rp 4.800.000',
+    ]));
   });
 });

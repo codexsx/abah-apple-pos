@@ -29,6 +29,7 @@ import {
   Trophy,
   CalendarCheck,
   ClipboardCheck,
+  RotateCcw,
 } from 'lucide-react';
 import {
   Sheet,
@@ -68,6 +69,7 @@ const navLinks: NavLink[] = [
   { path: '/servis', label: 'Servis', icon: Wrench },
   { path: '/pengeluaran', label: 'Pengeluaran', shortLabel: 'Keluar', icon: Receipt },
   { path: '/tukar-tambah', label: 'Tukar Tambah', shortLabel: 'Tukar', icon: ArrowLeftRight },
+  { path: '/buyback', label: 'Buyback', icon: RotateCcw },
   { path: '/stok', label: 'Stok', icon: Package },
   { path: '/agen', label: 'Agen', icon: Users },
 ];
@@ -81,6 +83,7 @@ const sheetSections = [
       { path: '/servis', label: 'Servis', icon: Wrench },
       { path: '/pengeluaran', label: 'Pengeluaran', icon: Receipt },
       { path: '/tukar-tambah', label: 'Tukar Tambah', icon: ArrowLeftRight },
+      { path: '/buyback', label: 'Buyback Customer', icon: RotateCcw },
     ],
   },
   {

@@ -23,6 +23,7 @@ export function pathToPermission(path: string): PermissionKey | null {
     case '/riwayat/penjualan':
       return 'penjualan';
     case '/pembelian':
+    case '/buyback':
     case '/riwayat/pembelian':
       return 'pembelian';
     case '/servis':
