@@ -22,6 +22,27 @@ $$;
 revoke all on function private.can_transaction_type(text) from public, anon, authenticated;
 grant execute on function private.can_transaction_type(text) to authenticated;
 
+alter table public.transactions
+  drop constraint if exists transactions_type_check;
+
+alter table public.transactions
+  add constraint transactions_type_check
+  check (
+    type = any (
+      array[
+        'Penjualan'::text,
+        'Pembelian'::text,
+        'Pembelian Pelengkap'::text,
+        'Buyback'::text,
+        'Servis'::text,
+        'Pengeluaran'::text,
+        'Tukar Tambah'::text,
+        'Pemasukan Lain'::text,
+        'Upah Servis'::text
+      ]
+    )
+  );
+
 create or replace function public.record_buyback_with_postings(
   p_type text,
   p_description text,
