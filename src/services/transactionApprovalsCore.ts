@@ -3,6 +3,7 @@ export type TransactionChangeAction = 'edit' | 'delete';
 const DELETE_SUPPORTED_TYPES = new Set([
   'Penjualan',
   'Pembelian',
+  'Tukar Tambah',
   'Pengeluaran',
   'Pemasukan Lain',
   'Upah Servis',

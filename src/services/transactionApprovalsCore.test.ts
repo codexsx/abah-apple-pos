@@ -71,7 +71,7 @@ describe('normalizeTransactionChangeRequest', () => {
     expect(isTransactionDeleteRequestSupported('Pengeluaran')).toBe(true);
     expect(isTransactionDeleteRequestSupported('Pemasukan Lain')).toBe(true);
     expect(isTransactionDeleteRequestSupported('Upah Servis')).toBe(true);
-    expect(isTransactionDeleteRequestSupported('Tukar Tambah')).toBe(false);
+    expect(isTransactionDeleteRequestSupported('Tukar Tambah')).toBe(true);
   });
 });
 
