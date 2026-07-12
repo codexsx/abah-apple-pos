@@ -95,6 +95,54 @@ interface AccessoryItem {
   price: number;
 }
 
+type SupabaseErrorLike = {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+};
+
+function getTukarTambahSaveErrorMessage(error: unknown): string {
+  const dbError = (error ?? {}) as SupabaseErrorLike;
+  const code = typeof dbError.code === 'string' ? dbError.code : '';
+  const message = [
+    typeof dbError.message === 'string' ? dbError.message : '',
+    typeof dbError.details === 'string' ? dbError.details : '',
+  ].join(' ').toLowerCase();
+
+  if (
+    code === '23505' &&
+    (
+      message.includes('stock_items_active_imei_unique') ||
+      message.includes('stock_items_imei_unique') ||
+      message.includes('(imei)')
+    )
+  ) {
+    return 'IMEI HP masuk sudah tercatat sebagai stok aktif. Periksa IMEI atau status unit di menu Stok.';
+  }
+
+  if (code === '42501') {
+    return 'Akun ini tidak memiliki izin untuk menyimpan Tukar Tambah.';
+  }
+
+  if (
+    (code === 'P0001' || code === 'P0002') &&
+    message.includes('stock item') &&
+    message.includes('not found')
+  ) {
+    return 'Unit HP keluar sudah tidak tersedia. Muat ulang stok lalu pilih unit kembali.';
+  }
+
+  if (code === '23503') {
+    return 'Akun kas/bank atau unit stok sudah tidak tersedia. Muat ulang halaman lalu coba kembali.';
+  }
+
+  if (message.includes('failed to fetch') || message.includes('network')) {
+    return 'Koneksi ke server terputus. Periksa internet lalu coba kembali.';
+  }
+
+  return 'Transaksi tidak dapat disimpan. Silakan coba lagi.';
+}
+
 /* ──────────────────────────────── constants */
 const TIPE_OPTIONS = [
   'iPhone 8 Plus', 'iPhone SE Gen 2', 'iPhone SE Gen 3',
@@ -718,8 +766,8 @@ export default function TukarTambah() {
       // Reload READY stock so the just-sold HP Keluar (now TERJUAL) drops out
       // and the new trade-in unit appears.
       setStockReloadKey((k) => k + 1);
-    } catch {
-      setSaveError('Transaksi tidak dapat disimpan. Silakan coba lagi.');
+    } catch (error) {
+      setSaveError(getTukarTambahSaveErrorMessage(error));
     } finally {
       setSaving(false);
     }

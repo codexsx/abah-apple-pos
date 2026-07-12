@@ -276,6 +276,27 @@ describe('positive Selisih (HP keluar price > appraisal)', () => {
       count: 1,
     });
   });
+
+  it('shows a clear active IMEI duplicate error', async () => {
+    mockRecord.mockRejectedValueOnce({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "stock_items_active_imei_unique"',
+    });
+
+    renderPage();
+
+    await fillCommonFields(3_000_000);
+    const absSelisih = HP_KELUAR.price - 3_000_000;
+    setPriceByLabel('Cash', String(absSelisih));
+    await selectCashAccount();
+
+    await waitFor(() => expect(getSaveButton()).toBeEnabled());
+    fireEvent.click(getSaveButton());
+
+    expect(
+      await screen.findByText(/IMEI HP masuk sudah tercatat sebagai stok aktif/i),
+    ).toBeInTheDocument();
+  });
 });
 
 // ===========================================================================
