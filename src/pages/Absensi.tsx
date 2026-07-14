@@ -211,6 +211,7 @@ export default function Absensi() {
   const [reviewingOffId, setReviewingOffId] = useState<string | null>(null);
   const [requestingRevisionId, setRequestingRevisionId] = useState<string | null>(null);
   const [reviewingRevisionId, setReviewingRevisionId] = useState<string | null>(null);
+  const [bulkReviewing, setBulkReviewing] = useState<string | null>(null);
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [mirrorCamera, setMirrorCamera] = useState(true);
@@ -365,6 +366,14 @@ export default function Absensi() {
       }).length > 0)
       .map(({ item }) => item)
   ), [attendanceItems, historyQuery, historyStatus]);
+
+  const pendingFilteredRecords = useMemo(() => (
+    filteredAttendanceItems
+      .filter((item): item is AttendanceListItem & { type: 'record'; record: AttendanceRecord } => (
+        item.type === 'record' && item.record.status === 'pending'
+      ))
+      .map((item) => item.record)
+  ), [filteredAttendanceItems]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -643,6 +652,26 @@ export default function Absensi() {
     }
   }
 
+  async function reviewOffBulk(status: 'approved' | 'rejected') {
+    if (!user?.id || pendingOffRequests.length === 0) return;
+    const actionKey = `off-${status}`;
+    setBulkReviewing(actionKey);
+    setError('');
+    try {
+      await Promise.all(pendingOffRequests.map((request) => reviewAttendanceOffRequest({
+        id: request.id,
+        status,
+        reviewerId: user.id,
+      })));
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] bulk off review error:', err);
+      setError(err instanceof Error ? err.message : 'Request libur massal tidak dapat diproses.');
+    } finally {
+      setBulkReviewing(null);
+    }
+  }
+
   function updateRevisionDraft(recordId: string, patch: Partial<{ shiftId: string; reason: string }>) {
     setRevisionDrafts((current) => ({
       ...current,
@@ -718,6 +747,33 @@ export default function Absensi() {
     }
   }
 
+  async function reviewRevisionBulk(status: 'approved' | 'rejected') {
+    if (pendingRevisionRequests.length === 0) return;
+    const actionKey = `revision-${status}`;
+    setBulkReviewing(actionKey);
+    setError('');
+    try {
+      await Promise.all(pendingRevisionRequests.map((request) => reviewAttendanceRevisionRequest({
+        id: request.id,
+        status,
+        note: revisionReviewNotes[request.id],
+      })));
+      setRevisionReviewNotes((current) => {
+        const next = { ...current };
+        pendingRevisionRequests.forEach((request) => {
+          delete next[request.id];
+        });
+        return next;
+      });
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] bulk revision review error:', err);
+      setError(err instanceof Error ? err.message : 'Request revisi shift massal tidak dapat diproses.');
+    } finally {
+      setBulkReviewing(null);
+    }
+  }
+
   async function verify(record: AttendanceRecord, status: AttendanceStatus) {
     if (!user?.id) return;
     setVerifyingId(record.id);
@@ -734,6 +790,26 @@ export default function Absensi() {
       setError(err instanceof Error ? err.message : 'Status absensi tidak dapat diubah.');
     } finally {
       setVerifyingId(null);
+    }
+  }
+
+  async function verifyBulk(status: AttendanceStatus) {
+    if (!user?.id || pendingFilteredRecords.length === 0) return;
+    const actionKey = `attendance-${status}`;
+    setBulkReviewing(actionKey);
+    setError('');
+    try {
+      await Promise.all(pendingFilteredRecords.map((record) => verifyAttendanceRecord({
+        id: record.id,
+        status,
+        verifierId: user.id,
+      })));
+      await loadData();
+    } catch (err) {
+      console.error('[Absensi] bulk verify error:', err);
+      setError(err instanceof Error ? err.message : 'Approval absensi massal tidak dapat diproses.');
+    } finally {
+      setBulkReviewing(null);
     }
   }
 
@@ -1118,6 +1194,104 @@ export default function Absensi() {
               )}
             </div>
           </div>
+
+          {canManage && (
+            <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-emerald-100">
+                    <ShieldCheck size={16} />
+                  </span>
+                  <div>
+                    <h3 className="text-[14px] font-bold text-slate-950">Approval Massal</h3>
+                    <p className="text-[11px] font-semibold text-slate-500">
+                      Proses banyak data pending tanpa review satu per satu.
+                    </p>
+                  </div>
+                </div>
+                {bulkReviewing && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                    <Loader2 size={13} className="animate-spin" />
+                    Memproses
+                  </span>
+                )}
+              </div>
+
+              <div className="grid gap-2 lg:grid-cols-3">
+                <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Absen pending</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-950">{pendingFilteredRecords.length}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Sesuai filter tanggal/staff saat ini.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => verifyBulk('rejected')}
+                      disabled={pendingFilteredRecords.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <XCircle size={14} /> Tolak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => verifyBulk('approved')}
+                      disabled={pendingFilteredRecords.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <ShieldCheck size={14} /> Approve
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Off / libur pending</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-950">{pendingOffRequests.length}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Semua request off/libur yang belum diproses.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => reviewOffBulk('rejected')}
+                      disabled={pendingOffRequests.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <XCircle size={14} /> Tolak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => reviewOffBulk('approved')}
+                      disabled={pendingOffRequests.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <ShieldCheck size={14} /> Approve
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Revisi shift pending</p>
+                  <p className="mt-1 text-[18px] font-black text-slate-950">{pendingRevisionRequests.length}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-slate-500">Semua koreksi shift yang menunggu approval.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => reviewRevisionBulk('rejected')}
+                      disabled={pendingRevisionRequests.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <XCircle size={14} /> Tolak
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => reviewRevisionBulk('approved')}
+                      disabled={pendingRevisionRequests.length === 0 || bulkReviewing !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-[12px] font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      <ShieldCheck size={14} /> Approve
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {pendingOffRequests.length > 0 && (
             <div className="mb-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-3">
