@@ -14,6 +14,8 @@ export const MAX_IDR = 999_999_999_999;
 
 // ---------- Domain types ----------
 
+import type { DeviceCategory } from '@/services/stockCore';
+
 export interface FinalizedUnit {
   imei: string;
   model: string;
@@ -22,6 +24,8 @@ export interface FinalizedUnit {
   color: string;
   defectDescription?: string;
   batteryHealth?: number;
+  /** IPHONE (default) | IPAD — iPad: `imei` berisi Serial Number. */
+  deviceCategory?: DeviceCategory;
   sellingPrice: number; // integer IDR
 }
 
@@ -65,6 +69,8 @@ export interface SaleDetail {
     color: string;
     defectDescription?: string;
     batteryHealth?: number;
+    /** IPHONE (default) | IPAD — iPad: `imei` berisi Serial Number. */
+    deviceCategory?: DeviceCategory;
   }>;
   manualSalePrice: number;
   imeiActivationPrice: number;
@@ -257,6 +263,7 @@ export function toSaleDetail(sale: AssembledSale): SaleDetail {
       color: unit.color,
       ...(unit.defectDescription ? { defectDescription: unit.defectDescription } : {}),
       ...(unit.batteryHealth !== undefined ? { batteryHealth: unit.batteryHealth } : {}),
+      ...(unit.deviceCategory ? { deviceCategory: unit.deviceCategory } : {}),
     })),
     manualSalePrice: sale.manualSalePrice,
     imeiActivationPrice: sale.imeiActivationPrice,
@@ -298,6 +305,7 @@ export function deserializeSaleDetail(serialized: string): SaleDetail {
         ...(unit.batteryHealth !== undefined
           ? { batteryHealth: Number(unit.batteryHealth) || 0 }
           : {}),
+        ...(unit.deviceCategory ? { deviceCategory: unit.deviceCategory } : {}),
       }))
     : [];
 

@@ -40,6 +40,7 @@ import {
 import { getAccessories, type Accessory } from '@/services/accessories';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
 import {
+  identifierLabel,
   normalizeStockEditDraft,
   STOCK_STATUSES,
   type StockEditDraft,
@@ -99,6 +100,7 @@ function stockItemToEditDraft(item: StockItem): StockEditDraft {
     condition: item.condition,
     color: item.color,
     hasImei: item.has_imei,
+    deviceCategory: item.device_category ?? 'IPHONE',
     imei: item.imei ?? '',
     price: formatIdrInput(item.price),
     costPrice: formatIdrInput(item.cost_price),
@@ -428,10 +430,12 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="stock-edit-imei">IMEI</Label>
+                <Label htmlFor="stock-edit-imei">
+                  {editDraft.deviceCategory === 'IPAD' ? 'Serial Number (SN)' : 'IMEI'}
+                </Label>
                 <Input
                   id="stock-edit-imei"
-                  inputMode="numeric"
+                  inputMode={editDraft.deviceCategory === 'IPAD' ? 'text' : 'numeric'}
                   value={editDraft.imei}
                   disabled={!editDraft.hasImei}
                   onChange={(event) => updateEditDraft('imei', event.target.value)}
@@ -612,6 +616,11 @@ function StatusSection({
                           {item.model}
                         </span>
                         <span className="text-[12px] text-slate-500">{item.capacity}</span>
+                        {item.device_category === 'IPAD' && (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                            iPad
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 text-[12px] text-slate-500 flex-wrap">
                         <ColorDot color={item.color} size={7} />
@@ -620,7 +629,11 @@ function StatusSection({
                         <span>{item.condition}</span>
                         <span className="text-slate-300">|</span>
                         <span className="font-mono text-[11px]">
-                          {item.has_imei && item.imei ? item.imei : 'Tanpa IMEI'}
+                          {item.has_imei && item.imei
+                            ? item.device_category === 'IPAD'
+                              ? `${identifierLabel(item.device_category)}: ${item.imei}`
+                              : item.imei
+                            : 'Tanpa IMEI'}
                         </span>
                         {!item.has_imei && item.count > 1 && (
                           <>
@@ -944,7 +957,7 @@ function TabIntegritas() {
 
   const steps = [
     'Memuat data stok...',
-    'Mengecek duplikat IMEI...',
+    'Mengecek duplikat IMEI/SN...',
     'Mengecek anomali unit...',
     'Selesai',
   ];
@@ -1037,7 +1050,7 @@ function TabIntegritas() {
           <div>
             <h2 className="text-[18px] font-semibold text-slate-900">Cek Integritas Stok</h2>
             <p className="text-[13px] text-slate-500 mt-0.5">
-              Deteksi anomali: IMEI ganda, status tidak valid, IMEI hilang, dan count negatif.
+              Deteksi anomali: IMEI/SN ganda, status tidak valid, IMEI/SN hilang, dan count negatif.
             </p>
           </div>
           {!isScanning && !scanComplete && (
@@ -1206,7 +1219,7 @@ function TabIntegritas() {
                   </span>
                 </div>
                 <p className="text-[12px] text-slate-500 mb-3">
-                  Status tidak valid, IMEI hilang, atau count negatif
+                  Status tidak valid, IMEI/SN hilang, atau count negatif
                 </p>
                 {result.problematicUnits.map((issue, idx) => {
                   const item = issue.item;
@@ -1214,7 +1227,7 @@ function TabIntegritas() {
                     issue.type === 'invalid-status'
                       ? 'Status tidak valid'
                       : issue.type === 'missing-imei'
-                      ? 'IMEI hilang'
+                      ? 'IMEI/SN hilang'
                       : 'Count negatif';
                   return (
                     <div
@@ -1253,12 +1266,12 @@ function TabIntegritas() {
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Copy size={16} className="text-amber-500" />
-                  <h3 className="text-[16px] font-semibold text-slate-900">IMEI Ganda</h3>
+                  <h3 className="text-[16px] font-semibold text-slate-900">IMEI/SN Ganda</h3>
                   <span className="ml-auto font-mono text-[22px] font-bold text-amber-500">
                     {result.duplicateImeis.length}
                   </span>
                 </div>
-                <p className="text-[12px] text-slate-500 mb-3">IMEI yang terdaftar lebih dari sekali</p>
+                <p className="text-[12px] text-slate-500 mb-3">IMEI/SN yang terdaftar lebih dari sekali</p>
                 {result.duplicateImeis.map((issue) => (
                   <div
                     key={issue.imei}
@@ -1294,7 +1307,7 @@ function TabIntegritas() {
                 <CheckCircle2 size={48} className="mx-auto text-emerald-500 mb-3" />
                 <p className="text-[15px] font-medium text-slate-700">Tidak ditemukan anomali stok</p>
                 <p className="text-[12px] text-slate-400 mt-1">
-                  Semua unit memiliki IMEI unik, status valid, dan count non-negatif.
+                  Semua unit memiliki IMEI/SN unik, status valid, dan count non-negatif.
                 </p>
               </motion.div>
             )}
@@ -1369,7 +1382,7 @@ export default function Stok() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari IMEI, model, atau kategori..."
+              placeholder="Cari IMEI/SN, model, atau kategori..."
               className="h-10 w-full sm:w-[280px] rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-[14px] text-slate-700 transition-colors duration-200 focus:outline-none focus:ring-[3px] focus:ring-teal-500/10 focus:border-teal-500"
             />
           </div>

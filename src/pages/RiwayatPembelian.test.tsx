@@ -3,14 +3,14 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import type { TransactionWithStockDetails } from '@/services/transactions';
 
-// Mock the transactions service so getTransactionsWithStockDetailsByType is a controllable spy.
+// Mock the transactions service so getTransactionsWithStockDetailsByTypes is a controllable spy.
 vi.mock('@/services/transactions', async () => {
   const actual = await vi.importActual<typeof import('@/services/transactions')>(
     '@/services/transactions',
   );
   return {
     ...actual,
-    getTransactionsWithStockDetailsByType: vi.fn(),
+    getTransactionsWithStockDetailsByTypes: vi.fn(),
   };
 });
 
@@ -22,12 +22,12 @@ vi.mock('@/services/technicians', () => ({
   getTechnicians: vi.fn(),
 }));
 
-import { getTransactionsWithStockDetailsByType } from '@/services/transactions';
+import { getTransactionsWithStockDetailsByTypes } from '@/services/transactions';
 import { recordServiceWithStockStatus } from '@/services/services';
 import { getTechnicians } from '@/services/technicians';
 import RiwayatPembelian from './RiwayatPembelian';
 
-const mockedGetByType = vi.mocked(getTransactionsWithStockDetailsByType);
+const mockedGetByTypes = vi.mocked(getTransactionsWithStockDetailsByTypes);
 const mockedRecordServiceWithStockStatus = vi.mocked(recordServiceWithStockStatus);
 const mockedGetTechnicians = vi.mocked(getTechnicians);
 
@@ -77,13 +77,13 @@ describe('RiwayatPembelian — integration', () => {
       makeTx({ id: 'TRX-001', description: 'iPhone 13 Pro', created_at: RECENT_DATE }),
       makeTx({ id: 'TRX-002', description: 'Samsung S22', amount: 8_500_000, created_at: RECENT_DATE }),
     ];
-    mockedGetByType.mockResolvedValueOnce(txs);
+    mockedGetByTypes.mockResolvedValueOnce(txs);
 
     renderPage();
 
     // Called exactly once with the 'Pembelian' type.
-    expect(mockedGetByType).toHaveBeenCalledTimes(1);
-    expect(mockedGetByType).toHaveBeenCalledWith('Pembelian');
+    expect(mockedGetByTypes).toHaveBeenCalledTimes(1);
+    expect(mockedGetByTypes).toHaveBeenCalledWith(['Pembelian', 'Buyback']);
 
     // After the promise resolves, the transactions render.
     expect(await screen.findByText('iPhone 13 Pro')).toBeTruthy();
@@ -118,16 +118,16 @@ describe('RiwayatPembelian — integration', () => {
         ],
       }),
     ];
-    mockedGetByType.mockResolvedValueOnce(txs);
+    mockedGetByTypes.mockResolvedValueOnce(txs);
 
     renderPage();
 
     expect(await screen.findByText('iPhone 14 Pro 128GB')).toBeInTheDocument();
-    expect(screen.getByText('352461789012342')).toBeInTheDocument();
+    expect(screen.getByText(/352461789012342/)).toBeInTheDocument();
   });
 
   it('records a warranty claim for one purchased stock unit and sends it to service with the selected technician', async () => {
-    mockedGetByType.mockResolvedValue([
+    mockedGetByTypes.mockResolvedValue([
       makeTx({
         id: 'TRX-BULK',
         description: 'Pembelian 10 unit iPhone 11',
@@ -182,18 +182,18 @@ describe('RiwayatPembelian — integration', () => {
   });
 
   it('renders the empty state when no purchases are returned', async () => {
-    mockedGetByType.mockResolvedValueOnce([]);
+    mockedGetByTypes.mockResolvedValueOnce([]);
 
     renderPage();
 
-    expect(mockedGetByType).toHaveBeenCalledWith('Pembelian');
+    expect(mockedGetByTypes).toHaveBeenCalledWith(['Pembelian', 'Buyback']);
 
-    expect(await screen.findByText('Belum ada transaksi pembelian')).toBeTruthy();
+    expect(await screen.findByText('Belum ada transaksi pembelian atau buyback')).toBeTruthy();
   });
 
   it('renders the error state with a retry button when the fetch rejects, and refetches on retry', async () => {
     // First call rejects → error state.
-    mockedGetByType.mockRejectedValueOnce(new Error('Network down'));
+    mockedGetByTypes.mockRejectedValueOnce(new Error('Network down'));
 
     renderPage();
 
@@ -205,7 +205,7 @@ describe('RiwayatPembelian — integration', () => {
     expect(retryButton).toBeTruthy();
 
     // Second call (on retry) succeeds → list renders.
-    mockedGetByType.mockResolvedValueOnce([makeTx({ description: 'Xiaomi 13' })]);
+    mockedGetByTypes.mockResolvedValueOnce([makeTx({ description: 'Xiaomi 13' })]);
 
     fireEvent.click(retryButton);
 
@@ -213,7 +213,7 @@ describe('RiwayatPembelian — integration', () => {
 
     // Error state cleared, and the service was called again (mount + retry).
     await waitFor(() => expect(screen.queryByText('Gagal memuat transaksi')).toBeNull());
-    expect(mockedGetByType).toHaveBeenCalledTimes(2);
-    expect(mockedGetByType).toHaveBeenLastCalledWith('Pembelian');
+    expect(mockedGetByTypes).toHaveBeenCalledTimes(2);
+    expect(mockedGetByTypes).toHaveBeenLastCalledWith(['Pembelian', 'Buyback']);
   });
 });

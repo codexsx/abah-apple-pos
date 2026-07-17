@@ -405,7 +405,7 @@ describe('Servis warranty claim from sold store unit', () => {
     fireEvent.click(checkButton);
 
     expect(
-      await screen.findByText('Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI ini.'),
+      await screen.findByText('Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI/SN ini.'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Virtual Customer')).not.toBeInTheDocument();
     expect(mockRecordServiceWithStockStatus).not.toHaveBeenCalled();

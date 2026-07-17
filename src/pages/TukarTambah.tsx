@@ -44,6 +44,12 @@ import {
 } from '@/services/paymentPosting';
 import { recordTukarTambahWithPostings } from '@/services/postings';
 import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
+import {
+  identifierLabel,
+  isValidSerialNumber,
+  normalizeSerialNumber,
+  type DeviceCategory,
+} from '@/services/stockCore';
 
 /* ──────────────────────────────── easing tokens */
 const easeSmooth = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -101,7 +107,7 @@ type SupabaseErrorLike = {
   details?: unknown;
 };
 
-function getTukarTambahSaveErrorMessage(error: unknown): string {
+function getTukarTambahSaveErrorMessage(error: unknown, category: DeviceCategory = 'IPHONE'): string {
   const dbError = (error ?? {}) as SupabaseErrorLike;
   const code = typeof dbError.code === 'string' ? dbError.code : '';
   const message = [
@@ -117,7 +123,9 @@ function getTukarTambahSaveErrorMessage(error: unknown): string {
       message.includes('(imei)')
     )
   ) {
-    return 'IMEI HP masuk sudah tercatat sebagai stok aktif. Periksa IMEI atau status unit di menu Stok.';
+    // Constraint yang sama memblok IMEI (iPhone) maupun SN (iPad) duplikat.
+    const idLabel = identifierLabel(category);
+    return `${idLabel} HP masuk sudah tercatat sebagai stok aktif. Periksa ${idLabel} atau status unit di menu Stok.`;
   }
 
   if (code === '42501') {
@@ -370,6 +378,64 @@ function IMEIInput({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
+/* ──────────────────────────────── Serial Number Input (iPad) */
+function SerialNumberInput({
+  value,
+  onChange,
+  duplicate,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  duplicate: boolean;
+}) {
+  const [touched, setTouched] = useState(false);
+  const isValid = isValidSerialNumber(value);
+
+  const getBorderColor = () => {
+    if (!touched && !value) return 'border-slate-300';
+    if (duplicate) return 'border-rose-400';
+    if (isValid) return 'border-emerald-500';
+    if (value.length > 0) return 'border-amber-400';
+    return 'border-slate-300';
+  };
+
+  const getIcon = () => {
+    if (duplicate) return <AlertCircle size={16} className="text-rose-400" />;
+    if (isValid) return <CheckCircle2 size={16} className="text-emerald-500" />;
+    if (value.length > 0) return <AlertCircle size={16} className="text-amber-400" />;
+    return null;
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-1 text-[12px] font-medium text-slate-500 uppercase tracking-[0.04em]">
+        <Hash size={13} strokeWidth={2} />
+        Serial Number (8–14 karakter) <span className="text-rose-500">*</span>
+      </label>
+      <div className="relative">
+        <input
+          type="text"
+          maxLength={14}
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
+          onBlur={() => setTouched(true)}
+          placeholder="DMPX1234ABCD"
+          className={`w-full h-11 rounded-xl border ${getBorderColor()} bg-white px-3 pr-16 font-mono text-[14px] tracking-[0.04em] uppercase transition-colors duration-200 focus:outline-none focus:ring-[3px] focus:ring-teal-500/10 focus:border-teal-500`}
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <span className="text-[11px] font-mono text-slate-400">{value.length}/14</span>
+          {getIcon()}
+        </div>
+      </div>
+      {duplicate && (
+        <p className="text-[12px] font-medium text-rose-600">
+          Serial Number sudah tercatat sebagai stok aktif. Periksa kembali atau ubah status unit di menu Stok.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────────────── Dropdown Select */
 function FormSelect({
   label,
@@ -535,6 +601,9 @@ export default function TukarTambah() {
     appraisal: 0,
   });
 
+  /* ── Kategori perangkat HP Masuk: IPHONE = IMEI 15 digit, IPAD = SN 8–14 ── */
+  const [hpMasukCategory, setHpMasukCategory] = useState<DeviceCategory>('IPHONE');
+
   /* ── HP Keluar state ── */
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHpKeluar, setSelectedHpKeluar] = useState<HPKeluar | null>(null);
@@ -617,6 +686,7 @@ export default function TukarTambah() {
     setNoWhatsapp('');
     setTanggalTransaksi(new Date().toISOString().split('T')[0]);
     setHpMasuk({ tipe: '', kapasitas: '', kondisi: '', warna: '', imei: '', batteryHealth: 85, appraisal: 0 });
+    setHpMasukCategory('IPHONE');
     setSelectedHpKeluar(null);
     setSearchQuery('');
     setCash(0);
@@ -669,6 +739,18 @@ export default function TukarTambah() {
   // A non-zero portion needs its matching account chosen (Req 1.1, 1.2).
   const cashNeedsAccount = paymentRequired && cash > 0 && !cashAccount;
   const transferNeedsAccount = paymentRequired && transfer > 0 && !transferAccount;
+  /* ── identitas unit masuk: IMEI 15 digit (iPhone) vs SN 8–14 (iPad) ── */
+  const isHpMasukIpad = hpMasukCategory === 'IPAD';
+  const normalizedHpMasukSn = normalizeSerialNumber(hpMasuk.imei);
+  // iPad: SN tidak boleh sama dengan SN stok aktif (perbandingan uppercase).
+  const hpMasukSnDuplicate =
+    isHpMasukIpad &&
+    isValidSerialNumber(hpMasuk.imei) &&
+    stockRows.some((r) => !!r.imei && normalizeSerialNumber(r.imei) === normalizedHpMasukSn);
+  const isHpMasukIdentifierValid = isHpMasukIpad
+    ? isValidSerialNumber(hpMasuk.imei) && !hpMasukSnDuplicate
+    : hpMasuk.imei.length === 15;
+  const hpMasukIdentifier = isHpMasukIpad ? normalizedHpMasukSn : hpMasuk.imei;
   const isFormValid =
     namaKonsumen.trim() !== '' &&
     tanggalTransaksi !== '' &&
@@ -676,7 +758,7 @@ export default function TukarTambah() {
     hpMasuk.kapasitas !== '' &&
     hpMasuk.kondisi !== '' &&
     hpMasuk.warna !== '' &&
-    hpMasuk.imei.length === 15 &&
+    isHpMasukIdentifierValid &&
     hpMasuk.appraisal > 0 &&
     selectedHpKeluar !== null &&
     garansi !== '' &&
@@ -724,7 +806,7 @@ export default function TukarTambah() {
     const payload = {
       konsumen: { nama: namaKonsumen, whatsapp: noWhatsapp },
       tanggal: tanggalTransaksi,
-      hpMasuk,
+      hpMasuk: { ...hpMasuk, imei: hpMasukIdentifier },
       hpKeluar: selectedHpKeluar,
       garansi,
       kelengkapan: kelengkapanItems,
@@ -756,7 +838,9 @@ export default function TukarTambah() {
           capacity: hpMasuk.kapasitas,
           condition: hpMasuk.kondisi,
           color: hpMasuk.warna,
-          imei: hpMasuk.imei,
+          imei: hpMasukIdentifier,
+          // IPAD menyimpan Serial Number (uppercase) di field imei.
+          device_category: hpMasukCategory,
           price: hpMasuk.appraisal,
           count: 1,
         },
@@ -767,7 +851,7 @@ export default function TukarTambah() {
       // and the new trade-in unit appears.
       setStockReloadKey((k) => k + 1);
     } catch (error) {
-      setSaveError(getTukarTambahSaveErrorMessage(error));
+      setSaveError(getTukarTambahSaveErrorMessage(error, hpMasukCategory));
     } finally {
       setSaving(false);
     }
@@ -905,7 +989,9 @@ export default function TukarTambah() {
         </div>
         <h2 className="text-[18px] font-semibold text-slate-900 mt-2">HP Masuk (dari Customer)</h2>
         <p className="text-[13px] text-slate-500 mt-0.5 mb-4">
-          Spesifikasi HP yang diberikan customer + harga appraisal toko. IMEI wajib 15 digit.
+          {isHpMasukIpad
+            ? 'Spesifikasi iPad yang diberikan customer + harga appraisal toko. Serial Number wajib 8–14 karakter alfanumerik.'
+            : 'Spesifikasi HP yang diberikan customer + harga appraisal toko. IMEI wajib 15 digit.'}
         </p>
 
         <motion.div
@@ -914,6 +1000,22 @@ export default function TukarTambah() {
           animate="show"
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
+          <motion.div variants={fieldVariants}>
+            <FormSelect
+              label="Kategori Perangkat"
+              icon={Smartphone}
+              value={hpMasukCategory === 'IPAD' ? 'iPad' : 'iPhone'}
+              onChange={(v) => {
+                setHpMasukCategory(v === 'iPad' ? 'IPAD' : 'IPHONE');
+                // Ganti kategori = ganti aturan identitas; kosongkan isian lama.
+                setHpMasuk((p) => ({ ...p, imei: '' }));
+              }}
+              options={['iPhone', 'iPad']}
+              required
+              placeholder="Pilih kategori..."
+            />
+          </motion.div>
+
           <motion.div variants={fieldVariants}>
             <PresetOrCustomSelect
               label="Tipe HP"
@@ -972,10 +1074,18 @@ export default function TukarTambah() {
           </motion.div>
 
           <motion.div variants={fieldVariants} className="md:col-span-2">
-            <IMEIInput
-              value={hpMasuk.imei}
-              onChange={(v) => setHpMasuk((p) => ({ ...p, imei: v }))}
-            />
+            {isHpMasukIpad ? (
+              <SerialNumberInput
+                value={hpMasuk.imei}
+                onChange={(v) => setHpMasuk((p) => ({ ...p, imei: v }))}
+                duplicate={hpMasukSnDuplicate}
+              />
+            ) : (
+              <IMEIInput
+                value={hpMasuk.imei}
+                onChange={(v) => setHpMasuk((p) => ({ ...p, imei: v }))}
+              />
+            )}
           </motion.div>
 
           <motion.div variants={fieldVariants}>

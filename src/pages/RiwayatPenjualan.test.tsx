@@ -127,7 +127,7 @@ describe('RiwayatPenjualan — integration', () => {
     const row = await screen.findByText('iPhone 14 Pro 256GB');
     const detail = row.closest('[class*="bg-slate-50"]') as HTMLElement;
     expect(detail).not.toBeNull();
-    expect(within(detail).getByText('352461789012341')).toBeInTheDocument();
+    expect(within(detail).getByText(/352461789012341/)).toBeInTheDocument();
     expect(within(detail).getByText('Rp 15.000.000')).toBeInTheDocument();
   });
 

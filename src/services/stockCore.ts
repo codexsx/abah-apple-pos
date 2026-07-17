@@ -2,7 +2,7 @@
 // Pure, dependency-free domain core. No React, no Supabase imports.
 //
 // This is the property-tested core for Phase 3 (stock source-of-truth): it
-// holds the status enum, the IMEI-presence rules, the unit-input validation
+// holds the status enum, the device-aware identifier (IMEI/SN) rules, the
 // (first-unmet-rule), and the lifecycle status-transition rule. Validation
 // returns the established `ValidationResult` shape with Indonesian messages and
 // mirrors the style of accountsCore.ts / paymentPosting.ts.
@@ -22,6 +22,24 @@ export const STOCK_STATUSES: readonly StockStatus[] = [
   'RUSAK',
   'TERJUAL',
 ] as const;
+/** Device category — drives which identifier rule applies (IMEI vs SN). */
+export type DeviceCategory = 'IPHONE' | 'IPAD';
+
+/** The canonical, ordered set of valid device categories. */
+export const DEVICE_CATEGORIES: readonly DeviceCategory[] = [
+  'IPHONE',
+  'IPAD',
+] as const;
+
+/** Type guard: a device category is valid iff it is in DEVICE_CATEGORIES. */
+export function isValidDeviceCategory(s: string): s is DeviceCategory {
+  return (DEVICE_CATEGORIES as readonly string[]).includes(s);
+}
+
+/** Label identitas unit berdasarkan kategori: 'SN' untuk IPAD, 'IMEI' selainnya. */
+export function identifierLabel(category?: DeviceCategory | null): string {
+  return category === 'IPAD' ? 'SN' : 'IMEI';
+}
 
 export type StockValidationCode =
   | 'MODEL_REQUIRED'
@@ -37,8 +55,8 @@ export type StockValidationResult =
   | { ok: false; code: StockValidationCode; message: string };
 
 /**
- * The pure-core input model for a stock unit. `imei` is required as 15 digits
- * iff `hasImei`, and must be absent otherwise (Req 2.1–2.4).
+ * The pure-core input model for a stock unit. `imei` is the unit identifier:
+ * 15 digits for IPHONE, 8–14 char SN for IPAD iff `hasImei`; absent otherwise.
  */
 export interface StockUnitInputCore {
   model: string;
@@ -46,7 +64,8 @@ export interface StockUnitInputCore {
   count: number; // integer >= 1
   status: string; // validated against STOCK_STATUSES
   hasImei: boolean;
-  imei: string | null; // required 15 digits iff hasImei
+  imei: string | null; // IMEI 15 digit (IPHONE) / SN (IPAD) iff hasImei
+  deviceCategory?: DeviceCategory; // defaults to 'IPHONE'
 }
 
 export interface StockEditDraft {
@@ -55,7 +74,8 @@ export interface StockEditDraft {
   condition: string;
   color: string;
   hasImei: boolean;
-  imei: string;
+  deviceCategory?: DeviceCategory; // defaults to 'IPHONE'
+  imei: string; // IMEI (IPHONE) atau Serial Number (IPAD)
   price: string | number;
   costPrice: string | number;
   batteryHealth: string | number;
@@ -68,6 +88,7 @@ export interface StockEditPayload {
   condition: string;
   color: string;
   has_imei: boolean;
+  device_category: DeviceCategory;
   imei: string | null;
   price: number;
   cost_price: number;
@@ -83,6 +104,19 @@ export type NormalizeStockEditDraftResult =
 
 /** A real IMEI is exactly 15 digits (Req 2.1). */
 const IMEI_RE = /^\d{15}$/;
+
+/** An Apple serial number (iPad dsb.) is 8–14 uppercase alphanumeric chars. */
+const SN_RE = /^[A-Z0-9]{8,14}$/;
+
+/** Normalize a serial number: trim + uppercase. */
+export function normalizeSerialNumber(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+/** A serial number is valid iff, after normalization, it is 8–14 alphanumeric. */
+export function isValidSerialNumber(value: string): boolean {
+  return SN_RE.test(normalizeSerialNumber(value));
+}
 
 /**
  * A price is valid iff it is an integer in 0..MAX_IDR (Req 3.2). Note 0 is
@@ -126,18 +160,28 @@ export function isValidStatus(s: string): s is StockStatus {
 // ---------- Validation ----------
 
 /**
- * Validate IMEI presence against the `hasImei` flag (Req 2.1, 2.2, 2.3, 2.4).
- * Property 1:
- *  - hasImei === true: valid iff `imei` matches /^\d{15}$/, else
- *    IMEI_REQUIRED_FORMAT.
- *  - hasImei === false: a non-empty (after trim) `imei` is rejected with
- *    IMEI_MUST_BE_ABSENT; null or empty/whitespace is accepted.
+ * Validate the unit identifier against `hasImei` and the device category.
+ *  - hasImei === true, IPHONE: ok iff `imei` is exactly 15 digits.
+ *  - hasImei === true, IPAD:   ok iff `imei` is a valid Serial Number
+ *    (8–14 alphanumeric, case-insensitive — stored uppercase).
+ *  - hasImei === false: a non-empty (after trim) `imei` is rejected.
  */
-export function validateImeiPresence(
+export function validateIdentifierPresence(
+  deviceCategory: DeviceCategory,
   hasImei: boolean,
   imei: string | null,
 ): StockValidationResult {
   if (hasImei) {
+    if (deviceCategory === 'IPAD') {
+      if (imei !== null && isValidSerialNumber(imei)) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        code: 'IMEI_REQUIRED_FORMAT',
+        message: 'Serial Number harus 8–14 karakter alfanumerik',
+      };
+    }
     if (imei !== null && IMEI_RE.test(imei)) {
       return { ok: true };
     }
@@ -161,10 +205,20 @@ export function validateImeiPresence(
 }
 
 /**
+ * Backward-compatible wrapper: validates with the IPHONE rule (15-digit IMEI).
+ */
+export function validateImeiPresence(
+  hasImei: boolean,
+  imei: string | null,
+): StockValidationResult {
+  return validateIdentifierPresence('IPHONE', hasImei, imei);
+}
+
+/**
  * Validate stock unit input in ascending criterion order; return the FIRST
  * unmet rule (Req 3.1, 3.2, 3.3, 3.4, 3.5, 3.6). Property 2 / Property 5:
  *  1) model required (non-empty after trim)            -> MODEL_REQUIRED
- *  2) IMEI presence rules (validateImeiPresence)        -> IMEI_* codes
+ *  2) identifier presence rules (device-aware)         -> IMEI_* codes
  *  3) price integer in 0..MAX_IDR                       -> PRICE_OUT_OF_RANGE
  *  4) count integer >= 1                                -> COUNT_OUT_OF_RANGE
  *  5) status in STOCK_STATUSES                          -> STATUS_INVALID
@@ -181,7 +235,11 @@ export function validateStockUnitInput(
     };
   }
 
-  const imeiResult = validateImeiPresence(input.hasImei, input.imei);
+  const imeiResult = validateIdentifierPresence(
+    input.deviceCategory ?? 'IPHONE',
+    input.hasImei,
+    input.imei,
+  );
   if (!imeiResult.ok) {
     return imeiResult;
   }
@@ -221,8 +279,10 @@ export function normalizeStockEditDraft(
     return { ok: false, message: 'Model wajib diisi' };
   }
 
-  const imei = normalizeText(draft.imei);
-  const imeiResult = validateImeiPresence(draft.hasImei, imei || null);
+  const deviceCategory = draft.deviceCategory ?? 'IPHONE';
+  const rawImei = normalizeText(draft.imei);
+  const imei = deviceCategory === 'IPAD' ? normalizeSerialNumber(rawImei) : rawImei;
+  const imeiResult = validateIdentifierPresence(deviceCategory, draft.hasImei, imei || null);
   if (!imeiResult.ok) {
     return { ok: false, message: imeiResult.message };
   }
@@ -250,6 +310,7 @@ export function normalizeStockEditDraft(
       condition: normalizeText(draft.condition),
       color: normalizeText(draft.color),
       has_imei: draft.hasImei,
+      device_category: deviceCategory,
       imei: draft.hasImei ? imei : null,
       price,
       cost_price: costPrice,

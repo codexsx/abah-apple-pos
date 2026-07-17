@@ -15,6 +15,7 @@ import {
   deserializeSaleDetail,
 } from '@/services/finalization';
 import type { TransactionWithStockDetails } from '@/services/transactions';
+import type { DeviceCategory } from '@/services/stockCore';
 
 /** Snapshot of a finalized sale used to render the printable receipt. */
 export interface ReceiptData {
@@ -49,6 +50,7 @@ function toFinalizedUnit(unit: {
   condition?: string;
   color?: string;
   batteryHealth?: number;
+  deviceCategory?: DeviceCategory;
 }): FinalizedUnit {
   return {
     imei: unit.imei ?? '',
@@ -60,6 +62,8 @@ function toFinalizedUnit(unit: {
     ...(unit.batteryHealth !== undefined
       ? { batteryHealth: Number(unit.batteryHealth) || 0 }
       : {}),
+    // Opsional: data lama tanpa kategori tetap dirender sebagai IMEI.
+    ...(unit.deviceCategory ? { deviceCategory: unit.deviceCategory } : {}),
   };
 }
 

@@ -9,7 +9,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Posting } from '@/services/paymentPosting';
-import type { StockStatus } from '@/services/stockCore';
+import type { DeviceCategory, StockStatus } from '@/services/stockCore';
 
 export interface RecordTransactionInput {
   type: string; // 'Penjualan' | ... | 'Pemasukan Lain'
@@ -93,6 +93,8 @@ export interface PurchaseItemInput {
   condition: string;
   color: string;
   imei?: string | null;
+  /** IPHONE (default) | IPAD — iPad menyimpan Serial Number di field imei. */
+  device_category?: DeviceCategory;
   defect_description?: string;
   status?: Exclude<StockStatus, 'TERJUAL'>;
   /** Harga jual (selling price). */
@@ -147,6 +149,7 @@ export async function recordPurchaseWithPostings(
       condition: it.condition,
       color: it.color,
       imei: it.imei ?? null,
+      device_category: it.device_category ?? 'IPHONE',
       defect_description: it.defect_description ?? '',
       status: it.status ?? 'READY',
       price: it.price,
@@ -233,6 +236,7 @@ export async function recordTukarTambahWithPostings(
       condition: input.newItem.condition,
       color: input.newItem.color,
       imei: input.newItem.imei ?? null,
+      device_category: input.newItem.device_category ?? 'IPHONE',
       price: input.newItem.price,
       cost_price: input.newItem.cost_price ?? input.newItem.price,
       count: input.newItem.count ?? 1,
@@ -273,6 +277,7 @@ export async function recordBuybackWithPostings(
       condition: input.item.condition,
       color: input.item.color,
       imei: input.item.imei ?? null,
+      device_category: input.item.device_category ?? 'IPHONE',
       status: input.item.status ?? 'READY',
       price: input.item.price,
       cost_price: input.item.cost_price ?? input.item.price,

@@ -225,11 +225,56 @@ describe('direct unit edit', () => {
       condition: 'Second iBox',
       color: 'Deep Purple',
       has_imei: true,
+      device_category: 'IPHONE',
       imei: '359481985375087',
       price: 13_000_000,
       cost_price: 10_000_000,
       battery_health: null,
       defect_description: 'Kaca kamera pecah',
+    });
+  });
+
+  it('saves an iPad edit with an uppercased SN and device_category IPAD', async () => {
+    const ipad = makeUnit({
+      id: 'ipad-1',
+      model: 'iPad Pro 11',
+      capacity: '256GB',
+      condition: 'Second',
+      color: 'Space Gray',
+      imei: 'DMPVX123ABC',
+      device_category: 'IPAD',
+      price: 8_000_000,
+      cost_price: 7_000_000,
+    });
+    mockGetStockItems.mockResolvedValueOnce([ipad]);
+    mockUpdateStockItem.mockResolvedValueOnce(ipad);
+
+    renderPage();
+
+    const row = await findRowByModel('iPad Pro 11');
+    // An iPad row shows the SN label instead of a bare IMEI value.
+    expect(within(row).getByText('SN: DMPVX123ABC')).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole('button', { name: /edit unit ipad pro 11/i }));
+
+    // The identifier field uses the Serial Number (SN) label for iPad.
+    fireEvent.change(screen.getByLabelText(/serial number/i), {
+      target: { value: 'dmpvx123abc' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /simpan perubahan/i }));
+
+    await waitFor(() => expect(mockUpdateStockItem).toHaveBeenCalledTimes(1));
+    expect(mockUpdateStockItem).toHaveBeenCalledWith('ipad-1', {
+      model: 'iPad Pro 11',
+      capacity: '256GB',
+      condition: 'Second',
+      color: 'Space Gray',
+      has_imei: true,
+      device_category: 'IPAD',
+      imei: 'DMPVX123ABC',
+      price: 8_000_000,
+      cost_price: 7_000_000,
+      battery_health: null,
+      defect_description: '',
     });
   });
 });

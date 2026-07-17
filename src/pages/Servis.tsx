@@ -71,6 +71,7 @@ import {
   type TransactionWithStockDetails,
 } from '@/services/transactions';
 import { deserializeSaleDetail, type SaleDetail } from '@/services/finalization';
+import { identifierLabel } from '@/services/stockCore';
 import { getSpareparts, type Sparepart } from '@/services/spareparts';
 import { TransactionStaffBadge } from '@/components/TransactionStaffBadge';
 import {
@@ -2573,13 +2574,16 @@ function ServisTokoForm({
                   <input
                     type="text"
                     value={imeiSearch}
-                    onChange={(e) => setImeiSearch(e.target.value.replace(/\D/g, '').slice(0, 20))}
-                    placeholder="Masukkan IMEI..."
+                    onChange={(e) => setImeiSearch(e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 20))}
+                    placeholder="Masukkan IMEI / SN..."
                     className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[14px] font-mono focus:outline-none focus:border-teal-500"
                   />
                   <button
                     onClick={() => {
-                      const found = readyUnits.find((u) => u.imei === imeiSearch);
+                      const q = imeiSearch.trim();
+                      const found = q.length > 0
+                        ? readyUnits.find((u) => (u.imei ?? '').toUpperCase() === q.toUpperCase())
+                        : undefined;
                       if (found) setSelectedUnit(found);
                     }}
                     className="h-10 rounded-xl bg-teal-500 px-4 text-[13px] font-semibold text-white hover:bg-teal-600"
@@ -2845,7 +2849,7 @@ function KlaimGaransiForm({
 
   const handleCheckImei = () => {
     const imei = imeiInput.trim();
-    if (imei.length < 10 || imei.length > 20) {
+    if (imei.length < 8 || imei.length > 20) {
       setImeiError(true);
       return;
     }
@@ -2975,20 +2979,20 @@ function KlaimGaransiForm({
           {step === 1 ? (
             /* Step 1: Cek IMEI */
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-card sm:p-6">
-              <h3 className="text-[18px] font-semibold text-slate-900 mb-1">Cek IMEI</h3>
+              <h3 className="text-[18px] font-semibold text-slate-900 mb-1">Cek IMEI / SN</h3>
               <p className="text-[13px] text-slate-500 mb-4">
-                Masukkan IMEI unit toko yang sudah terjual.
+                Masukkan IMEI (iPhone) atau SN (iPad) unit toko yang sudah terjual.
               </p>
 
               <label className="block text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
-                IMEI (10-20 DIGIT) *
+                IMEI / SN *
               </label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="text"
                   value={imeiInput}
                   onChange={(e) => {
-                    setImeiInput(e.target.value.replace(/\D/g, '').slice(0, 20));
+                    setImeiInput(e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 20));
                     setImeiError(false);
                   }}
                   placeholder="352345678901234"
@@ -3009,15 +3013,15 @@ function KlaimGaransiForm({
               )}
               {imeiError && (
                 <p className="mt-1 text-[12px] text-rose-500">
-                  {imeiInput.length < 10
-                    ? 'IMEI minimal 10 digit'
-                    : 'Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI ini.'}
+                  {imeiInput.length < 8
+                    ? 'IMEI / SN minimal 8 karakter'
+                    : 'Unit TERJUAL dari penjualan toko tidak ditemukan untuk IMEI/SN ini.'}
                 </p>
               )}
-              <p className="text-[11px] text-slate-400 mt-2">IMEI bisa dilihat di belakang HP atau dial *#06#</p>
+              <p className="text-[11px] text-slate-400 mt-2">IMEI: di belakang HP atau dial *#06#. SN iPad: Pengaturan &gt; Umum &gt; Mengenai.</p>
 
               <div className="mt-5 rounded-lg bg-slate-50 border border-slate-200 p-3">
-                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-2">Unit terjual ber-IMEI:</p>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-2">Unit terjual ber-IMEI/SN:</p>
                 {lookupLoading ? (
                   <p className="text-[12px] text-slate-400">Memuat riwayat penjualan...</p>
                 ) : soldHints.length === 0 ? (
@@ -3084,7 +3088,7 @@ function KlaimGaransiForm({
                       <p className="mt-1 text-[13px] text-slate-700">{foundRecord.color}</p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">IMEI</p>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">{identifierLabel(foundRecord.unit.device_category)}</p>
                       <p className="mt-1 font-mono text-[12px] text-slate-700">{foundRecord.imei}</p>
                     </div>
                     <div className="rounded-lg bg-slate-50 p-3">

@@ -128,6 +128,27 @@ const BULK_STOCK_ITEM: StockItem = {
   updated_at: '2024-01-01T00:00:00.000Z',
 };
 
+// ---------------------------------------------------------------------------
+// Stock fixture: satu unit iPad READY — unit tunggal berseri; Serial Number
+// (uppercase) disimpan di field `imei`, kategori 'IPAD'.
+// ---------------------------------------------------------------------------
+const IPAD_STOCK_ITEM: StockItem = {
+  id: 'stk-ipad-1',
+  model: 'iPad Pro 11',
+  capacity: '256GB',
+  condition: 'Second iBox',
+  color: 'Space Gray',
+  imei: 'DMR9X2ABCD',
+  has_imei: true,
+  device_category: 'IPAD',
+  status: 'READY',
+  count: 1,
+  price: 8_500_000,
+  cost_price: 7_000_000,
+  created_at: '2024-01-01T00:00:00.000Z',
+  updated_at: '2024-01-01T00:00:00.000Z',
+};
+
 const CHARGER_ACCESSORY = {
   id: 'acc-charger',
   name: 'Charger Original',
@@ -533,6 +554,70 @@ describe('persistence wiring (Req 3.2, 4.1, 4.2)', () => {
         costPrice: BOX_IPHONE_11_ACCESSORY.price,
       }),
     ]);
+  });
+});
+
+// ===========================================================================
+// Pencarian IMEI / SN: unit iPad (SN tersimpan di field imei)
+//
+// CATATAN URUTAN: describe ini sengaja ditaruh SEBELUM describe
+// "persistence failure & timeout" yang memakai vi.useFakeTimers(). Memasang
+// fake timer saat animasi framer-motion masih berjalan akan "membekukan"
+// frame loop framer-motion secara permanen (frame yang pending di fake timer
+// hilang saat useRealTimers), sehingga AnimatePresence mode="wait" tidak
+// pernah menyelesaikan exit animation — pergantian tab yang dibutuhkan test
+// ini tidak akan pernah termount. Test lain tidak terdampak karena elemen
+// mereka termount tanpa menunggu animasi selesai.
+// ===========================================================================
+describe('pencarian IMEI / SN (iPad)', () => {
+  it('menemukan unit iPad lewat SN huruf kecil, menambahkannya ke unit terpilih, dan meneruskan deviceCategory ke detail transaksi', async () => {
+    mockGetStock.mockResolvedValue([IPAD_STOCK_ITEM]);
+
+    renderPage();
+
+    // Pindah ke tab pencarian (default-nya "Browse Stok"), lalu ketik SN
+    // dalam huruf kecil — pencocokan SN (8–14 karakter) bersifat
+    // case-insensitive terhadap SN uppercase di stok. Tab baru termount
+    // setelah exit animation tab lama selesai (AnimatePresence mode="wait"),
+    // jadi beri timeout lebih longgar dari default 1s.
+    fireEvent.click(screen.getByRole('button', { name: 'Cari IMEI / SN' }));
+    const searchInput = await screen.findByPlaceholderText(
+      'Contoh: 352461789012345',
+      undefined,
+      { timeout: 5000 },
+    );
+    fireEvent.change(searchInput, {
+      target: { value: 'dmr9x2abcd' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Cari' }));
+
+    // Hasil ditemukan dan diberi label identitas "SN:".
+    expect(await screen.findByText('iPad Pro 11')).toBeInTheDocument();
+    expect(screen.getByText('SN: DMR9X2ABCD')).toBeInTheDocument();
+
+    // Unit iPad bisa dipilih persis seperti unit iPhone.
+    fireEvent.click(screen.getByRole('button', { name: '+ Tambah' }));
+    expect(screen.getAllByText('1 unit dipilih').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('DMR9X2ABCD').length).toBeGreaterThan(0);
+
+    // Finalisasi: detail JSON membawa deviceCategory 'IPAD' dan imei = SN.
+    setMoneyByLabel('Bayar Cash', String(IPAD_STOCK_ITEM.price));
+    await selectCashAccount();
+
+    await waitFor(() => expect(getFinalizeButton()).toBeEnabled());
+    fireEvent.click(getFinalizeButton());
+
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledTimes(1));
+    const call = mockRecord.mock.calls[0][0];
+    const detail = JSON.parse(call.detail);
+
+    expect(call.stockIds).toEqual(['stk-ipad-1']);
+    expect(detail.units[0]).toMatchObject({
+      imei: 'DMR9X2ABCD',
+      deviceCategory: 'IPAD',
+      model: 'iPad Pro 11',
+      sellingPrice: IPAD_STOCK_ITEM.price,
+    });
   });
 });
 

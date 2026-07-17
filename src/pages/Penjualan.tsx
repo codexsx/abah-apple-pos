@@ -23,6 +23,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { getStockItems, type StockItem } from '@/services/stock';
+import { identifierLabel, type DeviceCategory } from '@/services/stockCore';
 import { getAccessories, type Accessory } from '@/services/accessories';
 import {
   validateSale,
@@ -61,6 +62,8 @@ interface UnitDetail {
   suggestedPrice: number;
   hasImei: boolean;
   stockCount: number;
+  /** Kategori perangkat: IPHONE (default) | IPAD — iPad: `imei` berisi SN. */
+  deviceCategory?: DeviceCategory;
 }
 
 interface StockGroup {
@@ -83,6 +86,8 @@ interface SelectedUnit {
   batteryHealth: number;
   sellingPrice: number;
   stockHasImei: boolean;
+  /** Kategori perangkat: IPHONE (default) | IPAD — iPad: `imei` berisi SN. */
+  deviceCategory?: DeviceCategory;
 }
 
 interface AddedItem {
@@ -148,9 +153,19 @@ function buildStockGroups(rows: StockItem[]): StockGroup[] {
       suggestedPrice: row.price,
       hasImei: row.has_imei,
       stockCount: Math.max(1, row.count || 1),
+      deviceCategory: row.device_category ?? 'IPHONE',
     });
   }
   return Array.from(map.values());
+}
+
+/**
+ * Query identitas yang bisa dipakai mencari unit: tepat 15 digit (IMEI iPhone,
+ * dicocokkan persis) atau 8–14 karakter (Serial Number iPad, case-insensitive).
+ */
+function isSearchableIdentifier(query: string): boolean {
+  const len = query.trim().length;
+  return len >= 8 && len <= 15;
 }
 
 const warrantyOptions = ['No Garansi', '7 Hari', '30 Hari', '90 Hari', '1 Tahun'];
@@ -567,6 +582,11 @@ export default function Penjualan() {
         color: u.color,
         ...(u.defectDescription ? { defectDescription: u.defectDescription } : {}),
         ...(u.batteryHealth > 0 ? { batteryHealth: u.batteryHealth } : {}),
+        // Kategori perangkat diteruskan hanya bila bukan default 'IPHONE'
+        // (misal 'IPAD' — `imei` berisi SN), agar detail JSON tetap ramping.
+        ...(u.deviceCategory && u.deviceCategory !== 'IPHONE'
+          ? { deviceCategory: u.deviceCategory }
+          : {}),
         sellingPrice: u.sellingPrice,
       })),
       manualSalePrice: hargaJualNum,
@@ -640,6 +660,7 @@ export default function Penjualan() {
             batteryHealth: unit.batteryHealth,
             sellingPrice: unit.suggestedPrice,
             stockHasImei: unit.hasImei,
+            deviceCategory: unit.deviceCategory,
           },
         ];
       });
@@ -839,10 +860,19 @@ export default function Penjualan() {
   const [imeiResult, setImeiResult] = useState<(UnitDetail & { model: string; capacity: string; condition: string }) | null>(null);
 
   const handleImeiSearch = useCallback(() => {
-    if (imeiSearch.length !== 15) return;
+    const q = imeiSearch.trim();
+    if (!isSearchableIdentifier(q)) return;
     for (const g of stockGroups) {
-      // Skip non-IMEI rows (empty imei) so a 15-digit query never matches them.
-      const unit = g.units.find((u) => u.imei !== '' && u.imei === imeiSearch);
+      // Skip non-IMEI rows (empty imei) so a query never matches them.
+      // 15 digit → IMEI iPhone, exact match; 8–14 karakter → SN iPad,
+      // dicocokkan case-insensitive (SN tersimpan uppercase di DB).
+      const unit = g.units.find(
+        (u) =>
+          u.imei !== '' &&
+          (q.length === 15
+            ? u.imei === q
+            : u.imei.toUpperCase() === q.toUpperCase())
+      );
       if (unit) {
         setImeiResult({
           ...unit,
@@ -874,6 +904,7 @@ export default function Penjualan() {
       hasImei: imeiResult.hasImei,
       stockCount: imeiResult.stockCount,
       defectDescription: imeiResult.defectDescription,
+      deviceCategory: imeiResult.deviceCategory,
     });
     setImeiResult(null);
     setImeiSearch('');
@@ -975,7 +1006,7 @@ export default function Penjualan() {
                 activeTab === 'cari' ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Cari IMEI
+              Cari IMEI / SN
             </button>
             <button
               onClick={() => setActiveTab('browse')}
@@ -998,7 +1029,7 @@ export default function Penjualan() {
                 transition={{ duration: 0.25, ease: easeSmooth }}
               >
                 <label className="block text-[12px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1.5">
-                  IMEI (15 digit)
+                  IMEI / SN
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -1006,14 +1037,15 @@ export default function Penjualan() {
                       type="text"
                       value={imeiSearch}
                       onChange={(e) => {
-                        const v = e.target.value.replace(/\D/g, '').slice(0, 15);
+                        // Alfanumerik: IMEI 15 digit (iPhone) atau SN 8–14 karakter (iPad).
+                        const v = e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 15);
                         setImeiSearch(v);
-                        if (v.length !== 15) setImeiResult(null);
+                        if (!isSearchableIdentifier(v)) setImeiResult(null);
                       }}
                       placeholder="Contoh: 352461789012345"
                       className="w-full h-11 rounded-xl border border-slate-300 bg-white px-4 font-mono text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10 transition-all"
                     />
-                    {imeiSearch.length === 15 && (
+                    {isSearchableIdentifier(imeiSearch) && (
                       <span className="absolute right-3 top-1/2 -translate-y-1/2">
                         <Check size={18} className="text-emerald-500" />
                       </span>
@@ -1021,14 +1053,14 @@ export default function Penjualan() {
                   </div>
                   <button
                     onClick={handleImeiSearch}
-                    disabled={imeiSearch.length !== 15}
+                    disabled={!isSearchableIdentifier(imeiSearch)}
                     className="h-11 rounded-xl bg-teal-500 px-5 text-[14px] font-semibold text-white transition-colors hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Cari
                   </button>
                 </div>
-                {imeiSearch.length > 0 && imeiSearch.length !== 15 && (
-                  <p className="text-[12px] text-amber-600 mt-1.5">IMEI harus 15 digit</p>
+                {imeiSearch.length > 0 && !isSearchableIdentifier(imeiSearch) && (
+                  <p className="text-[12px] text-amber-600 mt-1.5">Masukkan 15 digit IMEI atau 8–14 karakter SN</p>
                 )}
 
                 <AnimatePresence>
@@ -1044,7 +1076,11 @@ export default function Penjualan() {
                           <p className="text-[14px] font-semibold text-slate-900">{imeiResult.model}</p>
                           <p className="text-[13px] text-slate-500">{imeiResult.capacity} &middot; {imeiResult.condition}</p>
                           <p className="text-[13px] text-slate-500">{imeiResult.color}</p>
-                          <p className="font-mono text-[14px] text-slate-600 mt-1">{imeiResult.imei}</p>
+                          <p className="font-mono text-[14px] text-slate-600 mt-1">
+                            {imeiResult.deviceCategory === 'IPAD'
+                              ? `${identifierLabel(imeiResult.deviceCategory)}: ${imeiResult.imei}`
+                              : imeiResult.imei}
+                          </p>
                           <p className="font-mono text-[16px] font-semibold text-slate-900 mt-1">{formatPrice(imeiResult.suggestedPrice)}</p>
                         </div>
                         <button
@@ -1056,7 +1092,7 @@ export default function Penjualan() {
                       </div>
                     </motion.div>
                   )}
-                  {imeiSearch.length === 15 && !imeiResult && (
+                  {isSearchableIdentifier(imeiSearch) && !imeiResult && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -1176,7 +1212,9 @@ export default function Penjualan() {
                                     >
                                       <div className="flex-1 min-w-0">
                                         <p className="font-mono text-[13px] text-slate-700 tracking-[0.04em]">
-                                          {unit.imei || 'Tanpa IMEI'}
+                                          {unit.deviceCategory === 'IPAD'
+                                            ? `${identifierLabel(unit.deviceCategory)}: ${unit.imei}`
+                                            : unit.imei || 'Tanpa IMEI'}
                                         </p>
                                         <div className="flex items-center gap-2 mt-0.5">
                                           <span className="text-[12px] text-slate-500">{unit.color}</span>

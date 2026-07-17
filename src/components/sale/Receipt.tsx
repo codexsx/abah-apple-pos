@@ -3,6 +3,7 @@
 // No data fetching — renders a captured ReceiptData snapshot only.
 
 import type { ReceiptData } from '@/services/receipt';
+import { identifierLabel } from '@/services/stockCore';
 
 export type { ReceiptData } from '@/services/receipt';
 
@@ -107,7 +108,11 @@ export function Receipt({ data }: { data: ReceiptData }): React.JSX.Element {
               <div className="text-gray-700">
                 {unit.capacity} • {unit.condition} • {unit.color}
               </div>
-              {unit.imei && <div className="font-mono text-gray-600">IMEI: {unit.imei}</div>}
+              {unit.imei && (
+                <div className="font-mono text-gray-600">
+                  {identifierLabel(unit.deviceCategory)}: {unit.imei}
+                </div>
+              )}
               {unit.batteryHealth !== undefined && unit.batteryHealth > 0 && (
                 <div className="text-gray-600">BH: {unit.batteryHealth}%</div>
               )}

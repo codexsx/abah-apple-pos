@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { StockStatus } from '@/services/stockCore';
+import type { DeviceCategory, StockStatus } from '@/services/stockCore';
 import { deriveStockLevelStatus, clampStock } from '@/services/inventoryCore';
 
 export interface StockItem {
@@ -10,6 +10,8 @@ export interface StockItem {
   color: string;
   imei: string | null;
   has_imei: boolean;
+  /** Kategori perangkat: IPHONE (imei = IMEI 15 digit) | IPAD (imei = Serial Number). */
+  device_category?: DeviceCategory;
   status: StockStatus;
   count: number;
   price: number;
@@ -32,6 +34,7 @@ export interface StockItemInsert {
   color?: string;
   imei?: string | null;
   has_imei?: boolean;
+  device_category?: DeviceCategory;
   status?: StockStatus;
   count?: number;
   price?: number;
@@ -52,6 +55,7 @@ export interface StockItemUpdate {
   color?: string;
   imei?: string | null;
   has_imei?: boolean;
+  device_category?: DeviceCategory;
   status?: StockStatus;
   count?: number;
   price?: number;

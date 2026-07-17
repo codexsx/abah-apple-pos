@@ -354,3 +354,51 @@ describe('zero Selisih (HP keluar price === appraisal)', () => {
     expect(call.sellStockId).toBe(HP_KELUAR.id);
   });
 });
+
+// ===========================================================================
+// Kategori iPad: HP Masuk memakai Serial Number (8–14 alfanumerik uppercase)
+// ===========================================================================
+describe('HP Masuk kategori iPad', () => {
+  it('menolak SN tidak valid lalu mengirim device_category IPAD untuk SN valid', async () => {
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('Pak Bambang'), {
+      target: { value: 'Bu Sari' },
+    });
+    setSelectByLabel('Kategori Perangkat', 'iPad');
+    setSelectByLabel('Tipe HP', 'iPhone 11');
+    setSelectByLabel('Kapasitas', '128GB');
+    setSelectByLabel('Kondisi', 'Second iBox');
+    setSelectByLabel('Warna', 'Black');
+
+    // SN terlalu pendek (< 8 karakter) → form tidak pernah valid.
+    fireEvent.change(screen.getByPlaceholderText('DMPX1234ABCD'), {
+      target: { value: 'ABC123' },
+    });
+    setPriceByLabel('Appraisal Toko', '3000000');
+    await selectHpKeluar(HP_KELUAR_LABEL);
+    setSelectByLabel('Garansi', '30 Hari');
+    setPriceByLabel('Cash', String(HP_KELUAR.price - 3_000_000));
+    await selectCashAccount();
+
+    expect(getSaveButton()).toBeDisabled();
+
+    // SN valid: input lowercase tampil uppercase dan tombol simpan aktif.
+    fireEvent.change(screen.getByPlaceholderText('DMPX1234ABCD'), {
+      target: { value: 'dmpx1234abcd' },
+    });
+
+    await waitFor(() => expect(getSaveButton()).toBeEnabled());
+    fireEvent.click(getSaveButton());
+
+    await waitFor(() => expect(mockRecord).toHaveBeenCalledTimes(1));
+    const call = mockRecord.mock.calls[0][0];
+    expect(call.newItem).toMatchObject({
+      model: 'iPhone 11',
+      imei: 'DMPX1234ABCD',
+      device_category: 'IPAD',
+      price: 3_000_000,
+      count: 1,
+    });
+  });
+});

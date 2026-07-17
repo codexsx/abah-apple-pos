@@ -34,7 +34,14 @@ import {
   recordPurchaseWithPostings,
 } from '@/services/postings';
 import { getStockItems } from '@/services/stock';
-import { STOCK_STATUSES, type StockStatus } from '@/services/stockCore';
+import {
+  identifierLabel,
+  isValidSerialNumber,
+  normalizeSerialNumber,
+  STOCK_STATUSES,
+  type DeviceCategory,
+  type StockStatus,
+} from '@/services/stockCore';
 import { getAgents, type Agent } from '@/services/agents';
 import {
   ACCESSORY_CATEGORIES,
@@ -133,6 +140,12 @@ const colorMap: Record<string, string[]> = {
   'iPhone SE Gen 3': ['Midnight', 'Starlight', 'Red'],
 };
 
+// iPad tidak punya IMEI — tiap unit diidentifikasi Serial Number (SN), jadi
+// daftar model & warnanya terpisah dari colorMap khusus iPhone.
+const ipadModels = ['iPad', 'iPad Mini', 'iPad Air', 'iPad Pro 11', 'iPad Pro 12.9'];
+
+const ipadColors = ['Space Gray', 'Silver', 'Starlight', 'Midnight', 'Blue', 'Pink', 'Purple', 'Green', 'Yellow'];
+
 const supplierPlaceholders: Record<SupplierType, string> = {
   perorangan: 'Pak Tono',
   agen: 'PT iPhone Indonesia',
@@ -229,6 +242,7 @@ export default function Pembelian() {
   const [agentsError, setAgentsError] = useState<string | null>(null);
 
   /* -- Section 2: Batch Specs -- */
+  const [deviceCategory, setDeviceCategory] = useState<DeviceCategory>('IPHONE');
   const [selectedModel, setSelectedModel] = useState('');
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
@@ -350,17 +364,24 @@ export default function Pembelian() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   /* -- derived -- */
+  const isIpad = deviceCategory === 'IPAD';
+  const availableModels = isIpad ? ipadModels : phoneModels;
+
   const availableColors = useMemo(() => {
     if (!selectedModel) return [];
+    if (isIpad) return ipadColors;
     return colorMap[selectedModel] || [];
-  }, [selectedModel]);
+  }, [selectedModel, isIpad]);
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? null,
     [agents, selectedAgentId],
   );
 
-  const activeDataMode: PurchaseDataMode = supplierType === 'agen' ? purchaseDataMode : 'full';
+  // iPad dipaksa Full Data: tiap unit punya Serial Number unik, jadi mode
+  // batch tanpa identitas (quantity/color) tidak relevan.
+  const activeDataMode: PurchaseDataMode =
+    isIpad || supplierType !== 'agen' ? 'full' : purchaseDataMode;
   const usesFullUnitData = activeDataMode === 'full';
   const usesQuantityOnlyData = activeDataMode === 'quantity';
   const usesColorGroupedData = activeDataMode === 'color';
@@ -446,8 +467,12 @@ export default function Pembelian() {
 
   const canSubmitAccessoryPurchase = accessorySubmitHint === null;
 
+  // Identitas unit yang valid: IMEI 15 digit (iPhone) atau Serial Number
+  // (iPad — dinormalisasi uppercase karena DB menyimpan SN uppercase).
   const allImeis = useMemo(() => {
-    const imeis = unitEntries.map((u) => u.imei).filter((i) => i.length === 15);
+    const imeis = unitEntries
+      .map((u) => (isIpad ? normalizeSerialNumber(u.imei) : u.imei))
+      .filter((i) => (isIpad ? isValidSerialNumber(i) : i.length === 15));
     const seen = new Set<string>();
     const duplicates = new Set<string>();
     for (const imei of imeis) {
@@ -455,7 +480,7 @@ export default function Pembelian() {
       seen.add(imei);
     }
     return { duplicates, all: seen };
-  }, [unitEntries]);
+  }, [unitEntries, isIpad]);
 
   const canSubmit = useMemo(() => {
     if (supplierType === 'agen') {
@@ -469,13 +494,15 @@ export default function Pembelian() {
       if (!selectedColor) return false;
       if (unitEntries.length === 0) return false;
       for (const u of unitEntries) {
-        if (u.imei.length !== 15) return false;
+        // iPad: SN dibandingkan uppercase (DB menyimpan SN uppercase).
+        const identifier = isIpad ? normalizeSerialNumber(u.imei) : u.imei;
+        if (isIpad ? !isValidSerialNumber(u.imei) : u.imei.length !== 15) return false;
         if (!u.price || parseMoney(u.price) <= 0) return false;
         // Harga jual is optional, but if entered it must be a positive amount.
         if (u.sellPrice && parseMoney(u.sellPrice) <= 0) return false;
         if (minusBatch && !u.defectDescription.trim()) return false;
-        if (allImeis.duplicates.has(u.imei)) return false;
-        if (existingImeis.has(u.imei)) return false;
+        if (allImeis.duplicates.has(identifier)) return false;
+        if (existingImeis.has(identifier)) return false;
       }
     } else {
       if (minusBatch) return false;
@@ -499,7 +526,7 @@ export default function Pembelian() {
     // Payment is OPTIONAL: a purchase may be saved unpaid (credit/hutang) — the
     // stock still enters inventory; cash/bank only moves when a payment is entered.
     return true;
-  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, isIpad, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /**
    * First unmet requirement, in the same order as `canSubmit`, surfaced near the
@@ -521,12 +548,17 @@ export default function Pembelian() {
     if (usesFullUnitData) {
       if (!selectedColor) return 'Lengkapi warna unit';
       for (const u of unitEntries) {
-        if (u.imei.length !== 15) return 'IMEI tiap unit harus 15 digit';
+        const identifier = isIpad ? normalizeSerialNumber(u.imei) : u.imei;
+        if (isIpad ? !isValidSerialNumber(u.imei) : u.imei.length !== 15) {
+          return isIpad
+            ? 'Serial Number tiap unit harus 8–14 karakter alfanumerik'
+            : 'IMEI tiap unit harus 15 digit';
+        }
         if (!u.price || parseMoney(u.price) <= 0) return 'Isi Harga Modal tiap unit';
         if (u.sellPrice && parseMoney(u.sellPrice) <= 0) return 'Harga Jual tidak boleh 0';
         if (minusBatch && !u.defectDescription.trim()) return 'Isi keterangan minus tiap unit';
-        if (allImeis.duplicates.has(u.imei)) return 'Ada IMEI duplikat antar unit';
-        if (existingImeis.has(u.imei)) return 'Ada IMEI yang sudah ada di stok';
+        if (allImeis.duplicates.has(identifier)) return `Ada ${identifierLabel(deviceCategory)} duplikat antar unit`;
+        if (existingImeis.has(identifier)) return `Ada ${identifierLabel(deviceCategory)} yang sudah ada di stok`;
       }
     } else {
       if (minusBatch) return 'Mode tanpa IMEI hanya untuk unit mulus/non-minus';
@@ -549,7 +581,7 @@ export default function Pembelian() {
     if (supplierType === 'agen' && paymentTotal < totalCost && !useAgentDebt)
       return 'Centang Hutang ke Agen untuk sisa pembayaran';
     return null;
-  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, isIpad, deviceCategory, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /* -- callbacks -- */
   const handleQuantityChange = useCallback(
@@ -627,10 +659,25 @@ export default function Pembelian() {
     }
   }, []);
 
+  // Ganti kategori perangkat: daftar model & warna berbeda, jadi pilihan
+  // model/warna direset. iPad dipaksa Full Data karena tiap unit punya SN unik.
+  const handleDeviceCategoryChange = useCallback((category: DeviceCategory) => {
+    setDeviceCategory(category);
+    setSelectedModel('');
+    setSelectedColor('');
+    setColorStockEntries((prev) => prev.map((entry) => ({ ...entry, color: '' })));
+    setSaveError(null);
+    setOpenDropdown(null);
+    if (category === 'IPAD') {
+      setPurchaseDataMode('full');
+    }
+  }, []);
+
   const handleReset = useCallback(() => {
     setSupplierType('perorangan');
     setSupplierName('');
     setSelectedAgentId('');
+    setDeviceCategory('IPHONE');
     setSelectedModel('');
     setSelectedCapacity('');
     setSelectedCondition('');
@@ -837,7 +884,7 @@ export default function Pembelian() {
       },
       units: usesFullUnitData
         ? unitEntries.map((u) => ({
-            imei: u.imei,
+            imei: isIpad ? normalizeSerialNumber(u.imei) : u.imei,
             price: parseMoney(u.price),
             sellPrice: parseMoney(u.sellPrice),
             defectDescription: minusBatch ? u.defectDescription.trim() : '',
@@ -871,7 +918,8 @@ export default function Pembelian() {
         }
       : null;
 
-    // Full data inserts one row per IMEI. Batch modes insert grouped non-IMEI
+    // Full data inserts one row per IMEI (iPhone) / Serial Number (iPad, SN
+    // disimpan uppercase di field imei). Batch modes insert grouped non-IMEI
     // stock rows and rely on stock_items.count for future sales.
     const items = usesFullUnitData
       ? unitEntries.map((u) => {
@@ -882,7 +930,8 @@ export default function Pembelian() {
             capacity: selectedCapacity,
             condition: selectedCondition,
             color: selectedColor,
-            imei: u.imei,
+            device_category: deviceCategory,
+            imei: isIpad ? normalizeSerialNumber(u.imei) : u.imei,
             defect_description: minusBatch ? u.defectDescription.trim() : '',
             status: initialStockStatus,
             cost_price: costPrice,
@@ -895,6 +944,9 @@ export default function Pembelian() {
           capacity: selectedCapacity,
           condition: selectedCondition,
           color: group.color,
+          // Mode batch hanya bisa terjadi saat kategori iPhone (iPad dipaksa
+          // Full Data), jadi device_category di sini selalu 'IPHONE'.
+          device_category: deviceCategory,
           imei: null,
           status: initialStockStatus,
           cost_price: group.costPrice,
@@ -936,7 +988,7 @@ export default function Pembelian() {
     } finally {
       setSaving(false);
     }
-  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, selectedModel, selectedCapacity, selectedCondition, selectedColor, initialStockStatus, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, minusBatch, handleReset]);
+  }, [canSubmit, submitHint, saving, supplierType, supplierName, selectedAgent, selectedAgentId, deviceCategory, isIpad, selectedModel, selectedCapacity, selectedCondition, selectedColor, initialStockStatus, activeDataMode, usesFullUnitData, usesQuantityOnlyData, unitEntries, bulkQuantityNum, bulkTotalCostNum, bulkAverageCost, bulkSellPriceNum, colorStockRows, displayQuantity, cashNum, transferNum, cashAccount, transferAccount, totalCost, agentDebtAmount, minusBatch, handleReset]);
 
   /* -- Custom Select component -- */
   const CustomSelect = ({
@@ -1009,24 +1061,29 @@ export default function Pembelian() {
     );
   };
 
-  /* -- IMEI status helper -- */
+  /* -- IMEI/SN status helper (device-aware) -- */
   const getImeiStatus = (imei: string, id: number) => {
     if (!imei) return 'empty';
-    if (imei.length !== 15) return 'invalid';
-    if (existingImeis.has(imei)) return 'exists';
-    if (allImeis.duplicates.has(imei)) {
-      const firstIdx = unitEntries.findIndex((u) => u.imei === imei);
+    // iPad: SN dibandingkan uppercase (DB menyimpan SN uppercase).
+    const identifier = isIpad ? normalizeSerialNumber(imei) : imei;
+    if (isIpad ? !isValidSerialNumber(imei) : imei.length !== 15) return 'invalid';
+    if (existingImeis.has(identifier)) return 'exists';
+    if (allImeis.duplicates.has(identifier)) {
+      const firstIdx = unitEntries.findIndex(
+        (u) => (isIpad ? normalizeSerialNumber(u.imei) : u.imei) === identifier,
+      );
       if (unitEntries[firstIdx]?.id !== id) return 'duplicate';
     }
     return 'valid';
   };
 
+  const idLabel = identifierLabel(deviceCategory);
   const imeiStatusConfig: Record<string, { border: string; text: string; message: string; icon: React.ReactNode }> = {
     empty: { border: 'border-slate-300', text: '', message: '', icon: null },
-    invalid: { border: 'border-amber-400', text: 'text-amber-600', message: 'IMEI harus 15 digit', icon: <AlertTriangle size={14} className="text-amber-500" /> },
-    exists: { border: 'border-rose-400', text: 'text-rose-600', message: 'IMEI sudah ada di stok', icon: <AlertTriangle size={14} className="text-rose-500" /> },
-    duplicate: { border: 'border-rose-400', text: 'text-rose-600', message: 'IMEI duplikat', icon: <AlertTriangle size={14} className="text-rose-500" /> },
-    valid: { border: 'border-emerald-400', text: 'text-emerald-600', message: 'IMEI valid', icon: <Check size={14} className="text-emerald-500" /> },
+    invalid: { border: 'border-amber-400', text: 'text-amber-600', message: isIpad ? 'SN harus 8–14 karakter alfanumerik' : 'IMEI harus 15 digit', icon: <AlertTriangle size={14} className="text-amber-500" /> },
+    exists: { border: 'border-rose-400', text: 'text-rose-600', message: `${idLabel} sudah ada di stok`, icon: <AlertTriangle size={14} className="text-rose-500" /> },
+    duplicate: { border: 'border-rose-400', text: 'text-rose-600', message: `${idLabel} duplikat`, icon: <AlertTriangle size={14} className="text-rose-500" /> },
+    valid: { border: 'border-emerald-400', text: 'text-emerald-600', message: `${idLabel} valid`, icon: <Check size={14} className="text-emerald-500" /> },
   };
 
   /* ---------------------------------------------------------------- */
@@ -1198,7 +1255,36 @@ export default function Pembelian() {
             </p>
           </div>
 
-          {supplierType === 'agen' && (
+          {/* Kategori Perangkat: iPhone (IMEI) atau iPad (Serial Number) */}
+          <div className="mb-5">
+            <label className="block text-[12px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1.5">
+              Kategori Perangkat
+            </label>
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-sunk p-1">
+              {([
+                { value: 'IPHONE', label: 'iPhone' },
+                { value: 'IPAD', label: 'iPad' },
+              ] as Array<{ value: DeviceCategory; label: string }>).map((category) => (
+                <button
+                  key={category.value}
+                  type="button"
+                  aria-pressed={deviceCategory === category.value}
+                  onClick={() => handleDeviceCategoryChange(category.value)}
+                  className={`rounded-[10px] px-3 py-2.5 text-[13px] font-semibold transition-colors ${
+                    deviceCategory === category.value
+                      ? 'bg-white text-gold shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* iPad dipaksa Full Data (tiap unit punya SN unik), jadi pilihan
+              mode batch quantity/color disembunyikan. */}
+          {supplierType === 'agen' && !isIpad && (
             <div className="mb-5">
               <label className="block text-[12px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1.5">
                 Format Data Agen
@@ -1229,18 +1315,18 @@ export default function Pembelian() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <PresetOrCustomSelect
-              label="Tipe HP"
+              label={isIpad ? 'Tipe iPad' : 'Tipe HP'}
               value={selectedModel}
-              options={phoneModels}
+              options={availableModels}
               onChange={(v) => {
                 setSelectedModel(v);
                 setSelectedColor('');
                 setColorStockEntries((prev) => prev.map((entry) => ({ ...entry, color: '' })));
               }}
-              placeholder="Pilih tipe HP"
+              placeholder={isIpad ? 'Pilih tipe iPad' : 'Pilih tipe HP'}
               customLabel="Tipe custom / seri baru"
-              customPlaceholder="Contoh: iPhone 17 Pro, Samsung S24 Ultra"
-              inputAriaLabel="Tipe HP custom"
+              customPlaceholder={isIpad ? 'Contoh: iPad Pro 11, iPad Mini 6' : 'Contoh: iPhone 17 Pro, Samsung S24 Ultra'}
+              inputAriaLabel={isIpad ? 'Tipe iPad custom' : 'Tipe HP custom'}
               required
             />
             <PresetOrCustomSelect
@@ -1285,7 +1371,7 @@ export default function Pembelian() {
                 value={selectedColor}
                 options={availableColors}
                 onChange={setSelectedColor}
-                placeholder={selectedModel ? 'Pilih warna' : 'Pilih tipe HP dulu...'}
+                placeholder={selectedModel ? 'Pilih warna' : isIpad ? 'Pilih tipe iPad dulu...' : 'Pilih tipe HP dulu...'}
                 customLabel="Warna custom"
                 customPlaceholder="Contoh: Desert Titanium, Navy, Black"
                 inputAriaLabel="Warna custom"
@@ -1347,7 +1433,7 @@ export default function Pembelian() {
             <h2 className="text-[18px] font-semibold text-slate-900 font-body">Detail Unit</h2>
             <p className="text-[13px] text-slate-500 mt-0.5">
               {usesFullUnitData
-                ? 'Masukkan IMEI dan harga untuk setiap unit.'
+                ? `Masukkan ${idLabel} dan harga untuk setiap unit.`
                 : usesQuantityOnlyData
                   ? 'Masukkan total jumlah stok dan total modal dari agen.'
                   : 'Kelompokkan stok agen berdasarkan warna dan modal per unit.'}
@@ -1384,21 +1470,24 @@ export default function Pembelian() {
 
                     {/* Fields */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* IMEI */}
+                      {/* IMEI (iPhone) / Serial Number (iPad) */}
                       <div>
                         <label className="block text-[11px] font-medium text-slate-500 uppercase tracking-[0.04em] mb-1">
-                          IMEI (15 digit) <span className="text-rose-500">*</span>
+                          {isIpad ? 'Serial Number (8–14 karakter)' : 'IMEI (15 digit)'} <span className="text-rose-500">*</span>
                         </label>
                         <div className="relative">
                           <input
                             type="text"
                             value={unit.imei}
                             onChange={(e) => {
-                              const v = e.target.value.replace(/\D/g, '').slice(0, 15);
+                              // iPad: SN alfanumerik ditampilkan uppercase.
+                              const v = isIpad
+                                ? e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 14)
+                                : e.target.value.replace(/\D/g, '').slice(0, 15);
                               updateUnit(unit.id, { imei: v });
                             }}
-                            placeholder="352461789012345"
-                            maxLength={15}
+                            placeholder={isIpad ? 'DMPX1234567' : '352461789012345'}
+                            maxLength={isIpad ? 14 : 15}
                             className={`w-full h-10 rounded-xl border ${statusCfg.border} bg-white px-3 font-mono text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10 transition-all tracking-[0.04em]`}
                           />
                           {status !== 'empty' && (

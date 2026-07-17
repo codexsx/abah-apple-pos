@@ -3,9 +3,12 @@ import fc from 'fast-check';
 import {
   normalizeStockEditDraft,
   validateImeiPresence,
+  validateIdentifierPresence,
   validateStockUnitInput,
+  isValidSerialNumber,
   isValidStatus,
   isValidStatusTransition,
+  normalizeSerialNumber,
 } from './stockCore';
 import type { StockUnitInputCore, StockValidationCode, StockStatus } from './stockCore';
 import { MAX_IDR } from '@/services/accountsCore';
@@ -114,6 +117,7 @@ describe('normalizeStockEditDraft', () => {
         condition: 'Second Inter Unlock Minus',
         color: 'Silver',
         has_imei: true,
+        device_category: 'IPHONE',
         imei: '359481985375087',
         price: 6_000_000,
         cost_price: 5_000_000,
@@ -364,5 +368,181 @@ describe('Property 5: Price/count ranges', () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 6: Device-aware identifier rules (iPad Serial Number)
+// ---------------------------------------------------------------------------
+
+describe('Property 6: Device-aware identifier (IMEI vs SN)', () => {
+  // Feature: ipad-serial-number-support, Property 6
+  // IPHONE keeps the 15-digit IMEI rule; IPAD accepts an 8–14 char
+  // alphanumeric Serial Number (stored uppercase); hasImei=false unchanged.
+
+  /** Valid SN: 8–14 chars from A–Z0–9. */
+  const validSnArb: fc.Arbitrary<string> = fc
+    .array(
+      fc.constantFrom(
+        ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split(''),
+      ),
+      { minLength: 8, maxLength: 14 },
+    )
+    .map((chars) => chars.join(''));
+
+  it('IPAD + hasImei: ok iff identifier is a valid SN (case-insensitive)', () => {
+    fc.assert(
+      fc.property(validSnArb, fc.boolean(), (sn, lower) => {
+        const input = lower ? sn.toLowerCase() : sn;
+        expect(validateIdentifierPresence('IPAD', true, input).ok).toBe(true);
+      }),
+      RUNS,
+    );
+  });
+
+  it('IPAD + hasImei: rejects 15-digit IMEIs and other non-SN shapes', () => {
+    const badArb = fc.oneof(
+      validImeiArb, // 15 digits — too long for an SN
+      blankStringArb,
+      fc.constant<string | null>(null),
+      fc
+        .string({ minLength: 15, maxLength: 30 })
+        .filter((s) => !/^[A-Z0-9]{8,14}$/i.test(s)),
+    );
+
+    fc.assert(
+      fc.property(badArb, (val) => {
+        const result = validateIdentifierPresence('IPAD', true, val);
+        expect(result.ok).toBe(false);
+        expect(result.ok === false && result.code).toBe('IMEI_REQUIRED_FORMAT');
+      }),
+      RUNS,
+    );
+  });
+
+  it('IPHONE rule unchanged: ok iff exactly 15 digits', () => {
+    const candidateArb = fc.oneof(validImeiArb, validSnArb, fc.string());
+
+    fc.assert(
+      fc.property(candidateArb, (val) => {
+        const result = validateIdentifierPresence('IPHONE', true, val);
+        expect(result.ok).toBe(matchesImei(val));
+      }),
+      RUNS,
+    );
+  });
+
+  it('IPAD + hasImei=false: identifier must still be absent', () => {
+    fc.assert(
+      fc.property(validSnArb, (sn) => {
+        const result = validateIdentifierPresence('IPAD', false, sn);
+        expect(result.ok).toBe(false);
+        expect(result.ok === false && result.code).toBe('IMEI_MUST_BE_ABSENT');
+      }),
+      RUNS,
+    );
+  });
+
+  it('normalizeSerialNumber trims and uppercases (idempotent)', () => {
+    fc.assert(
+      fc.property(fc.string(), (s) => {
+        const once = normalizeSerialNumber(s);
+        expect(once).toBe(s.trim().toUpperCase());
+        expect(normalizeSerialNumber(once)).toBe(once);
+      }),
+      RUNS,
+    );
+  });
+
+  it('isValidSerialNumber matches the 8–14 alphanumeric oracle', () => {
+    fc.assert(
+      fc.property(fc.string(), (s) => {
+        expect(isValidSerialNumber(s)).toBe(
+          /^[A-Z0-9]{8,14}$/.test(s.trim().toUpperCase()),
+        );
+      }),
+      RUNS,
+    );
+  });
+
+  it('validateStockUnitInput honours deviceCategory for the identifier rule', () => {
+    fc.assert(
+      fc.property(validSnArb, validImeiArb, (sn, imei) => {
+        const base = {
+          model: 'iPad Air',
+          price: 5_000_000,
+          count: 1,
+          status: 'READY',
+          hasImei: true,
+        };
+        expect(
+          validateStockUnitInput({ ...base, deviceCategory: 'IPAD', imei: sn }).ok,
+        ).toBe(true);
+        const rejected = validateStockUnitInput({
+          ...base,
+          deviceCategory: 'IPAD',
+          imei,
+        });
+        expect(rejected.ok).toBe(false);
+        expect(rejected.ok === false && rejected.code).toBe(
+          'IMEI_REQUIRED_FORMAT',
+        );
+      }),
+      RUNS,
+    );
+  });
+
+  it('normalizeStockEditDraft stores iPad SN uppercase with device_category IPAD', () => {
+    const result = normalizeStockEditDraft({
+      model: 'iPad Pro 11',
+      capacity: '256GB',
+      condition: 'Second',
+      color: 'Space Gray',
+      hasImei: true,
+      deviceCategory: 'IPAD',
+      imei: '  dmr9abcd12  ',
+      price: '8.000.000',
+      costPrice: '7.000.000',
+      batteryHealth: '92',
+      defectDescription: '',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        model: 'iPad Pro 11',
+        capacity: '256GB',
+        condition: 'Second',
+        color: 'Space Gray',
+        has_imei: true,
+        device_category: 'IPAD',
+        imei: 'DMR9ABCD12',
+        price: 8_000_000,
+        cost_price: 7_000_000,
+        battery_health: 92,
+        defect_description: '',
+      },
+    });
+  });
+
+  it('normalizeStockEditDraft rejects a bad SN for iPad', () => {
+    const result = normalizeStockEditDraft({
+      model: 'iPad Pro 11',
+      capacity: '256GB',
+      condition: 'Second',
+      color: 'Space Gray',
+      hasImei: true,
+      deviceCategory: 'IPAD',
+      imei: 'abc',
+      price: '8.000.000',
+      costPrice: '7.000.000',
+      batteryHealth: '',
+      defectDescription: '',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Serial Number harus 8–14 karakter alfanumerik',
+    });
   });
 });

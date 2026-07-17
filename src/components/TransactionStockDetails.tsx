@@ -1,5 +1,6 @@
 import { Smartphone } from 'lucide-react';
 import type { StockItem } from '@/services/stock';
+import { identifierLabel } from '@/services/stockCore';
 
 function formatRupiah(n: number) {
   return 'Rp ' + n.toLocaleString('id-ID');
@@ -7,8 +8,8 @@ function formatRupiah(n: number) {
 
 /**
  * Render the stock unit(s) linked to a transaction. Used by the Riwayat pages
- * to show detail HP (model, capacity, color, condition, IMEI, price) when the
- * backend returns joined stock_items via transaction_id.
+ * to show detail HP (model, capacity, color, condition, IMEI/SN, price) when
+ * the backend returns joined stock_items via transaction_id.
  */
 export function TransactionStockDetails({ items }: { items: StockItem[] }) {
   if (!items || items.length === 0) return null;
@@ -29,7 +30,7 @@ export function TransactionStockDetails({ items }: { items: StockItem[] }) {
           <span className="break-words">{unit.condition}</span>
           {unit.has_imei && unit.imei && (
             <span className="min-w-0 break-all font-mono text-[11px] text-slate-400">
-              {unit.imei}
+              {identifierLabel(unit.device_category)}: {unit.imei}
             </span>
           )}
           {unit.defect_description && (

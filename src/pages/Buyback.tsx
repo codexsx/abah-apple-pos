@@ -30,7 +30,11 @@ import {
 import { recordBuybackWithPostings } from '@/services/postings';
 import { getStockItems, type StockItem } from '@/services/stock';
 import {
+  identifierLabel,
+  isValidSerialNumber,
+  normalizeSerialNumber,
   STOCK_STATUSES,
+  type DeviceCategory,
   type StockStatus,
 } from '@/services/stockCore';
 import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
@@ -129,7 +133,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-function getBuybackSaveErrorMessage(error: unknown): string {
+function getBuybackSaveErrorMessage(error: unknown, category: DeviceCategory = 'IPHONE'): string {
   const dbError = (error ?? {}) as SupabaseErrorLike;
   const code = typeof dbError.code === 'string' ? dbError.code : '';
   const message = [
@@ -141,7 +145,8 @@ function getBuybackSaveErrorMessage(error: unknown): string {
     code === '23505' &&
     (message.includes('imei') || message.includes('stock_items_active_imei_unique'))
   ) {
-    return 'IMEI ini masih tercatat sebagai stok aktif. Ubah status stok lama dulu sebelum buyback.';
+    // Constraint yang sama memblok IMEI (iPhone) maupun SN (iPad) duplikat.
+    return `${identifierLabel(category)} ini masih tercatat sebagai stok aktif. Ubah status stok lama dulu sebelum buyback.`;
   }
 
   if (code === '42501') {
@@ -194,6 +199,9 @@ function StockHistoryCard({ item }: { item: StockItem }) {
 export default function Buyback() {
   const navigate = useNavigate();
 
+  // Kategori perangkat menentukan aturan identitas: IMEI 15 digit (IPHONE)
+  // atau Serial Number 8–14 karakter (IPAD, disimpan uppercase di field imei).
+  const [deviceCategory, setDeviceCategory] = useState<DeviceCategory>('IPHONE');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [imei, setImei] = useState('');
@@ -224,11 +232,23 @@ export default function Buyback() {
   const cashNum = useMemo(() => parseMoney(cash), [cash]);
   const transferNum = useMemo(() => parseMoney(transfer), [transfer]);
   const paymentTotal = cashNum + transferNum;
-  const normalizedImei = normalizeImei(imei);
+  const isIpad = deviceCategory === 'IPAD';
+  // iPad: SN dinormalisasi uppercase; iPhone: IMEI 15 digit apa adanya.
+  const normalizedImei = isIpad ? normalizeSerialNumber(imei) : normalizeImei(imei);
+  const isIdentifierValid = isIpad
+    ? isValidSerialNumber(normalizedImei)
+    : normalizedImei.length === 15;
 
   const matchingHistory = useMemo(
-    () => stockRows.filter((item) => item.imei === normalizedImei && normalizedImei.length === 15),
-    [normalizedImei, stockRows],
+    () =>
+      stockRows.filter((item) => {
+        if (!isIdentifierValid || !item.imei) return false;
+        // iPad: bandingkan SN secara uppercase; iPhone: IMEI apa adanya.
+        return isIpad
+          ? normalizeSerialNumber(item.imei) === normalizedImei
+          : item.imei === normalizedImei;
+      }),
+    [isIdentifierValid, isIpad, normalizedImei, stockRows],
   );
   const activeDuplicate = matchingHistory.find((item) => item.status !== 'TERJUAL') ?? null;
 
@@ -256,6 +276,7 @@ export default function Buyback() {
   }, [reloadData]);
 
   const resetForm = useCallback(() => {
+    setDeviceCategory('IPHONE');
     setCustomerName('');
     setCustomerPhone('');
     setImei('');
@@ -275,7 +296,7 @@ export default function Buyback() {
   }, []);
 
   const canSubmit =
-    normalizedImei.length === 15 &&
+    isIdentifierValid &&
     model.trim() !== '' &&
     capacity.trim() !== '' &&
     condition.trim() !== '' &&
@@ -287,8 +308,12 @@ export default function Buyback() {
     (transferNum === 0 || transferAccount !== null);
 
   const submitHint = useMemo(() => {
-    if (normalizedImei.length !== 15) return 'IMEI wajib 15 digit.';
-    if (activeDuplicate) return 'IMEI masih aktif di stok.';
+    if (!isIdentifierValid) {
+      return isIpad
+        ? 'Serial Number wajib 8–14 karakter alfanumerik.'
+        : 'IMEI wajib 15 digit.';
+    }
+    if (activeDuplicate) return `${identifierLabel(deviceCategory)} masih aktif di stok.`;
     if (!model.trim()) return 'Model wajib diisi.';
     if (!capacity.trim()) return 'Kapasitas wajib diisi.';
     if (!condition.trim()) return 'Kondisi wajib diisi.';
@@ -306,8 +331,10 @@ export default function Buyback() {
     cashNum,
     color,
     condition,
+    deviceCategory,
+    isIdentifierValid,
+    isIpad,
     model,
-    normalizedImei.length,
     paymentTotal,
     transferAccount,
     transferNum,
@@ -386,6 +413,8 @@ export default function Buyback() {
           condition: condition.trim(),
           color: color.trim(),
           imei: normalizedImei,
+          // IPAD menyimpan Serial Number (uppercase) di field imei.
+          device_category: deviceCategory,
           status: initialStatus,
           cost_price: buybackPriceNum,
           price: stockSellingPrice,
@@ -398,7 +427,7 @@ export default function Buyback() {
       setSaveSuccess(true);
       await reloadData();
     } catch (error) {
-      setSaveError(getBuybackSaveErrorMessage(error));
+      setSaveError(getBuybackSaveErrorMessage(error, deviceCategory));
     } finally {
       setSaving(false);
     }
@@ -423,7 +452,7 @@ export default function Buyback() {
             Buyback HP
           </h1>
           <p className="mt-2 max-w-2xl text-[14px] text-slate-500">
-            Input unit yang dibeli kembali dari customer. IMEI yang sudah pernah terjual bisa masuk lagi, IMEI aktif akan diblok.
+            Input unit yang dibeli kembali dari customer. IMEI/SN yang sudah pernah terjual bisa masuk lagi, IMEI/SN aktif akan diblok.
           </p>
         </div>
         <button
@@ -440,9 +469,9 @@ export default function Buyback() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
-            <h2 className="text-[18px] font-semibold text-slate-950">Customer & IMEI</h2>
+            <h2 className="text-[18px] font-semibold text-slate-950">Customer & {identifierLabel(deviceCategory)}</h2>
             <p className="mt-1 text-[13px] text-slate-500">
-              Masukkan data customer dan IMEI unit yang dibeli kembali.
+              Masukkan data customer dan {identifierLabel(deviceCategory)} unit yang dibeli kembali.
             </p>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -470,24 +499,47 @@ export default function Buyback() {
               </label>
               <label className="space-y-1.5 md:col-span-2">
                 <span className="flex items-center gap-1 text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500">
-                  <Hash size={13} /> IMEI *
+                  <Smartphone size={13} /> Kategori Perangkat *
+                </span>
+                <select
+                  value={deviceCategory}
+                  onChange={(event) => {
+                    setDeviceCategory(event.target.value as DeviceCategory);
+                    // Ganti kategori = ganti aturan identitas; kosongkan isian lama.
+                    setImei('');
+                  }}
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-[14px] outline-none transition-all focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
+                >
+                  <option value="IPHONE">iPhone</option>
+                  <option value="IPAD">iPad</option>
+                </select>
+              </label>
+              <label className="space-y-1.5 md:col-span-2">
+                <span className="flex items-center gap-1 text-[12px] font-medium uppercase tracking-[0.04em] text-slate-500">
+                  <Hash size={13} /> {isIpad ? 'Serial Number (8–14 karakter)' : 'IMEI'} *
                 </span>
                 <input
                   value={imei}
-                  onChange={(event) => setImei(normalizeImei(event.target.value))}
-                  inputMode="numeric"
-                  maxLength={15}
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 font-mono text-[15px] tracking-[0.06em] outline-none transition-all focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
-                  placeholder="15 digit IMEI"
+                  onChange={(event) =>
+                    setImei(
+                      isIpad
+                        ? event.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 14)
+                        : normalizeImei(event.target.value),
+                    )
+                  }
+                  inputMode={isIpad ? 'text' : 'numeric'}
+                  maxLength={isIpad ? 14 : 15}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 font-mono text-[15px] tracking-[0.06em] uppercase outline-none transition-all focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10"
+                  placeholder={isIpad ? 'Serial Number iPad' : '15 digit IMEI'}
                 />
               </label>
             </div>
 
-            {normalizedImei.length === 15 && (
+            {isIdentifierValid && (
               <div className="mt-4 space-y-2">
                 {matchingHistory.length === 0 ? (
                   <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] font-medium text-sky-700">
-                    IMEI belum pernah tercatat. Tetap bisa buyback sebagai unit baru.
+                    {identifierLabel(deviceCategory)} belum pernah tercatat. Tetap bisa buyback sebagai unit baru.
                   </div>
                 ) : (
                   matchingHistory.map((item) => (
@@ -696,7 +748,7 @@ export default function Buyback() {
                   {color || 'Warna'} - {condition || 'Kondisi'} - {initialStatus}
                 </p>
                 <p className="mt-1 font-mono text-[12px] text-slate-500">
-                  {normalizedImei || 'IMEI belum diisi'}
+                  {normalizedImei || `${identifierLabel(deviceCategory)} belum diisi`}
                 </p>
               </div>
             </div>

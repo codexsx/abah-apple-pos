@@ -514,3 +514,104 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
     ]);
   });
 });
+
+describe('Pembelian — pembelian iPad (Serial Number)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getStockItems).mockResolvedValue([]);
+    vi.mocked(getAgents).mockResolvedValue([AGENT_SUPPLIER]);
+    recordPurchaseWithPostings.mockResolvedValue('tx-ipad');
+    recordAccessoryPurchaseWithPostings.mockResolvedValue('tx-accessory');
+  });
+
+  it('records an iPad purchase with normalized uppercase Serial Number and device_category IPAD', async () => {
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('Pak Tono'), {
+      target: { value: 'Pak Tono' },
+    });
+
+    // Switch ke kategori iPad: daftar model/warna berganti & mode dipaksa full.
+    fireEvent.click(screen.getByRole('button', { name: 'iPad' }));
+
+    pickFromDropdown('Pilih tipe iPad', 'iPad Air');
+    pickFromDropdown('Pilih kapasitas', '128GB');
+    pickFromDropdown('Pilih kondisi', 'Second iBox');
+    pickFromDropdown('Pilih warna', 'Space Gray');
+
+    // SN huruf kecil harus dinormalisasi menjadi uppercase oleh input.
+    fireEvent.change(screen.getByPlaceholderText('DMPX1234567'), {
+      target: { value: 'dmpx1234567' },
+    });
+
+    // Money inputs: [0] = Harga Modal (unit cost), [1] = Harga Jual (unit sell),
+    // [2] = Bayar Cash, [3] = Bayar Transfer.
+    const moneyInputs = screen.getAllByPlaceholderText('Rp 0');
+    fireEvent.change(moneyInputs[0], { target: { value: UNIT_PRICE } });
+    fireEvent.change(moneyInputs[1], { target: { value: SELL_PRICE } });
+    fireEvent.change(moneyInputs[2], { target: { value: UNIT_PRICE } });
+
+    const cashOption = await screen.findByRole('radio', { name: /Kas Toko/ });
+    fireEvent.click(cashOption);
+
+    const saveButton = screen.getByRole('button', { name: /Simpan Pembelian/ });
+    await waitFor(() => expect(saveButton).not.toBeDisabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() =>
+      expect(recordPurchaseWithPostings).toHaveBeenCalledTimes(1),
+    );
+
+    const arg = recordPurchaseWithPostings.mock.calls[0][0];
+    // Unit iPad tersimpan dengan device_category IPAD dan SN uppercase di
+    // field imei (DB menyimpan SN uppercase).
+    expect(arg.items).toEqual([
+      expect.objectContaining({
+        model: 'iPad Air',
+        device_category: 'IPAD',
+        imei: 'DMPX1234567',
+        count: 1,
+        cost_price: Number(UNIT_PRICE),
+        price: Number(SELL_PRICE),
+      }),
+    ]);
+    // Detail JSON juga membawa SN yang sudah dinormalisasi uppercase.
+    const detail = JSON.parse(arg.detail);
+    expect(detail.units).toEqual([
+      expect.objectContaining({ imei: 'DMPX1234567' }),
+    ]);
+  });
+
+  it('blocks submission and persists nothing when the iPad Serial Number is invalid', async () => {
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText('Pak Tono'), {
+      target: { value: 'Pak Tono' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'iPad' }));
+
+    pickFromDropdown('Pilih tipe iPad', 'iPad Air');
+    pickFromDropdown('Pilih kapasitas', '128GB');
+    pickFromDropdown('Pilih kondisi', 'Second iBox');
+    pickFromDropdown('Pilih warna', 'Space Gray');
+
+    // 'abc' → dinormalisasi 'ABC' tapi hanya 3 karakter → SN tidak valid.
+    fireEvent.change(screen.getByPlaceholderText('DMPX1234567'), {
+      target: { value: 'abc' },
+    });
+
+    const moneyInputs = screen.getAllByPlaceholderText('Rp 0');
+    fireEvent.change(moneyInputs[0], { target: { value: UNIT_PRICE } });
+    fireEvent.change(moneyInputs[2], { target: { value: UNIT_PRICE } });
+
+    const cashOption = await screen.findByRole('radio', { name: /Kas Toko/ });
+    fireEvent.click(cashOption);
+
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pembelian/ }));
+
+    expect(
+      (await screen.findAllByText(/Serial Number tiap unit harus 8–14 karakter alfanumerik/i)).length,
+    ).toBeGreaterThan(0);
+    expect(recordPurchaseWithPostings).not.toHaveBeenCalled();
+  });
+});
