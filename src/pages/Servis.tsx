@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -21,6 +21,9 @@ import {
   Clock,
   AlertTriangle,
   Edit3,
+  Plus,
+  Trash2,
+  Undo2,
 } from 'lucide-react';
 import {
   type ServiceStatus,
@@ -36,7 +39,6 @@ import {
   getServiceSparepartUsages,
   recordServiceSparepartUsage,
   recordManualServiceSparepartCost,
-  updateServiceCostFields,
   type ServiceRecord as DbServiceRecord,
   type ServiceSparepartUsage,
 } from '@/services/services';
@@ -78,6 +80,12 @@ import {
   buildServiceCostPayload,
   validateServiceCostDraft,
 } from '@/services/serviceCosts';
+import {
+  getPendingServiceChangeRecordIds,
+  submitServiceChangeRequest,
+} from '@/services/serviceApprovals';
+import type { ProposedServiceEdit } from '@/services/serviceApprovalsCore';
+import { useAuth } from '@/contexts/AuthContext';
 import { UNIT_CONDITION_OPTIONS } from '@/services/unitConditions';
 
 /* ------------------------------------------------------------------ */
@@ -124,6 +132,40 @@ function dbToUiServiceRecord(r: DbServiceRecord): ServiceRecordUi {
     pickedUp: r.picked_up ?? false,
     pickedUpAt: r.picked_up_at ?? undefined,
     createdByStaff: r.created_by_staff ?? null,
+  };
+}
+
+/**
+ * UI -> DB mapper untuk payload request approval. Snapshot hanya dipakai
+ * untuk tampilan di kartu approval manajer; field yang tidak ada di UI model
+ * diisi nilai aman.
+ */
+function uiToDbServiceRecord(r: ServiceRecordUi): DbServiceRecord {
+  return {
+    id: r.id,
+    customer_name: r.customerName,
+    phone_model: r.phoneModel,
+    capacity: r.capacity ?? '',
+    condition: r.condition ?? '',
+    color: r.color ?? '',
+    imei: r.imei ?? '',
+    battery_health: r.batteryHealth ?? null,
+    issue: r.issue,
+    additional_note: r.additionalNote ?? '',
+    status: r.status,
+    estimated_cost: r.estimatedCost,
+    work_cost: r.workCost,
+    dp: r.dp ?? 0,
+    created_at: r.createdAt,
+    completed_at: r.completedAt ?? null,
+    technician: r.technician ?? '',
+    service_type: r.serviceType,
+    stk_id: r.stkId ?? '',
+    wage_amount: r.wageAmount,
+    wage_paid: r.wagePaid,
+    picked_up: r.pickedUp,
+    picked_up_at: r.pickedUpAt ?? null,
+    created_by_staff: r.createdByStaff ?? null,
   };
 }
 
@@ -414,6 +456,7 @@ function MonitorServisView({
   onClose: () => void;
   technicians: Technician[];
 }) {
+  const { user } = useAuth();
   const [activeTechFilter, setActiveTechFilter] = useState<Technician | 'SEMUA'>('SEMUA');
   const [activeTypeFilter, setActiveTypeFilter] = useState<ServiceType | 'SEMUA'>('SEMUA');
   const [searchQuery, setSearchQuery] = useState('');
@@ -441,6 +484,18 @@ function MonitorServisView({
   });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // Request-approval flow: alasan wajib + perubahan sparepart di-stage dulu,
+  // baru dikirim sebagai satu request saat "Ajukan Perubahan" ditekan.
+  const [editReason, setEditReason] = useState('');
+  const [editUsageChanges, setEditUsageChanges] = useState<
+    Record<string, { quantity: string; unitCost: string; deleted: boolean }>
+  >({});
+  const [editNewManualUsages, setEditNewManualUsages] = useState<
+    Array<{ key: string; name: string; cost: string }>
+  >([]);
+  const editManualKeyRef = useRef(0);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
+  const [pendingApprovalIds, setPendingApprovalIds] = useState<Set<string>>(new Set());
 
   const [partTarget, setPartTarget] = useState<ServiceRecordUi | null>(null);
   const [partId, setPartId] = useState('');
@@ -479,6 +534,17 @@ function MonitorServisView({
       .then(setSpareparts)
       .catch(() => setSpareparts([]));
   }, []);
+
+  // Badge "Menunggu Approval": id record servis yang punya request pending.
+  const reloadPendingApprovals = useCallback(() => {
+    getPendingServiceChangeRecordIds()
+      .then(setPendingApprovalIds)
+      .catch(() => setPendingApprovalIds(new Set()));
+  }, []);
+
+  useEffect(() => {
+    reloadPendingApprovals();
+  }, [reloadPendingApprovals]);
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -543,23 +609,40 @@ function MonitorServisView({
       technician: rec.technician ?? '',
       upah: String(rec.wageAmount || rec.workCost || ''),
     });
+    // Stage kondisi sparepart saat ini — perubahan baru ikut terkirim saat
+    // request approval diajukan.
+    const staged: Record<string, { quantity: string; unitCost: string; deleted: boolean }> = {};
+    for (const usage of sparepartUsages[rec.id] ?? []) {
+      staged[usage.id] = {
+        quantity: String(usage.quantity),
+        unitCost: String(usage.unit_cost),
+        deleted: false,
+      };
+    }
+    setEditUsageChanges(staged);
+    setEditNewManualUsages([]);
+    setEditReason('');
     setEditError(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
+    setEditUsageChanges({});
+    setEditNewManualUsages([]);
+    setEditReason('');
     setEditError(null);
   };
 
-  // Persist the edited detail + required wage, then patch local state in place.
+  // Ajukan perubahan sebagai REQUEST APPROVAL manajer — tidak menyimpan
+  // langsung ke service_records. Validasi form sama seperti sebelumnya,
+  // plus alasan wajib.
   const saveEdit = async (id: string) => {
+    const record = records.find((r) => r.id === id);
+    if (!record) return;
+    const usages = sparepartUsages[id] ?? [];
     const wageAmount = Number(editDraft.upah) || 0;
-    const workCost = wageAmount;
-    const partsTotal = (sparepartUsages[id] ?? []).reduce(
-      (sum, usage) => sum + usage.total_cost,
-      0,
-    );
-    const imei = editDraft.imei.replace(/\D/g, '').slice(0, 20);
+    // SN iPad memakai huruf — pertahankan alfanumerik, jangan strip huruf.
+    const imei = editDraft.imei.replace(/[^0-9A-Za-z]/g, '').slice(0, 20);
     const batteryHealth = editDraft.batteryHealth
       ? Number(editDraft.batteryHealth.replace(/\D/g, '').slice(0, 3))
       : null;
@@ -580,53 +663,72 @@ function MonitorServisView({
       setEditError('Upah wajib diisi.');
       return;
     }
+    if (!editReason.trim()) {
+      setEditError('Alasan perubahan wajib diisi.');
+      return;
+    }
+
+    // Hanya field yang benar-benar berubah dari nilai record saat ini.
+    const fields: NonNullable<ProposedServiceEdit['fields']> = {};
+    const nextCustomerName = editDraft.customerName.trim() || 'Customer';
+    if (nextCustomerName !== record.customerName) fields.customer_name = nextCustomerName;
+    if (editDraft.phoneModel.trim() !== record.phoneModel) fields.phone_model = editDraft.phoneModel.trim();
+    if (editDraft.capacity.trim() !== (record.capacity ?? '')) fields.capacity = editDraft.capacity.trim();
+    if (editDraft.condition.trim() !== (record.condition ?? '')) fields.condition = editDraft.condition.trim();
+    if (editDraft.color.trim() !== (record.color ?? '')) fields.color = editDraft.color.trim();
+    if (imei !== (record.imei ?? '')) fields.imei = imei;
+    if (batteryHealth !== (record.batteryHealth ?? null)) fields.battery_health = batteryHealth;
+    if (editDraft.issue.trim() !== record.issue) fields.issue = editDraft.issue.trim();
+    if (editDraft.additionalNote.trim() !== (record.additionalNote ?? '')) {
+      fields.additional_note = editDraft.additionalNote.trim();
+    }
+    if (editDraft.technician !== (record.technician ?? '')) fields.technician = editDraft.technician;
+    if (wageAmount !== record.wageAmount) fields.wage_amount = wageAmount;
+
+    // Sparepart staged: baris berubah → upsert, baris manual baru → upsert
+    // (qty 1), baris ditandai hapus → delete.
+    const usagesUpsert: NonNullable<ProposedServiceEdit['usagesUpsert']> = [];
+    const usagesDelete: string[] = [];
+    for (const usage of usages) {
+      const change = editUsageChanges[usage.id];
+      if (!change) continue;
+      if (change.deleted) {
+        usagesDelete.push(usage.id);
+        continue;
+      }
+      const quantity = Number(change.quantity) || 0;
+      const unitCost = Number(change.unitCost) || 0;
+      if (quantity !== usage.quantity || unitCost !== usage.unit_cost) {
+        usagesUpsert.push({ id: usage.id, quantity, unit_cost: unitCost });
+      }
+    }
+    for (const manual of editNewManualUsages) {
+      usagesUpsert.push({
+        sparepart_name: manual.name.trim() || 'Spare Part Manual',
+        quantity: 1,
+        unit_cost: Number(manual.cost) || 0,
+      });
+    }
 
     setEditSaving(true);
     setEditError(null);
     try {
-      await updateServiceRecord(id, {
-        customer_name: editDraft.customerName.trim() || 'Customer',
-        phone_model: editDraft.phoneModel.trim(),
-        capacity: editDraft.capacity.trim(),
-        condition: editDraft.condition.trim(),
-        color: editDraft.color.trim(),
-        imei,
-        battery_health: batteryHealth,
-        issue: editDraft.issue.trim(),
-        additional_note: editDraft.additionalNote.trim(),
-        technician: editDraft.technician,
+      await submitServiceChangeRequest({
+        record: uiToDbServiceRecord(record),
+        usages,
+        reason: editReason,
+        requestedBy: user?.id ?? '',
+        proposed: { fields, usagesUpsert, usagesDelete },
       });
-      await updateServiceCostFields({
-        serviceRecordId: id,
-        workCost,
-        wageAmount,
-      });
-      setRecords((prev) =>
-        prev.map((r) =>
-          r.id === id
-            ? {
-                ...r,
-                customerName: editDraft.customerName.trim() || 'Customer',
-                phoneModel: editDraft.phoneModel.trim(),
-                capacity: editDraft.capacity.trim(),
-                condition: editDraft.condition.trim(),
-                color: editDraft.color.trim(),
-                imei,
-                batteryHealth: batteryHealth ?? undefined,
-                issue: editDraft.issue.trim(),
-                additionalNote: editDraft.additionalNote.trim(),
-                technician: editDraft.technician,
-                workCost,
-                estimatedCost: workCost + partsTotal,
-                wageAmount,
-              }
-            : r,
-        ),
-      );
-      setEditingId(null);
+      cancelEdit();
+      setEditSuccess('Perubahan diajukan — menunggu approval manajer.');
+      reloadPendingApprovals();
     } catch (err) {
-      console.error('Gagal memperbarui estimasi servis:', err);
-      setEditError('Gagal menyimpan perubahan. Silakan coba lagi.');
+      setEditError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Gagal mengajukan perubahan. Silakan coba lagi.',
+      );
     } finally {
       setEditSaving(false);
     }
@@ -796,6 +898,11 @@ function MonitorServisView({
               {record.pickedUp && (
                 <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                   <Check size={10} /> Sudah Diambil
+                </span>
+              )}
+              {pendingApprovalIds.has(record.id) && (
+                <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <Clock size={10} /> Menunggu Approval
                 </span>
               )}
             </div>
@@ -984,7 +1091,7 @@ function MonitorServisView({
                         </label>
                         <input
                           value={editDraft.imei}
-                          onChange={(event) => handleEditDraftChange('imei', event.target.value.replace(/\D/g, '').slice(0, 20))}
+                          onChange={(event) => handleEditDraftChange('imei', event.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 20))}
                           className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 font-mono text-[13px] outline-none focus:border-teal-500"
                         />
                       </div>
@@ -1052,6 +1159,166 @@ function MonitorServisView({
                           Upah + modal part yang sudah tercatat.
                         </p>
                       </div>
+                      {/* Sparepart dipakai — perubahan di-stage, ikut request approval */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          Sparepart Dipakai
+                        </label>
+                        <div className="space-y-2">
+                          {usages.map((usage) => {
+                            const change = editUsageChanges[usage.id] ?? {
+                              quantity: String(usage.quantity),
+                              unitCost: String(usage.unit_cost),
+                              deleted: false,
+                            };
+                            return (
+                              <div
+                                key={usage.id}
+                                className="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 sm:flex-row sm:items-center"
+                              >
+                                <span
+                                  className={
+                                    'flex-1 text-[12px] font-medium ' +
+                                    (change.deleted ? 'text-slate-400 line-through' : 'text-slate-800')
+                                  }
+                                >
+                                  {usage.sparepart_name}
+                                </span>
+                                {change.deleted ? (
+                                  <span className="font-mono text-[12px] text-slate-400 line-through">
+                                    x{usage.quantity} · {formatPrice(usage.unit_cost)}/pcs
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      aria-label={`Jumlah ${usage.sparepart_name}`}
+                                      value={change.quantity}
+                                      onChange={(event) =>
+                                        setEditUsageChanges((prev) => ({
+                                          ...prev,
+                                          [usage.id]: {
+                                            ...change,
+                                            quantity: event.target.value.replace(/\D/g, '').slice(0, 3),
+                                          },
+                                        }))
+                                      }
+                                      className="h-9 w-14 rounded-lg border border-slate-300 bg-white px-2 font-mono text-[12px] outline-none focus:border-teal-500"
+                                    />
+                                    <div className="w-36">
+                                      <RpInput
+                                        ariaLabel={`Harga ${usage.sparepart_name}`}
+                                        value={change.unitCost}
+                                        onChange={(value) =>
+                                          setEditUsageChanges((prev) => ({
+                                            ...prev,
+                                            [usage.id]: { ...change, unitCost: value },
+                                          }))
+                                        }
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                <button
+                                  aria-label={change.deleted ? `Batal hapus ${usage.sparepart_name}` : `Hapus ${usage.sparepart_name}`}
+                                  onClick={() =>
+                                    setEditUsageChanges((prev) => ({
+                                      ...prev,
+                                      [usage.id]: { ...change, deleted: !change.deleted },
+                                    }))
+                                  }
+                                  className={
+                                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ' +
+                                    (change.deleted
+                                      ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                                      : 'bg-rose-50 text-rose-600 hover:bg-rose-100')
+                                  }
+                                >
+                                  {change.deleted ? <Undo2 size={14} /> : <Trash2 size={14} />}
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {editNewManualUsages.map((manual) => (
+                            <div
+                              key={manual.key}
+                              className="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 sm:flex-row sm:items-center"
+                            >
+                              <input
+                                aria-label="Nama sparepart manual"
+                                placeholder="Nama sparepart manual"
+                                value={manual.name}
+                                onChange={(event) =>
+                                  setEditNewManualUsages((prev) =>
+                                    prev.map((item) =>
+                                      item.key === manual.key ? { ...item, name: event.target.value } : item,
+                                    ),
+                                  )
+                                }
+                                className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-2 text-[12px] outline-none focus:border-teal-500"
+                              />
+                              <div className="flex items-center gap-2">
+                                <div className="w-36">
+                                  <RpInput
+                                    ariaLabel="Harga sparepart manual"
+                                    value={manual.cost}
+                                    onChange={(value) =>
+                                      setEditNewManualUsages((prev) =>
+                                        prev.map((item) =>
+                                          item.key === manual.key ? { ...item, cost: value } : item,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <button
+                                  aria-label="Hapus baris sparepart manual"
+                                  onClick={() =>
+                                    setEditNewManualUsages((prev) =>
+                                      prev.filter((item) => item.key !== manual.key),
+                                    )
+                                  }
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {usages.length === 0 && editNewManualUsages.length === 0 && (
+                            <p className="text-[12px] text-slate-400">Belum ada part dipakai.</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() =>
+                            setEditNewManualUsages((prev) => [
+                              ...prev,
+                              { key: `manual-${(editManualKeyRef.current += 1)}`, name: '', cost: '' },
+                            ])
+                          }
+                          className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+                        >
+                          <Plus size={14} /> Tambah Sparepart Manual
+                        </button>
+                      </div>
+                      {/* Alasan wajib — request approval manajer */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.04em] text-slate-500 mb-1.5">
+                          ALASAN PERUBAHAN *
+                        </label>
+                        <textarea
+                          value={editReason}
+                          onChange={(event) => {
+                            setEditReason(event.target.value);
+                            setEditError(null);
+                          }}
+                          rows={2}
+                          placeholder="Contoh: harga part naik, customer tambah ganti speaker"
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-teal-500"
+                        />
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Wajib diisi — perubahan akan dikirim sebagai request approval manajer.
+                        </p>
+                      </div>
                     </div>
                     {editError && <p className="mt-2 text-[12px] text-rose-500">{editError}</p>}
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -1066,7 +1333,7 @@ function MonitorServisView({
                         disabled={editSaving}
                         className="rounded-lg bg-teal-500 px-4 py-2 text-[13px] font-semibold text-white hover:bg-teal-600 transition-colors disabled:opacity-60"
                       >
-                        {editSaving ? 'Menyimpan...' : 'Simpan Detail'}
+                        {editSaving ? 'Mengajukan...' : 'Ajukan Perubahan'}
                       </button>
                     </div>
                   </div>
@@ -1208,6 +1475,16 @@ function MonitorServisView({
             )}
           </div>
         </div>
+
+        {/* Pesan sukses request approval */}
+        {editSuccess && (
+          <div
+            role="status"
+            className="mb-4 flex items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-[13px] font-semibold text-teal-700"
+          >
+            <Check size={14} /> {editSuccess}
+          </div>
+        )}
 
         {/* Loading state */}
         {loading && (
@@ -1804,12 +2081,14 @@ function RpInput({
   placeholder = '0',
   icon,
   error,
+  ariaLabel,
 }: {
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
   icon?: React.ReactNode;
   error?: boolean;
+  ariaLabel?: string;
 }) {
   return (
     <div className="relative">
@@ -1817,6 +2096,7 @@ function RpInput({
       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[14px] text-slate-400 font-mono">Rp</span>
       <input
         type="text"
+        aria-label={ariaLabel}
         value={value ? 'Rp ' + value.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
         placeholder={'Rp ' + placeholder}

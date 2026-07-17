@@ -36,6 +36,10 @@ import {
 } from '@/services/services';
 import { getTransactionsWithStockDetailsByType, type TransactionWithStockDetails } from '@/services/transactions';
 import { getSpareparts } from '@/services/spareparts';
+import {
+  submitServiceChangeRequest,
+  getPendingServiceChangeRecordIds,
+} from '@/services/serviceApprovals';
 
 // ---------------------------------------------------------------------------
 // Mock the persistence layer. Servis imports `recordTransactionWithPostings`
@@ -77,6 +81,23 @@ vi.mock('@/services/spareparts', () => ({
   getSpareparts: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('@/services/serviceApprovals', () => ({
+  submitServiceChangeRequest: vi.fn(),
+  getPendingServiceChangeRecordIds: vi.fn(),
+}));
+
+// Form edit monitor butuh user login untuk requestedBy (request approval).
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'user-test-1' },
+    profile: null,
+    isLoading: false,
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    refreshProfile: vi.fn(),
+  }),
+}));
+
 vi.mock('@/services/technicians', () => ({
   getTechnicians: vi.fn().mockResolvedValue([
     {
@@ -113,6 +134,8 @@ const mockUpdateServiceCostFields = vi.mocked(updateServiceCostFields);
 const mockUpdateServiceRecord = vi.mocked(updateServiceRecord);
 const mockGetSalesWithStockDetails = vi.mocked(getTransactionsWithStockDetailsByType);
 const mockGetSpareparts = vi.mocked(getSpareparts);
+const mockSubmitServiceChangeRequest = vi.mocked(submitServiceChangeRequest);
+const mockGetPendingServiceChangeRecordIds = vi.mocked(getPendingServiceChangeRecordIds);
 
 // ---------------------------------------------------------------------------
 // Account fixtures — match the real AccountWithBalance shape.
@@ -251,6 +274,13 @@ beforeEach(() => {
   });
   mockGetSpareparts.mockReset();
   mockGetSpareparts.mockResolvedValue([]);
+  mockSubmitServiceChangeRequest.mockReset();
+  mockSubmitServiceChangeRequest.mockResolvedValue({
+    id: 'req-1',
+    payload: { reason: 'ok', fields: {}, usagesUpsert: [], usagesDelete: [] },
+  });
+  mockGetPendingServiceChangeRecordIds.mockReset();
+  mockGetPendingServiceChangeRecordIds.mockResolvedValue(new Set());
 
   // The form alerts + closes on success; silence the jsdom alert.
   vi.spyOn(window, 'alert').mockImplementation(() => {});
@@ -496,7 +526,7 @@ describe('Servis cost input and monitor detail edit', () => {
     });
   });
 
-  it('edits service details and required wage from the monitor view', async () => {
+  it('submits monitor detail edits as an approval request instead of saving directly', async () => {
     mockGetServiceRecords.mockResolvedValue([
       {
         id: 'srv-monitor-1',
@@ -539,23 +569,29 @@ describe('Servis cost input and monitor detail edit', () => {
     fireEvent.change(fieldByLabel('UPAH *'), {
       target: { value: '600000' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Simpan Detail/i }));
-
-    await waitFor(() =>
-      expect(mockUpdateServiceRecord).toHaveBeenCalledWith(
-        'srv-monitor-1',
-        expect.objectContaining({
-          issue: 'Ganti battery dan speaker bawah',
-          additional_note: 'Customer minta cepat',
-          technician: 'Zaidan',
-        }),
-      ),
-    );
-    expect(mockUpdateServiceCostFields).toHaveBeenCalledWith({
-      serviceRecordId: 'srv-monitor-1',
-      workCost: 600000,
-      wageAmount: 600000,
+    fireEvent.change(fieldByLabel('ALASAN PERUBAHAN *'), {
+      target: { value: 'Keluhan bertambah, upah menyesuaikan' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /Ajukan Perubahan/i }));
+
+    await waitFor(() => expect(mockSubmitServiceChangeRequest).toHaveBeenCalledTimes(1));
+    const arg = mockSubmitServiceChangeRequest.mock.calls[0][0];
+    expect(arg.record).toMatchObject({ id: 'srv-monitor-1' });
+    expect(arg.requestedBy).toBe('user-test-1');
+    expect(arg.reason).toBe('Keluhan bertambah, upah menyesuaikan');
+    expect(arg.proposed.fields).toEqual({
+      issue: 'Ganti battery dan speaker bawah',
+      additional_note: 'Customer minta cepat',
+      wage_amount: 600000,
+    });
+    expect(arg.proposed.usagesUpsert).toEqual([]);
+    expect(arg.proposed.usagesDelete).toEqual([]);
+    // Tidak ada lagi penyimpanan langsung dari form edit.
+    expect(mockUpdateServiceRecord).not.toHaveBeenCalled();
+    expect(mockUpdateServiceCostFields).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText('Perubahan diajukan — menunggu approval manajer.'),
+    ).toBeInTheDocument();
   });
 });
 
@@ -643,5 +679,118 @@ describe('Servis DP payment — invalid selection (Req 6.4, 6.7)', () => {
 
     // ...and nothing is persisted.
     expect(mockRecord).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Service edit request approval flow (monitor inline editor)
+// ===========================================================================
+describe('Servis edit approval request', () => {
+  const MONITOR_RECORD = {
+    id: 'srv-monitor-1',
+    customer_name: 'Budi Santoso',
+    phone_model: 'iPhone 11',
+    capacity: '128GB',
+    condition: 'Second iBox',
+    color: 'Black',
+    imei: '352345678901234',
+    battery_health: null,
+    issue: 'Ganti battery',
+    additional_note: '',
+    status: 'PROSES' as const,
+    estimated_cost: 740000,
+    work_cost: 500000,
+    dp: 0,
+    created_at: '2024-01-01T00:00:00.000Z',
+    completed_at: null,
+    technician: 'Zaidan',
+    service_type: 'Customer' as const,
+    stk_id: '',
+    wage_amount: 500000,
+    wage_paid: false,
+    picked_up: false,
+    picked_up_at: null,
+  };
+
+  const USAGE_ROW = {
+    id: 'usage-1',
+    service_record_id: 'srv-monitor-1',
+    sparepart_id: 'sp-battery-11',
+    sparepart_name: 'Battery iPhone 11',
+    quantity: 2,
+    unit_cost: 120000,
+    total_cost: 240000,
+    created_at: '2024-01-01T00:00:00.000Z',
+  };
+
+  async function openMonitorEditor() {
+    renderPage();
+    fireEvent.click(screen.getByText('Monitor Servis').closest('button')!);
+    fireEvent.click(await screen.findByText(/iPhone 11/));
+    fireEvent.click(await screen.findByRole('button', { name: /Edit Detail/i }));
+  }
+
+  it('blocks submission and shows an error when the reason is empty', async () => {
+    mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
+    await openMonitorEditor();
+
+    fireEvent.change(fieldByLabel('UPAH *'), { target: { value: '600000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Ajukan Perubahan/i }));
+
+    expect(await screen.findByText('Alasan perubahan wajib diisi.')).toBeInTheDocument();
+    expect(mockSubmitServiceChangeRequest).not.toHaveBeenCalled();
+  });
+
+  it('sends changed wage and edited sparepart row in the approval request', async () => {
+    mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
+    mockGetServiceSparepartUsages.mockResolvedValue([USAGE_ROW]);
+    await openMonitorEditor();
+
+    fireEvent.change(fieldByLabel('UPAH *'), { target: { value: '600000' } });
+    fireEvent.change(screen.getByLabelText('Harga Battery iPhone 11'), {
+      target: { value: '150000' },
+    });
+    fireEvent.change(fieldByLabel('ALASAN PERUBAHAN *'), {
+      target: { value: 'Harga part naik' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Ajukan Perubahan/i }));
+
+    await waitFor(() => expect(mockSubmitServiceChangeRequest).toHaveBeenCalledTimes(1));
+    const arg = mockSubmitServiceChangeRequest.mock.calls[0][0];
+    expect(arg.requestedBy).toBe('user-test-1');
+    expect(arg.usages).toEqual([USAGE_ROW]);
+    expect(arg.proposed.fields).toEqual({ wage_amount: 600000 });
+    expect(arg.proposed.usagesUpsert).toEqual([
+      { id: 'usage-1', quantity: 2, unit_cost: 150000 },
+    ]);
+    expect(arg.proposed.usagesDelete).toEqual([]);
+  });
+
+  it('sends a staged sparepart delete in usagesDelete', async () => {
+    mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
+    mockGetServiceSparepartUsages.mockResolvedValue([USAGE_ROW]);
+    await openMonitorEditor();
+
+    fireEvent.click(screen.getByLabelText('Hapus Battery iPhone 11'));
+    fireEvent.change(fieldByLabel('ALASAN PERUBAHAN *'), {
+      target: { value: 'Part batal dipakai' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Ajukan Perubahan/i }));
+
+    await waitFor(() => expect(mockSubmitServiceChangeRequest).toHaveBeenCalledTimes(1));
+    const arg = mockSubmitServiceChangeRequest.mock.calls[0][0];
+    expect(arg.proposed.usagesDelete).toEqual(['usage-1']);
+    expect(arg.proposed.usagesUpsert).toEqual([]);
+    expect(arg.proposed.fields).toEqual({});
+  });
+
+  it('shows the Menunggu Approval badge for records with a pending request', async () => {
+    mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
+    mockGetPendingServiceChangeRecordIds.mockResolvedValue(new Set(['srv-monitor-1']));
+
+    renderPage();
+    fireEvent.click(screen.getByText('Monitor Servis').closest('button')!);
+
+    expect(await screen.findByText('Menunggu Approval')).toBeInTheDocument();
   });
 });
