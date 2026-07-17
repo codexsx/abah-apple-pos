@@ -33,6 +33,7 @@ import {
   getAttendanceAutoOffDates,
   getAttendanceExpectedStaff,
   getAttendanceOffRequests,
+  getAttendancePhotoUrl,
   getAttendanceRecords,
   getAttendanceRevisionRequests,
   getAttendanceSettings,
@@ -92,13 +93,13 @@ function formatTime(value: string): string {
   });
 }
 
-function currentMonthRange() {
+function recentAttendanceRange() {
   const today = pontianakDate();
-  const [year, month] = today.split('-').map(Number);
-  const end = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
   return {
-    startDate: `${year}-${String(month).padStart(2, '0')}-01`,
-    endDate: `${year}-${String(month).padStart(2, '0')}-${String(end).padStart(2, '0')}`,
+    startDate: start.toISOString().slice(0, 10),
+    endDate: today,
   };
 }
 
@@ -116,21 +117,25 @@ function statusLabel(status: AttendanceStatus): string {
 
 type AttendanceListItem = AttendanceReportItem;
 
-function AttendancePhoto({ record }: { record: AttendanceRecord }) {
-  if (!record.photo_url) {
-    return (
-      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-2xl bg-slate-100 text-[12px] font-semibold text-slate-400">
-        Foto
-      </div>
-    );
-  }
-
+function AttendancePhoto({
+  record,
+  loading,
+  onView,
+}: {
+  record: AttendanceRecord;
+  loading: boolean;
+  onView: (record: AttendanceRecord) => void;
+}) {
   return (
-    <img
-      src={record.photo_url}
-      alt={`Foto absen ${record.staff.name}`}
-      className="aspect-[3/4] w-full rounded-2xl object-cover ring-1 ring-slate-100"
-    />
+    <button
+      type="button"
+      onClick={() => onView(record)}
+      disabled={loading}
+      className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 px-2 text-[12px] font-bold text-slate-600 ring-1 ring-slate-200 transition-colors hover:bg-slate-200 disabled:cursor-wait disabled:opacity-70"
+    >
+      {loading ? <Loader2 size={19} className="animate-spin" /> : <Camera size={19} />}
+      {loading ? 'Memuat...' : 'Lihat Foto'}
+    </button>
   );
 }
 
@@ -175,7 +180,7 @@ export default function Absensi() {
   const canManage = effectivePermission(profile?.role, profile?.permissions, 'manage_users');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const range = useMemo(() => currentMonthRange(), []);
+  const range = useMemo(() => recentAttendanceRange(), []);
 
   const [settings, setSettings] = useState<AttendanceSettings | null>(null);
   const [draft, setDraft] = useState<AttendanceSettings | null>(null);
@@ -215,6 +220,8 @@ export default function Absensi() {
   const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [mirrorCamera, setMirrorCamera] = useState(true);
+  const [photoLoadingId, setPhotoLoadingId] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<{ url: string; record: AttendanceRecord } | null>(null);
   const [error, setError] = useState('');
 
   const selectedShift = useMemo(() => (
@@ -827,15 +834,23 @@ export default function Absensi() {
     window.setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
-  function printPhotoReport() {
+  async function viewAttendancePhoto(record: AttendanceRecord) {
+    setPhotoLoadingId(record.id);
+    setError('');
+    try {
+      const url = await getAttendancePhotoUrl(record.photo_path);
+      if (!url) throw new Error('Foto absensi tidak tersedia.');
+      setPhotoPreview({ url, record });
+    } catch (err) {
+      console.error('[Absensi] photo preview error:', err);
+      setError(err instanceof Error ? err.message : 'Foto absensi tidak dapat dimuat.');
+    } finally {
+      setPhotoLoadingId(null);
+    }
+  }
+
+  async function printPhotoReport() {
     if (!canManage || filteredAttendanceItems.length === 0) return;
-    const html = buildAttendancePhotoReportHtml({
-      title: `Report Absensi ${settings?.store_name ?? 'Toko'}`,
-      startDate,
-      endDate,
-      generatedAt: new Date(),
-      items: filteredAttendanceItems,
-    });
 
     const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!reportWindow) {
@@ -843,11 +858,33 @@ export default function Absensi() {
       return;
     }
 
-    reportWindow.document.open();
-    reportWindow.document.write(html);
-    reportWindow.document.close();
-    reportWindow.focus();
-    window.setTimeout(() => reportWindow.print(), 500);
+    try {
+      const reportItems = await Promise.all(filteredAttendanceItems.map(async (item) => {
+        if (item.type !== 'record') return item;
+        const photoUrl = await getAttendancePhotoUrl(item.record.photo_path);
+        return {
+          ...item,
+          record: { ...item.record, photo_url: photoUrl },
+        };
+      }));
+      const html = buildAttendancePhotoReportHtml({
+        title: `Report Absensi ${settings?.store_name ?? 'Toko'}`,
+        startDate,
+        endDate,
+        generatedAt: new Date(),
+        items: reportItems,
+      });
+
+      reportWindow.document.open();
+      reportWindow.document.write(html);
+      reportWindow.document.close();
+      reportWindow.focus();
+      window.setTimeout(() => reportWindow.print(), 500);
+    } catch (err) {
+      reportWindow.close();
+      console.error('[Absensi] photo report error:', err);
+      setError(err instanceof Error ? err.message : 'Report foto tidak dapat dibuat.');
+    }
   }
 
   return (
@@ -1534,7 +1571,11 @@ export default function Absensi() {
                 const canRequestRevision = Boolean(settings && (canManage || record.staff_id === user?.id));
                 return (
                 <div key={item.key} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:grid-cols-[92px_minmax(0,1fr)]">
-                  <AttendancePhoto record={record} />
+                  <AttendancePhoto
+                    record={record}
+                    loading={photoLoadingId === record.id}
+                    onView={viewAttendancePhoto}
+                  />
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
@@ -1882,6 +1923,42 @@ export default function Absensi() {
             />
           </div>
         </section>
+      )}
+
+      {photoPreview && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/65 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Foto absensi ${photoPreview.record.staff.name}`}
+          onMouseDown={() => setPhotoPreview(null)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-md overflow-hidden rounded-[28px] bg-white shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-bold text-slate-950">{photoPreview.record.staff.name}</p>
+                <p className="text-[11px] font-semibold text-slate-500">
+                  {formatDate(photoPreview.record.attendance_date)} - {formatTime(photoPreview.record.check_in_at)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoPreview(null)}
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 px-3 text-[12px] font-bold text-slate-700 hover:bg-slate-200"
+              >
+                Tutup
+              </button>
+            </div>
+            <img
+              src={photoPreview.url}
+              alt={`Foto absen ${photoPreview.record.staff.name}`}
+              className="max-h-[78vh] w-full object-contain bg-slate-950"
+            />
+          </div>
+        </div>
       )}
     </div>
   );

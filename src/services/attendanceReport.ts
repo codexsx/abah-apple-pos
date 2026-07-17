@@ -18,7 +18,7 @@ const CSV_HEADERS = [
   'Keterangan',
   'GPS Meter',
   'Akurasi Meter',
-  'Foto URL',
+  'Path Foto',
 ];
 
 function csvCell(value: string | number | null | undefined): string {
@@ -65,7 +65,7 @@ function recordRow(record: AttendanceRecord): Array<string | number | null> {
     record.late_reason,
     record.distance_meters,
     record.accuracy_meters,
-    record.photo_url,
+    record.photo_path,
   ];
 }
 

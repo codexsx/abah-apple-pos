@@ -13,19 +13,23 @@ const mocks = vi.hoisted(() => {
   const order = vi.fn();
   const select = vi.fn();
   const single = vi.fn();
-  return { eq, from, gte, insert, lte, order, remove, rpc, select, single, update, upsert };
+  const storageFrom = vi.fn();
+  return { eq, from, gte, insert, lte, order, remove, rpc, select, single, storageFrom, update, upsert };
 });
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: mocks.from,
     rpc: mocks.rpc,
+    storage: { from: mocks.storageFrom },
   },
 }));
 
 import {
   createAttendanceAutoOffDate,
   getAttendanceAbsences,
+  getAttendancePhotoUrl,
+  getAttendanceRecords,
   getAttendanceRevisionRequests,
   requestAttendanceOff,
   requestAttendanceRevision,
@@ -64,6 +68,7 @@ beforeEach(() => {
   mocks.order.mockReset();
   mocks.select.mockReset();
   mocks.single.mockReset();
+  mocks.storageFrom.mockReset();
   mocks.rpc.mockReset();
   mocks.rpc.mockResolvedValue({
     data: [
@@ -382,5 +387,81 @@ describe('attendance service', () => {
       p_staff_id: 'staff-1',
       p_required: false,
     });
+  });
+
+  it('loads attendance metadata without creating signed URLs for every photo', async () => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      lte: vi.fn().mockReturnThis(),
+      order: vi.fn(),
+    };
+    query.order
+      .mockReturnValueOnce(query)
+      .mockResolvedValueOnce({
+        data: [{
+          id: 'attendance-1',
+          staff_id: 'staff-1',
+          attendance_date: '2026-07-05',
+          shift_id: 'pagi',
+          shift_name: 'Pagi',
+          scheduled_start_time: '09:00:00',
+          tolerance_minutes: 10,
+          penalty_per_minute: 50_000,
+          check_in_at: '2026-07-05T02:00:00.000Z',
+          photo_path: 'staff-1/2026-07-05/attendance-1.webp',
+          store_latitude: -0.0249,
+          store_longitude: 109.3188,
+          latitude: -0.0249,
+          longitude: 109.3188,
+          accuracy_meters: 8,
+          distance_meters: 4,
+          within_radius: true,
+          late_minutes: 0,
+          penalty_amount: 0,
+          late_reason: null,
+          status: 'pending',
+          verification_note: null,
+          verified_by: null,
+          verified_at: null,
+          created_at: '2026-07-05T02:00:00.000Z',
+        }],
+        error: null,
+      });
+    mocks.from.mockReturnValueOnce(query);
+    mocks.rpc.mockImplementation((name: string) => {
+      if (name === 'get_attendance_staff') {
+        return Promise.resolve({
+          data: [{ id: 'staff-1', name: 'Bella', role: 'KASIR', initials: 'BE', avatar_url: null }],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+
+    const records = await getAttendanceRecords({
+      currentUserId: 'boss-1',
+      canManage: true,
+      startDate: '2026-07-01',
+      endDate: '2026-07-31',
+    });
+
+    expect(records).toHaveLength(1);
+    expect(records[0].photo_url).toBeNull();
+    expect(mocks.storageFrom).not.toHaveBeenCalled();
+  });
+
+  it('creates a signed attendance photo URL only when requested', async () => {
+    const createSignedUrl = vi.fn().mockResolvedValue({
+      data: { signedUrl: 'https://example.test/attendance.webp' },
+      error: null,
+    });
+    mocks.storageFrom.mockReturnValue({ createSignedUrl });
+
+    await expect(getAttendancePhotoUrl('staff-1/2026-07-05/attendance-1.webp'))
+      .resolves.toBe('https://example.test/attendance.webp');
+
+    expect(mocks.storageFrom).toHaveBeenCalledWith('attendance-photos');
+    expect(createSignedUrl).toHaveBeenCalledWith('staff-1/2026-07-05/attendance-1.webp', 60 * 60);
   });
 });

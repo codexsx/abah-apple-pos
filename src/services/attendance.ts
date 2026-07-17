@@ -381,7 +381,9 @@ export async function captureVideoFrameToWebp(
 ): Promise<Blob> {
   const sourceWidth = video.videoWidth || 720;
   const sourceHeight = video.videoHeight || 960;
-  const maxDimension = 960;
+  // Attendance only needs a clear verification photo. Keeping the long edge at
+  // 480px significantly reduces Storage egress when the photo is reviewed.
+  const maxDimension = 480;
   const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
   const width = Math.max(1, Math.round(sourceWidth * scale));
   const height = Math.max(1, Math.round(sourceHeight * scale));
@@ -396,7 +398,7 @@ export async function captureVideoFrameToWebp(
   const blob = await encodeCanvasImageBlob(canvas, {
     preferredType: 'image/webp',
     fallbackType: 'image/jpeg',
-    quality: 0.78,
+    quality: 0.68,
   });
   if (!blob) throw new Error('Foto absen tidak dapat dikompres.');
   return blob;
@@ -536,13 +538,22 @@ export async function getAttendanceRecords(input: {
     ((staffRows ?? []) as RawStaffRow[]).map((row) => [row.id, row]),
   );
 
-  return Promise.all(rows.map(async (row) => {
-    const { data: signed, error: signedError } = await supabase.storage
-      .from(ATTENDANCE_PHOTOS_BUCKET)
-      .createSignedUrl(row.photo_path, 10 * 60);
-    const photoUrl = signedError ? null : signed.signedUrl;
-    return normalizeRecord(row, normalizeStaff(staffMap.get(row.staff_id), row.staff_id), photoUrl);
-  }));
+  // Keep the bucket private and avoid downloading every attendance image each
+  // time a history list is opened. A signed URL is requested only on demand.
+  return rows.map((row) => (
+    normalizeRecord(row, normalizeStaff(staffMap.get(row.staff_id), row.staff_id), null)
+  ));
+}
+
+export async function getAttendancePhotoUrl(photoPath: string): Promise<string | null> {
+  if (!photoPath) return null;
+
+  const { data, error } = await supabase.storage
+    .from(ATTENDANCE_PHOTOS_BUCKET)
+    .createSignedUrl(photoPath, 60 * 60);
+
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 export async function getAttendanceAbsences(input: {
