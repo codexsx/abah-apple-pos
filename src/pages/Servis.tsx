@@ -858,7 +858,12 @@ function MonitorServisView({
     return c;
   }, [records, technicians]);
 
-  const ServiceCard = ({ record }: { record: (typeof records)[0] }) => {
+  // Render function (bukan komponen nested) — komponen yang didefinisikan di
+  // dalam komponen lain mendapat tipe baru setiap render, sehingga React
+  // me-remount seluruh kartu tiap keystroke (fokus input hilang & halaman
+  // melompat ke atas). Dipanggil sebagai {renderServiceCard(record)} supaya
+  // rekonsiliasi DOM tetap di tempat.
+  const renderServiceCard = (record: (typeof records)[0]) => {
     const cfg = statusConfig[record.status];
     const isExpanded = expandedIds.has(record.id);
     const usages = sparepartUsages[record.id] ?? [];
@@ -870,12 +875,8 @@ function MonitorServisView({
     };
 
     return (
-      <motion.div
-        layout
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.35, ease: easeSmooth }}
+      <div
+        key={record.id}
         className="rounded-xl bg-white border border-slate-200 shadow-card overflow-hidden"
         style={{
           borderLeftWidth: '4px',
@@ -1395,7 +1396,7 @@ function MonitorServisView({
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
     );
   };
 
@@ -1524,11 +1525,7 @@ function MonitorServisView({
               </span>
             </div>
             <div className="flex flex-col gap-3">
-              <AnimatePresence mode="popLayout">
-                {groupedByStatus.ANTRIAN.map((record) => (
-                  <ServiceCard key={record.id} record={record} />
-                ))}
-              </AnimatePresence>
+              {groupedByStatus.ANTRIAN.map((record) => renderServiceCard(record))}
               {groupedByStatus.ANTRIAN.length === 0 && (
                 <p className="text-[13px] text-slate-400 italic pl-2">Tidak ada servis dalam antrian.</p>
               )}
@@ -1545,11 +1542,7 @@ function MonitorServisView({
               </span>
             </div>
             <div className="flex flex-col gap-3">
-              <AnimatePresence mode="popLayout">
-                {groupedByStatus.PROSES.map((record) => (
-                  <ServiceCard key={record.id} record={record} />
-                ))}
-              </AnimatePresence>
+              {groupedByStatus.PROSES.map((record) => renderServiceCard(record))}
               {groupedByStatus.PROSES.length === 0 && (
                 <p className="text-[13px] text-slate-400 italic pl-2">Tidak ada servis dalam proses.</p>
               )}
@@ -1566,11 +1559,7 @@ function MonitorServisView({
               </span>
             </div>
             <div className="flex flex-col gap-3">
-              <AnimatePresence mode="popLayout">
-                {groupedByStatus.SELESAI.map((record) => (
-                  <ServiceCard key={record.id} record={record} />
-                ))}
-              </AnimatePresence>
+              {groupedByStatus.SELESAI.map((record) => renderServiceCard(record))}
               {groupedByStatus.SELESAI.length === 0 && (
                 <p className="text-[13px] text-slate-400 italic pl-2">Tidak ada servis selesai menunggu diambil.</p>
               )}
@@ -1587,11 +1576,7 @@ function MonitorServisView({
               </span>
             </div>
             <div className="flex flex-col gap-3">
-              <AnimatePresence mode="popLayout">
-                {groupedByStatus.GAGAL.map((record) => (
-                  <ServiceCard key={record.id} record={record} />
-                ))}
-              </AnimatePresence>
+              {groupedByStatus.GAGAL.map((record) => renderServiceCard(record))}
               {groupedByStatus.GAGAL.length === 0 && (
                 <p className="text-[13px] text-slate-400 italic pl-2">Tidak ada servis gagal.</p>
               )}

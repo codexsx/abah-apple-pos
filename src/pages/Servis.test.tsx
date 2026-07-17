@@ -741,6 +741,18 @@ describe('Servis edit approval request', () => {
     expect(mockSubmitServiceChangeRequest).not.toHaveBeenCalled();
   });
 
+  it('keeps focus in the editor while typing a change reason', async () => {
+    mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
+    await openMonitorEditor();
+
+    const reasonField = fieldByLabel('ALASAN PERUBAHAN *');
+    reasonField.focus();
+    fireEvent.change(reasonField, { target: { value: 'Harga part naik' } });
+
+    expect(reasonField).toHaveFocus();
+    expect(reasonField).toHaveValue('Harga part naik');
+  });
+
   it('sends changed wage and edited sparepart row in the approval request', async () => {
     mockGetServiceRecords.mockResolvedValue([MONITOR_RECORD]);
     mockGetServiceSparepartUsages.mockResolvedValue([USAGE_ROW]);
