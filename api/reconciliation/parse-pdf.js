@@ -161,7 +161,9 @@ async function parseWithAi(config, input) {
     },
     body: JSON.stringify({
       model: config.model,
-      temperature: 0,
+      // Kimi K2.6 currently accepts a fixed temperature of 1, while the
+      // OpenAI-compatible fallback can keep deterministic parsing at 0.
+      temperature: config.provider === 'kimi-moonshot' ? 1 : 0,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: prompt },
