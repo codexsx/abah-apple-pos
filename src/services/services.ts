@@ -5,6 +5,7 @@ export {
   getTechnicians,
   createTechnician,
   updateTechnician,
+  deactivateTechnician,
   type Technician,
   type TechnicianInsert,
   type TechnicianUpdate,

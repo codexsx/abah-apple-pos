@@ -46,6 +46,7 @@ import {
   getTechnicians,
   createTechnician,
   updateTechnician,
+  deactivateTechnician,
   type Technician as DbTechnician,
 } from '@/services/technicians';
 import {
@@ -3538,6 +3539,26 @@ function TechnicianManagerView({
     }
   };
 
+  const handleDeactivate = async (row: DbTechnician) => {
+    const confirmed = window.confirm(
+      `Hapus ${row.name} dari daftar teknisi aktif? Riwayat servis lama tetap tersimpan.`,
+    );
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      await deactivateTechnician(row.id);
+      const next = rows.filter((item) => item.id !== row.id);
+      setRows(next);
+      onChanged(next);
+    } catch {
+      setError('Teknisi tidak dapat dihapus dari daftar aktif.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -3636,17 +3657,29 @@ function TechnicianManagerView({
                       </button>
                     </>
                   ) : (
-                    <button
-                      onClick={() => {
-                        setEditingId(row.id);
-                        setEditingName(row.name);
-                        setError(null);
-                      }}
-                      className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-200"
-                    >
-                      <Edit3 size={12} />
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingId(row.id);
+                          setEditingName(row.name);
+                          setError(null);
+                        }}
+                        disabled={saving}
+                        className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-60"
+                      >
+                        <Edit3 size={12} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeactivate(row)}
+                        disabled={saving}
+                        title="Hapus dari daftar aktif"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-60"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   )}
                 </div>
               );
@@ -3673,7 +3706,7 @@ export default function Servis() {
 
   const applyTechnicians = useCallback((rows: DbTechnician[]) => {
     const names = rows.map((row) => row.name).filter(Boolean);
-    setTechnicians(names.length > 0 ? names : DEFAULT_TECHNICIANS);
+    setTechnicians(names);
   }, []);
 
   useEffect(() => {

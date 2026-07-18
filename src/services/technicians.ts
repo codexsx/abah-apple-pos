@@ -63,3 +63,11 @@ export async function updateTechnician(
   if (!data) throw new Error('Failed to update technician');
   return data;
 }
+
+/**
+ * Removes a technician from active forms without erasing their name from
+ * historic service records, wage reports, or audit trails.
+ */
+export async function deactivateTechnician(id: string): Promise<Technician> {
+  return updateTechnician(id, { is_active: false });
+}

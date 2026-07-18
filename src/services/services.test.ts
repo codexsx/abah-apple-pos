@@ -4,6 +4,7 @@ import {
   getTechnicians,
   createTechnician,
   updateTechnician,
+  deactivateTechnician,
   recordServiceWithStockStatus,
   getServiceSparepartUsages,
   recordServiceSparepartUsage,
@@ -69,12 +70,14 @@ describe('technicians service', () => {
     expect(result).toBe(rows);
   });
 
-  it('creates and updates technician names', async () => {
+  it('creates, updates, and deactivates technician names', async () => {
     const created = { id: 'tech-new', name: 'Adit', is_active: true };
     const updated = { id: 'tech-new', name: 'Adit Service', is_active: true };
+    const deactivated = { id: 'tech-new', name: 'Adit Service', is_active: false };
     chain.single
       .mockResolvedValueOnce({ data: created, error: null })
-      .mockResolvedValueOnce({ data: updated, error: null });
+      .mockResolvedValueOnce({ data: updated, error: null })
+      .mockResolvedValueOnce({ data: deactivated, error: null });
 
     await expect(createTechnician({ name: 'Adit' })).resolves.toBe(created);
     expect(chain.insert).toHaveBeenCalledWith({ name: 'Adit', is_active: true });
@@ -82,6 +85,9 @@ describe('technicians service', () => {
     await expect(updateTechnician('tech-new', { name: 'Adit Service' })).resolves.toBe(updated);
     expect(chain.update).toHaveBeenCalledWith({ name: 'Adit Service' });
     expect(chain.eq).toHaveBeenCalledWith('id', 'tech-new');
+
+    await expect(deactivateTechnician('tech-new')).resolves.toBe(deactivated);
+    expect(chain.update).toHaveBeenLastCalledWith({ is_active: false });
   });
 });
 
