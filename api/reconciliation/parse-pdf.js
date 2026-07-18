@@ -1,4 +1,3 @@
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { parseAiBankStatement } from './pdfBankStatement.js';
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
@@ -100,6 +99,13 @@ function decodePdf(fileBase64) {
 }
 
 async function extractPdfText(buffer) {
+  let getDocument;
+  try {
+    ({ getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs'));
+  } catch {
+    throw new Error('Parser PDF tidak dapat dimuat di server. Hubungi administrator aplikasi.');
+  }
+
   const document = await getDocument({
     data: new Uint8Array(buffer),
     disableWorker: true,
