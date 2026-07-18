@@ -153,26 +153,33 @@ async function parseWithAi(config, input) {
     'amount harus integer Rupiah tanpa pemisah ribuan. Jika tanggal transaksi tidak jelas, pakai tanggal closing yang diberikan.',
   ].join('\n');
 
+  const requestBody = {
+    model: config.model,
+    // Kimi K2.6 currently accepts a fixed temperature of 1, while the
+    // OpenAI-compatible fallback can keep deterministic parsing at 0.
+    temperature: config.provider === 'kimi-moonshot' ? 1 : 0,
+    messages: [
+      { role: 'system', content: prompt },
+      {
+        role: 'user',
+        content: `Tanggal closing: ${input.defaultDate}\nNama file: ${input.fileName}\n\nTeks mutasi:\n${input.text}`,
+      },
+    ],
+  };
+
+  // Kimi accepts OpenAI-style chat messages, but not every Kimi model accepts
+  // response_format. The prompt and parseJsonContent below still enforce JSON.
+  if (config.provider !== 'kimi-moonshot') {
+    requestBody.response_format = { type: 'json_object' };
+  }
+
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: config.model,
-      // Kimi K2.6 currently accepts a fixed temperature of 1, while the
-      // OpenAI-compatible fallback can keep deterministic parsing at 0.
-      temperature: config.provider === 'kimi-moonshot' ? 1 : 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: prompt },
-        {
-          role: 'user',
-          content: `Tanggal closing: ${input.defaultDate}\nNama file: ${input.fileName}\n\nTeks mutasi:\n${input.text}`,
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const payload = await response.json().catch(() => null);
@@ -228,6 +235,12 @@ export default async function handler(req, res) {
       warnings: result.warnings,
     });
   } catch (error) {
+    // Keep Vercel logs useful for runtime-only failures without logging a PDF,
+    // access token, or provider credential.
+    console.error('[reconciliation/parse-pdf]', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error),
+    });
     json(res, 400, {
       error: error instanceof Error ? error.message : 'PDF mutasi tidak dapat diproses.',
     });
