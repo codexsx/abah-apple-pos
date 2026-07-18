@@ -16,10 +16,15 @@ const DATE_HEADERS = ['tanggal', 'date', 'tgl', 'waktu', 'created at', 'transact
 const AMOUNT_HEADERS = ['nominal', 'amount', 'jumlah', 'nilai', 'mutasi', 'total'];
 const CREDIT_HEADERS = ['kredit', 'credit', 'masuk', 'uang masuk', 'in'];
 const DEBIT_HEADERS = ['debit', 'debet', 'keluar', 'uang keluar', 'out'];
+const TRANSFER_HEADERS = ['transfer', 'tf', 'qris', 'bank transfer'];
+const CASH_HEADERS = ['cash', 'tunai', 'kas'];
 const DIRECTION_HEADERS = ['arah', 'direction', 'tipe', 'type', 'jenis'];
 const DESCRIPTION_HEADERS = ['deskripsi', 'description', 'keterangan', 'berita', 'remark', 'catatan', 'note'];
 const ACCOUNT_HEADERS = ['akun', 'account', 'rekening', 'bank', 'metode', 'method'];
 const REFERENCE_HEADERS = ['referensi', 'reference', 'ref', 'no ref', 'id transaksi', 'transaction id'];
+const CUSTOMER_HEADERS = ['nama', 'customer', 'pembeli'];
+const ITEM_HEADERS = ['item', 'produk', 'barang', 'tipe'];
+const IMEI_HEADERS = ['imei', 'serial', 'sn'];
 
 function normalizeHeader(value: CellValue): string {
   return String(value ?? '')
@@ -152,6 +157,16 @@ function splitDelimited(text: string): string[][] {
 }
 
 export function normalizeSpreadsheetRows(value: unknown): CellValue[][] {
+  // read-excel-file returns [{ sheet, data }] when a workbook exposes sheets.
+  // The previous parser assumed a direct matrix and rejected valid workbooks.
+  if (Array.isArray(value) && value.length === 1 && isSheetResult(value[0])) {
+    return normalizeSpreadsheetRows(value[0].data);
+  }
+
+  if (isSheetResult(value)) {
+    return normalizeSpreadsheetRows(value.data);
+  }
+
   if (!Array.isArray(value)) {
     throw new Error('Format Excel tidak dapat dibaca. Gunakan file Excel dengan tabel/baris yang valid.');
   }
@@ -166,6 +181,11 @@ export function normalizeSpreadsheetRows(value: unknown): CellValue[][] {
 
     throw new Error(`Format Excel tidak valid pada baris ${index + 1}.`);
   });
+}
+
+function isSheetResult(value: unknown): value is { data: unknown } {
+  if (!value || typeof value !== 'object') return false;
+  return 'data' in value && Array.isArray((value as { data?: unknown }).data);
 }
 
 function resolveSpreadsheetReader(module: unknown): SpreadsheetReader {
@@ -223,6 +243,69 @@ function directionFromColumns(row: CellValue[], indexes: {
   return { direction: explicit ?? 'in', amount: Math.abs(signed) };
 }
 
+function isSummaryRow(row: CellValue[]): boolean {
+  return ['total', 'grand total', 'jumlah'].includes(normalizeHeader(row[0]));
+}
+
+function manualPaymentEntries(input: {
+  row: CellValue[];
+  rowIndex: number;
+  fileName: string;
+  defaultDate: string;
+  indexes: {
+    dateIndex: number;
+    customerIndex: number;
+    itemIndex: number;
+    referenceIndex: number;
+    imeiIndex: number;
+    transferIndex: number;
+    cashIndex: number;
+    amountIndex: number;
+  };
+}): ReconciliationEntry[] | null {
+  const { row, indexes } = input;
+  const transfer = parseCurrency(readCell(row, indexes.transferIndex));
+  const cash = parseCurrency(readCell(row, indexes.cashIndex));
+  if (transfer <= 0 && cash <= 0) return null;
+
+  const date = fallbackDate(input.defaultDate, toIsoDate(readCell(row, indexes.dateIndex)));
+  const customer = indexes.customerIndex >= 0
+    ? String(readCell(row, indexes.customerIndex) || '').trim()
+    : '';
+  const item = indexes.itemIndex >= 0
+    ? String(readCell(row, indexes.itemIndex) || '').trim()
+    : '';
+  const description = [customer, item].filter(Boolean).join(' - ') || `Manual row ${input.rowIndex + 2}`;
+  const reference = String(
+    readCell(row, indexes.imeiIndex >= 0 ? indexes.imeiIndex : indexes.referenceIndex) || '',
+  ).trim();
+
+  const entries: Array<ReconciliationEntry | null> = [
+    transfer > 0 ? {
+      id: `manual:${input.fileName}:${input.rowIndex + 2}:transfer`,
+      source: 'manual' as const,
+      date,
+      direction: 'in' as const,
+      amount: transfer,
+      accountName: 'Transfer',
+      description,
+      reference: reference || undefined,
+    } : null,
+    cash > 0 ? {
+      id: `manual:${input.fileName}:${input.rowIndex + 2}:cash`,
+      source: 'manual' as const,
+      date,
+      direction: 'in' as const,
+      amount: cash,
+      accountName: 'Cash',
+      description,
+      reference: reference || undefined,
+    } : null,
+  ];
+
+  return entries.filter((entry): entry is ReconciliationEntry => entry !== null);
+}
+
 export async function parseReconciliationFile(input: {
   file: File;
   source: Exclude<ReconciliationSource, 'webapp'>;
@@ -248,6 +331,11 @@ export async function parseReconciliationFile(input: {
     descriptionIndex: findColumn(headers, DESCRIPTION_HEADERS),
     accountIndex: findColumn(headers, ACCOUNT_HEADERS),
     referenceIndex: findColumn(headers, REFERENCE_HEADERS),
+    customerIndex: findColumn(headers, CUSTOMER_HEADERS),
+    itemIndex: findColumn(headers, ITEM_HEADERS),
+    imeiIndex: findColumn(headers, IMEI_HEADERS),
+    transferIndex: findColumn(headers, TRANSFER_HEADERS),
+    cashIndex: findColumn(headers, CASH_HEADERS),
   };
 
   const warnings: string[] = [];
@@ -260,6 +348,22 @@ export async function parseReconciliationFile(input: {
 
   const entries: ReconciliationEntry[] = [];
   rows.slice(1).forEach((row, rowIndex) => {
+    if (isSummaryRow(row)) return;
+
+    if (input.source === 'manual') {
+      const paymentEntries = manualPaymentEntries({
+        row,
+        rowIndex,
+        fileName: input.file.name,
+        defaultDate: input.defaultDate,
+        indexes,
+      });
+      if (paymentEntries) {
+        entries.push(...paymentEntries);
+        return;
+      }
+    }
+
     const { direction, amount } = directionFromColumns(row, indexes);
     if (amount <= 0) return;
 
