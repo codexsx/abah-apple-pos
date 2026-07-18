@@ -5,8 +5,10 @@ import {
 } from '@/services/mediaCore';
 
 export const STORY_TTL_HOURS = 24;
-export const STORY_MAX_DIMENSION = 1080;
-export const STORY_WEBP_QUALITY = 0.76;
+// Stories are viewed on a phone-sized full-screen surface and expire after 24h.
+// 720px WebP is clear enough while keeping repeated viewing economical.
+export const STORY_MAX_DIMENSION = 720;
+export const STORY_WEBP_QUALITY = 0.7;
 export const STORY_COMMENT_MAX_LENGTH = 240;
 
 export interface StoryMediaResult {

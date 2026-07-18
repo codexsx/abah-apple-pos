@@ -21,6 +21,7 @@ import {
   deleteStoryComment,
   deleteStoreStory,
   getActiveStories,
+  getStoreStoryMediaUrl,
   getStoryComments,
   markStoryViewed,
   uploadStoreStory,
@@ -98,6 +99,8 @@ export default function StoreStories() {
   const [commentDraft, setCommentDraft] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentError, setCommentError] = useState('');
+  const [activeMediaUrl, setActiveMediaUrl] = useState<string | null>(null);
+  const [activeMediaLoading, setActiveMediaLoading] = useState(false);
 
   const activeGroup = viewer ? groups[viewer.groupIndex] : null;
   const activeStory = activeGroup ? activeGroup.stories[viewer?.storyIndex ?? 0] : null;
@@ -125,6 +128,33 @@ export default function StoreStories() {
   useEffect(() => {
     refreshStories();
   }, [refreshStories]);
+
+  useEffect(() => {
+    if (!activeStory) {
+      setActiveMediaUrl(null);
+      setActiveMediaLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    setActiveMediaUrl(null);
+    setActiveMediaLoading(true);
+    getStoreStoryMediaUrl(activeStory.media_path)
+      .then((url) => {
+        if (active) setActiveMediaUrl(url);
+      })
+      .catch((err) => {
+        console.error('[StoreStories] media load error:', err);
+        if (active) setError(err instanceof Error ? err.message : 'Media story tidak dapat dimuat.');
+      })
+      .finally(() => {
+        if (active) setActiveMediaLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeStory?.id, activeStory?.media_path]);
 
   const syncCommentCount = useCallback((storyId: string, count: number) => {
     setGroups((current) => current.map((group) => ({
@@ -463,11 +493,17 @@ export default function StoreStories() {
                 </div>
               </div>
 
-              <img
-                src={activeStory.media_url}
-                alt={activeStory.caption || 'Story toko'}
-                className="h-full w-full object-contain"
-              />
+              {activeMediaUrl ? (
+                <img
+                  src={activeMediaUrl}
+                  alt={activeStory.caption || 'Story toko'}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-white/70">
+                  {activeMediaLoading ? <Loader2 size={28} className="animate-spin" /> : 'Media tidak tersedia'}
+                </div>
+              )}
 
               {!commentsOpen && (
                 <div className="absolute bottom-5 left-4 right-4 z-20 space-y-3">

@@ -22,7 +22,7 @@ export interface StoreStory {
   author_id: string;
   media_path: string;
   media_type: 'image';
-  media_url: string;
+  media_url: string | null;
   caption: string | null;
   width: number | null;
   height: number | null;
@@ -163,23 +163,16 @@ export async function getActiveStories(currentUserId: string): Promise<StoreStor
     return counts;
   }, new Map<string, number>());
 
-  const enriched = await Promise.all(
-    stories.map(async (story) => {
-      const { data, error: signedError } = await supabase.storage
-        .from(STORE_STORIES_BUCKET)
-        .createSignedUrl(story.media_path, 15 * 60);
-      if (signedError) throw signedError;
-
-      return {
-        ...story,
-        media_type: 'image' as const,
-        media_url: data.signedUrl,
-        viewed: viewed.has(story.id),
-        comment_count: commentCounts.get(story.id) ?? 0,
-        author: normalizeAuthor(profiles.get(story.author_id), story.author_id),
-      };
-    }),
-  );
+  // The dashboard only needs story metadata and avatars. Do not create signed
+  // URLs for every active image until a user opens the specific story.
+  const enriched = stories.map((story) => ({
+    ...story,
+    media_type: 'image' as const,
+    media_url: null,
+    viewed: viewed.has(story.id),
+    comment_count: commentCounts.get(story.id) ?? 0,
+    author: normalizeAuthor(profiles.get(story.author_id), story.author_id),
+  }));
 
   return groupStoriesByAuthor(enriched).map((group) => ({
     author: group.stories[0].author,
@@ -187,6 +180,16 @@ export async function getActiveStories(currentUserId: string): Promise<StoreStor
     hasUnseen: group.hasUnseen,
     latestCreatedAt: group.latestCreatedAt,
   }));
+}
+
+export async function getStoreStoryMediaUrl(mediaPath: string): Promise<string | null> {
+  if (!mediaPath) return null;
+
+  const { data, error } = await supabase.storage
+    .from(STORE_STORIES_BUCKET)
+    .createSignedUrl(mediaPath, 60 * 60);
+  if (error) throw error;
+  return data.signedUrl;
 }
 
 export async function uploadStoreStory(input: {
