@@ -42,6 +42,14 @@ export interface AiReconciliationResponse {
   error?: string;
 }
 
+export interface ParsedBankStatementPdfResponse {
+  provider?: string;
+  model?: string;
+  entries: ReconciliationEntry[];
+  warnings: string[];
+  error?: string;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
@@ -158,4 +166,50 @@ export async function analyzeReconciliationWithAi(
     throw new Error(payload?.error || 'Analisa AI gagal diproses.');
   }
   return payload ?? { available: false, error: 'Response AI kosong.' };
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('PDF mutasi tidak dapat dibaca.'));
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const separator = result.indexOf(',');
+      resolve(separator >= 0 ? result.slice(separator + 1) : result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function parseBankStatementPdfWithAi(
+  file: File,
+  defaultDate: string,
+): Promise<ParsedBankStatementPdfResponse> {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('Mutasi bank harus diupload dalam format PDF.');
+  }
+  if (file.size <= 0 || file.size > 2 * 1024 * 1024) {
+    throw new Error('Ukuran PDF mutasi maksimal 2 MB.');
+  }
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const response = await fetch('/api/reconciliation/parse-pdf', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileBase64: await fileToBase64(file),
+      defaultDate,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as ParsedBankStatementPdfResponse | null;
+  if (!response.ok) {
+    throw new Error(payload?.error || 'PDF mutasi tidak dapat diproses.');
+  }
+  return payload ?? { entries: [], warnings: ['Response parser PDF kosong.'] };
 }
