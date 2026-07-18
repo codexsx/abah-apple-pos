@@ -119,8 +119,8 @@ function toIsoDate(value: CellValue): string {
 function parseDirection(value: CellValue): MoneyDirection | null {
   const text = normalizeHeader(value);
   if (!text) return null;
-  if (/\b(in|masuk|kredit|credit|terima|debet masuk)\b/.test(text)) return 'in';
-  if (/\b(out|keluar|debit|debet|bayar|potong)\b/.test(text)) return 'out';
+  if (/\b(in|masuk|kredit|credit|terima|cr|debet masuk)\b/.test(text)) return 'in';
+  if (/\b(out|keluar|debit|debet|bayar|potong|db)\b/.test(text)) return 'out';
   return null;
 }
 
@@ -228,6 +228,7 @@ function directionFromColumns(row: CellValue[], indexes: {
   debitIndex: number;
   creditIndex: number;
   directionIndex: number;
+  descriptionIndex: number;
 }): { direction: MoneyDirection; amount: number } {
   const credit = parseCurrency(readCell(row, indexes.creditIndex));
   const debit = parseCurrency(readCell(row, indexes.debitIndex));
@@ -237,7 +238,8 @@ function directionFromColumns(row: CellValue[], indexes: {
       : { direction: 'out', amount: debit };
   }
 
-  const explicit = parseDirection(readCell(row, indexes.directionIndex));
+  const explicit = parseDirection(readCell(row, indexes.directionIndex))
+    ?? parseDirection(readCell(row, indexes.descriptionIndex));
   const signed = signedCurrency(readCell(row, indexes.amountIndex));
   if (signed < 0) return { direction: 'out', amount: Math.abs(signed) };
   return { direction: explicit ?? 'in', amount: Math.abs(signed) };
@@ -368,7 +370,9 @@ export async function parseReconciliationFile(input: {
     if (amount <= 0) return;
 
     const date = fallbackDate(input.defaultDate, toIsoDate(readCell(row, indexes.dateIndex)));
-    const accountName = String(readCell(row, indexes.accountIndex) || input.source).trim();
+    const accountName = String(
+      readCell(row, indexes.accountIndex) || (input.source === 'bank' ? 'myBCA' : input.source),
+    ).trim();
     const description = String(readCell(row, indexes.descriptionIndex) || '').trim();
     const reference = String(readCell(row, indexes.referenceIndex) || '').trim();
 

@@ -95,4 +95,29 @@ describe('reconciliation file parsing', () => {
       },
     ]);
   });
+
+  it('parses myBCA export columns and detects CR/DB from the description', async () => {
+    const file = new File(
+      [
+        'Date,Description,Amount\n',
+        '2026-07-12,"TRSF E-BANKING CR - 1207/FTSCY/WS95031 200000.00 MUHAMMAD FAUZI","IDR 200,000.00"\n',
+        '2026-07-12,"BI-FAST DB - TRANSFER KE 535 YOGA PUTRA PRASETY MyBCA","IDR 60,000.00"\n',
+        '2026-07-12,"TRANSAKSI DEBIT - TGL: 0712 QR 918 00000.00Gerobak So","IDR 36,000.00"',
+      ],
+      'myBCA.xlsx.csv',
+      { type: 'text/csv' },
+    );
+
+    const result = await parseReconciliationFile({
+      file,
+      source: 'bank',
+      defaultDate: '2026-07-19',
+    });
+
+    expect(result.entries).toMatchObject([
+      { direction: 'in', amount: 200_000, accountName: 'myBCA' },
+      { direction: 'out', amount: 60_000, accountName: 'myBCA' },
+      { direction: 'out', amount: 36_000, accountName: 'myBCA' },
+    ]);
+  });
 });

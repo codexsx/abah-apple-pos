@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button';
 import {
   analyzeReconciliationWithAi,
   getWebappReconciliationEntries,
-  parseBankStatementPdfWithAi,
   todayLocalDate,
   type AiReconciliationResponse,
 } from '@/services/reconciliation';
@@ -110,7 +109,7 @@ function UploadBox({
     <label className="group flex min-h-[160px] cursor-pointer flex-col justify-between rounded-2xl border border-dashed border-slate-300 bg-white p-5 transition-colors hover:border-blue-300 hover:bg-blue-50/40">
       <input
         type="file"
-        accept={source === 'bank' ? '.pdf,application/pdf' : '.csv,.txt,.xlsx,.xls'}
+        accept=".csv,.txt,.xlsx,.xls"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -128,7 +127,7 @@ function UploadBox({
       <p className="mt-4 text-[12px] font-semibold text-slate-400">
         {entries.length > 0
           ? `${entries.length} baris terbaca`
-          : source === 'bank' ? 'PDF mutasi rekening' : 'CSV / Excel / TXT'}
+          : 'CSV / Excel / TXT'}
       </p>
     </label>
   );
@@ -214,12 +213,7 @@ export default function RekonsiliasiKas() {
       setParseLoading(source);
       setError(null);
       try {
-        if (source === 'bank' && !file.name.toLowerCase().endsWith('.pdf')) {
-          throw new Error('Mutasi bank harus diupload dalam format PDF.');
-        }
-        const parsed = source === 'bank'
-          ? await parseBankStatementPdfWithAi(file, date)
-          : await parseReconciliationFile({ file, source, defaultDate: date });
+        const parsed = await parseReconciliationFile({ file, source, defaultDate: date });
         if (source === 'manual') setManualEntries(parsed.entries);
         else setBankEntries(parsed.entries);
         setWarnings((current) => [
@@ -376,7 +370,7 @@ export default function RekonsiliasiKas() {
         <UploadBox
           source="bank"
           title="Upload Mutasi Bank Harian"
-          description="Upload PDF mutasi rekening/QRIS harian. Kimi membaca debit/kredit, nominal, tanggal, akun, dan deskripsi tanpa menyimpan file."
+              description="Upload export mutasi Excel/CSV harian. Sistem membaca debit/kredit, nominal, tanggal, dan deskripsi langsung di browser tanpa menyimpan file."
           entries={bankEntries}
           onUpload={handleUpload}
         />
