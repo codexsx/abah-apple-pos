@@ -10,6 +10,7 @@ export interface ParsedReconciliationFile {
 }
 
 type CellValue = string | number | boolean | Date | null | undefined;
+type SpreadsheetReader = (file: File) => Promise<unknown>;
 
 const DATE_HEADERS = ['tanggal', 'date', 'tgl', 'waktu', 'created at', 'transaction date'];
 const AMOUNT_HEADERS = ['nominal', 'amount', 'jumlah', 'nilai', 'mutasi', 'total'];
@@ -150,12 +151,44 @@ function splitDelimited(text: string): string[][] {
   });
 }
 
+export function normalizeSpreadsheetRows(value: unknown): CellValue[][] {
+  if (!Array.isArray(value)) {
+    throw new Error('Format Excel tidak dapat dibaca. Gunakan file Excel dengan tabel/baris yang valid.');
+  }
+
+  return value.map((row, index) => {
+    if (Array.isArray(row)) return row as CellValue[];
+
+    // Some spreadsheet readers return iterable row objects instead of plain arrays.
+    if (row && typeof (row as { [Symbol.iterator]?: unknown })[Symbol.iterator] === 'function') {
+      return Array.from(row as Iterable<CellValue>);
+    }
+
+    throw new Error(`Format Excel tidak valid pada baris ${index + 1}.`);
+  });
+}
+
+function resolveSpreadsheetReader(module: unknown): SpreadsheetReader {
+  const source = module as { default?: unknown } | null;
+  const direct = source?.default;
+  const nested = direct && typeof direct === 'object'
+    ? (direct as { default?: unknown }).default
+    : undefined;
+  const reader = typeof direct === 'function' ? direct : nested;
+
+  if (typeof reader !== 'function') {
+    throw new Error('Parser Excel tidak dapat dimuat di browser. Coba refresh halaman lalu upload ulang.');
+  }
+
+  return reader as SpreadsheetReader;
+}
+
 async function readRows(file: File): Promise<CellValue[][]> {
   const lowerName = file.name.toLowerCase();
   if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
     const mod = await import('read-excel-file/browser');
-    const rows = await mod.default(file);
-    return rows as unknown as CellValue[][];
+    const rows = await resolveSpreadsheetReader(mod)(file);
+    return normalizeSpreadsheetRows(rows);
   }
 
   const text = await file.text();
