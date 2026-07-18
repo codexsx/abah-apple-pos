@@ -1,5 +1,4 @@
 import { parseAiBankStatement } from './pdfBankStatement.js';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
 const MAX_PDF_PAGES = 25;
@@ -99,11 +98,32 @@ function decodePdf(fileBase64) {
   return buffer;
 }
 
-async function extractPdfText(buffer) {
-  const document = await getDocument({
+function ensurePdfGeometryPolyfills() {
+  // pdfjs-dist v5 tries to load a native canvas package in Node. Vercel's
+  // serverless runtime does not ship that optional dependency, although this
+  // route only extracts text and never renders a PDF. A small DOMMatrix shell
+  // lets the legacy build initialise its unused canvas module safely.
+  if (!globalThis.DOMMatrix) {
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(values = []) {
+        const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = Array.from(values);
+        Object.assign(this, { a, b, c, d, e, f, m11: a, m12: b, m21: c, m22: d, m41: e, m42: f });
+      }
+    };
+  }
+}
+
+async function getPdfDocument(buffer) {
+  ensurePdfGeometryPolyfills();
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  return getDocument({
     data: new Uint8Array(buffer),
     disableWorker: true,
   }).promise;
+}
+
+async function extractPdfText(buffer) {
+  const document = await getPdfDocument(buffer);
   try {
     if (document.numPages > MAX_PDF_PAGES) {
       throw new Error(`PDF mutasi maksimal ${MAX_PDF_PAGES} halaman.`);
