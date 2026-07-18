@@ -158,8 +158,7 @@ begin
 
       update public.service_sparepart_usages
       set quantity = v_quantity,
-          unit_cost = v_unit_cost,
-          total_cost = v_quantity * v_unit_cost
+          unit_cost = v_unit_cost
       where id = v_usage.id;
     else
       if coalesce(v_row ->> 'sparepart_id', '') <> '' then
@@ -168,9 +167,9 @@ begin
 
       v_manual_name := coalesce(nullif(btrim(v_row ->> 'sparepart_name'), ''), 'Spare Part Manual');
       insert into public.service_sparepart_usages (
-        service_record_id, sparepart_id, sparepart_name, quantity, unit_cost, total_cost
+        service_record_id, sparepart_id, sparepart_name, quantity, unit_cost
       ) values (
-        v_request.service_record_id, null, v_manual_name, v_quantity, v_unit_cost, v_quantity * v_unit_cost
+        v_request.service_record_id, null, v_manual_name, v_quantity, v_unit_cost
       );
     end if;
   end loop;
