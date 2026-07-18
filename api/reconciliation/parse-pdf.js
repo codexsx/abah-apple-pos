@@ -1,4 +1,4 @@
-import { PDFParse } from 'pdf-parse';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { parseAiBankStatement } from './pdfBankStatement.js';
 
 const MAX_PDF_BYTES = 2 * 1024 * 1024;
@@ -100,20 +100,31 @@ function decodePdf(fileBase64) {
 }
 
 async function extractPdfText(buffer) {
-  const parser = new PDFParse({ data: buffer });
+  const document = await getDocument({
+    data: new Uint8Array(buffer),
+    disableWorker: true,
+  }).promise;
   try {
-    const info = await parser.getInfo();
-    if (info.total > MAX_PDF_PAGES) {
+    if (document.numPages > MAX_PDF_PAGES) {
       throw new Error(`PDF mutasi maksimal ${MAX_PDF_PAGES} halaman.`);
     }
-    const extracted = await parser.getText();
-    const text = String(extracted.text ?? '').replace(/\u0000/g, '').trim();
+
+    const pages = await Promise.all(
+      Array.from({ length: document.numPages }, async (_, index) => {
+        const page = await document.getPage(index + 1);
+        const content = await page.getTextContent();
+        return content.items
+          .map((item) => ('str' in item ? item.str : ''))
+          .join(' ');
+      }),
+    );
+    const text = pages.join('\n').replace(/\u0000/g, '').trim();
     if (text.length < 40) {
       throw new Error('PDF tidak memiliki teks yang bisa dibaca. Gunakan mutasi PDF asli dari bank, bukan hasil scan/foto.');
     }
     return text.slice(0, MAX_EXTRACTED_TEXT);
   } finally {
-    await parser.destroy();
+    await document.destroy();
   }
 }
 
