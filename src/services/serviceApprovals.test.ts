@@ -26,6 +26,7 @@ import {
   getServiceChangeRequests,
   reviewServiceChangeRequest,
   submitServiceChangeRequest,
+  submitServiceDeleteRequest,
 } from './serviceApprovals';
 
 function makeRecord(overrides: Partial<ServiceRecord> = {}): ServiceRecord {
@@ -145,6 +146,25 @@ describe('serviceApprovals service', () => {
         proposed: { fields: { customer_name: 'Budi Baru' } },
       }),
     ).rejects.toThrow('Alasan');
+  });
+
+  it('submits a service deletion as a separate approval action', async () => {
+    const result = await submitServiceDeleteRequest({
+      record: makeRecord(),
+      usages: [usage],
+      reason: 'Duplikat input service',
+      requestedBy: 'staff-1',
+    });
+
+    expect(result.id).toBe('req-1');
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        service_record_id: 'srv-1',
+        action: 'delete',
+        reason: 'Duplikat input service',
+        proposed: {},
+      }),
+    );
   });
 
   it('fetches requests with joins', async () => {

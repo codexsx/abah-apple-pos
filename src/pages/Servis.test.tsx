@@ -38,6 +38,7 @@ import { getTransactionsWithStockDetailsByType, type TransactionWithStockDetails
 import { getSpareparts } from '@/services/spareparts';
 import {
   submitServiceChangeRequest,
+  submitServiceDeleteRequest,
   getPendingServiceChangeRecordIds,
 } from '@/services/serviceApprovals';
 
@@ -83,6 +84,7 @@ vi.mock('@/services/spareparts', () => ({
 
 vi.mock('@/services/serviceApprovals', () => ({
   submitServiceChangeRequest: vi.fn(),
+  submitServiceDeleteRequest: vi.fn(),
   getPendingServiceChangeRecordIds: vi.fn(),
 }));
 
@@ -135,6 +137,7 @@ const mockUpdateServiceRecord = vi.mocked(updateServiceRecord);
 const mockGetSalesWithStockDetails = vi.mocked(getTransactionsWithStockDetailsByType);
 const mockGetSpareparts = vi.mocked(getSpareparts);
 const mockSubmitServiceChangeRequest = vi.mocked(submitServiceChangeRequest);
+const mockSubmitServiceDeleteRequest = vi.mocked(submitServiceDeleteRequest);
 const mockGetPendingServiceChangeRecordIds = vi.mocked(getPendingServiceChangeRecordIds);
 
 // ---------------------------------------------------------------------------
@@ -275,6 +278,7 @@ beforeEach(() => {
   mockGetSpareparts.mockReset();
   mockGetSpareparts.mockResolvedValue([]);
   mockSubmitServiceChangeRequest.mockReset();
+  mockSubmitServiceDeleteRequest.mockReset();
   mockSubmitServiceChangeRequest.mockResolvedValue({
     id: 'req-1',
     payload: { reason: 'ok', fields: {}, usagesUpsert: [], usagesDelete: [] },

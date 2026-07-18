@@ -16,10 +16,12 @@ import type { TransactionStaff } from '@/services/transactions';
 
 export type ServiceChangeStatus = 'pending' | 'approved' | 'rejected';
 export type ServiceReviewDecision = 'approved' | 'rejected';
+export type ServiceChangeAction = 'edit' | 'delete';
 
 export interface ServiceChangeRequest {
   id: string;
   service_record_id: string;
+  action: ServiceChangeAction;
   status: ServiceChangeStatus;
   requested_by: string;
   reviewed_by: string | null;
@@ -154,6 +156,37 @@ export async function submitServiceChangeRequest(
     .single();
   if (error) throw error;
   return { id: data.id as string, payload: normalized.payload };
+}
+
+/** Submit a deletion for manager approval without deleting the service directly. */
+export async function submitServiceDeleteRequest(input: {
+  record: ServiceRecord;
+  usages: ServiceSparepartUsage[];
+  reason: string;
+  requestedBy: string;
+}): Promise<{ id: string }> {
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 500) {
+    throw new Error('Alasan hapus wajib diisi (maks. 500 karakter).');
+  }
+  if (!input.requestedBy) {
+    throw new Error('Sesi login tidak ditemukan.');
+  }
+
+  const { data, error } = await supabase
+    .from('service_change_requests')
+    .insert({
+      service_record_id: input.record.id,
+      action: 'delete',
+      requested_by: input.requestedBy,
+      reason,
+      proposed: {},
+      snapshot: snapshotServiceChange(input.record, input.usages),
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return { id: data.id as string };
 }
 
 /** Managers see all requests (RLS); staff see their own. */

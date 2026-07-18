@@ -65,7 +65,11 @@ export async function getServiceRecords(): Promise<ServiceRecord[]> {
     .select(SERVICE_RECORD_SELECT)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+  // Deleted records are retained in the database for audit/approval history
+  // but are intentionally hidden from the operational service monitor.
+  return ((data || []) as Array<ServiceRecord & { deleted_at?: string | null }>).filter(
+    (record) => !record.deleted_at,
+  );
 }
 
 export async function getServiceRecordById(id: string): Promise<ServiceRecord | null> {

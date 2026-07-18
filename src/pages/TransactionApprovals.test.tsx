@@ -110,6 +110,7 @@ function makeServiceRequest(
   return {
     id: 'svc-request-1',
     service_record_id: 'svc-1',
+    action: 'edit',
     status: 'pending',
     requested_by: 'staff-1',
     reviewed_by: null,

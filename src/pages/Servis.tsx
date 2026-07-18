@@ -84,6 +84,7 @@ import {
 import {
   getPendingServiceChangeRecordIds,
   submitServiceChangeRequest,
+  submitServiceDeleteRequest,
 } from '@/services/serviceApprovals';
 import type { ProposedServiceEdit } from '@/services/serviceApprovalsCore';
 import { useAuth } from '@/contexts/AuthContext';
@@ -504,6 +505,16 @@ function MonitorServisView({
   const [partUnitCost, setPartUnitCost] = useState('');
   const [partSaving, setPartSaving] = useState(false);
   const [partError, setPartError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ServiceRecordUi | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [warrantyTarget, setWarrantyTarget] = useState<ServiceRecordUi | null>(null);
+  const [warrantyIssue, setWarrantyIssue] = useState('');
+  const [warrantyNote, setWarrantyNote] = useState('');
+  const [warrantyTechnician, setWarrantyTechnician] = useState<Technician | ''>('');
+  const [warrantySaving, setWarrantySaving] = useState(false);
+  const [warrantyError, setWarrantyError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -566,20 +577,22 @@ function MonitorServisView({
         )
       );
 
-      // When a "Toko Sendiri" unit finishes service, return it to sellable
-      // stock: flip the held stock_items row from SERVIS back to READY. The
-      // unit was set to SERVIS when the service was created (ServisTokoForm).
+      // Return the held stock unit when service finishes. Store units return
+      // to READY; a sold unit under warranty returns to TERJUAL.
       // Non-fatal: a stock-status failure must not block the status update.
       if (newStatus === 'SELESAI') {
         const rec = records.find((r) => r.id === id);
-        if (rec && rec.serviceType === 'Toko Sendiri' && rec.stkId) {
+        const targetStatus =
+          rec?.serviceType === 'Toko Sendiri'
+            ? 'READY'
+            : rec?.serviceType === 'Klaim Garansi'
+              ? 'TERJUAL'
+              : null;
+        if (rec && targetStatus && rec.stkId) {
           try {
-            await updateStockStatus(rec.stkId, 'READY');
+            await updateStockStatus(rec.stkId, targetStatus);
           } catch (stockErr) {
-            console.warn(
-              'Servis selesai tapi gagal mengembalikan stok ke READY:',
-              stockErr,
-            );
+            console.warn('Servis selesai tapi gagal mengembalikan status stok:', stockErr);
           }
         }
       }
@@ -821,6 +834,118 @@ function MonitorServisView({
     } catch (err) {
       console.error('Gagal memperbarui status ambil HP:', err);
       setError('Gagal memperbarui status ambil HP. Silakan coba lagi.');
+    }
+  };
+
+  const openDeleteRequest = (record: ServiceRecordUi) => {
+    setDeleteTarget(record);
+    setDeleteReason('');
+    setDeleteError(null);
+  };
+
+  const submitDeleteRequest = async () => {
+    if (!deleteTarget || deleteSaving) return;
+    if (!deleteReason.trim()) {
+      setDeleteError('Alasan hapus wajib diisi.');
+      return;
+    }
+
+    setDeleteSaving(true);
+    setDeleteError(null);
+    try {
+      await submitServiceDeleteRequest({
+        record: uiToDbServiceRecord(deleteTarget),
+        usages: sparepartUsages[deleteTarget.id] ?? [],
+        reason: deleteReason,
+        requestedBy: user?.id ?? '',
+      });
+      setDeleteTarget(null);
+      setDeleteReason('');
+      setEditSuccess('Request hapus servis dikirim — menunggu approval manajer.');
+      reloadPendingApprovals();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Request hapus servis tidak dapat dikirim.',
+      );
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
+
+  const openWarrantyReclaim = (record: ServiceRecordUi) => {
+    setWarrantyTarget(record);
+    setWarrantyIssue('');
+    setWarrantyNote('');
+    setWarrantyTechnician(record.technician ?? '');
+    setWarrantyError(null);
+  };
+
+  const submitWarrantyReclaim = async () => {
+    if (!warrantyTarget || warrantySaving) return;
+    if (warrantyIssue.trim().length < 3) {
+      setWarrantyError('Keluhan baru minimal 3 karakter.');
+      return;
+    }
+    if (!warrantyTechnician) {
+      setWarrantyError('Pilih teknisi untuk klaim garansi.');
+      return;
+    }
+
+    const source = warrantyTarget;
+    const noteParts = [
+      `Klaim garansi servis ulang dari: ${source.id}`,
+      `Servis awal: ${formatDate(source.completedAt ?? source.createdAt)}`,
+      source.additionalNote ? `Catatan servis awal: ${source.additionalNote}` : '',
+      warrantyNote.trim() ? `Catatan klaim: ${warrantyNote.trim()}` : '',
+    ].filter(Boolean);
+    const claimRecord = {
+      customer_name: source.customerName || 'Customer Garansi',
+      phone_model: source.phoneModel,
+      capacity: source.capacity ?? '',
+      condition: source.condition ?? '',
+      color: source.color ?? '',
+      imei: source.imei ?? '',
+      battery_health: source.batteryHealth ?? null,
+      issue: warrantyIssue.trim(),
+      additional_note: noteParts.join(' - '),
+      status: 'ANTRIAN' as const,
+      estimated_cost: 0,
+      dp: 0,
+      completed_at: null,
+      technician: warrantyTechnician,
+      service_type: 'Klaim Garansi' as const,
+      stk_id: '',
+      wage_amount: 0,
+      wage_paid: false,
+      picked_up: false,
+      picked_up_at: null,
+    };
+
+    setWarrantySaving(true);
+    setWarrantyError(null);
+    try {
+      if (source.stkId && uuidPattern.test(source.stkId)) {
+        await recordServiceWithStockStatus({
+          stockId: source.stkId,
+          targetStatus: 'SERVIS',
+          record: claimRecord,
+        });
+      } else {
+        await createServiceRecord(claimRecord);
+      }
+      setWarrantyTarget(null);
+      setEditSuccess('Klaim garansi servis dibuat dan masuk ke antrian.');
+      reload();
+    } catch (err) {
+      setWarrantyError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Klaim garansi servis tidak dapat disimpan.',
+      );
+    } finally {
+      setWarrantySaving(false);
     }
   };
 
@@ -1349,6 +1474,13 @@ function MonitorServisView({
                   >
                     <Edit3 size={14} /> Edit Detail
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => openDeleteRequest(record)}
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-4 py-2 text-[13px] font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                  >
+                    <Trash2 size={14} /> Hapus Servis
+                  </button>
                   {(record.status === 'ANTRIAN' || record.status === 'PROSES') && (
                     <button
                       onClick={() => openPartDialog(record)}
@@ -1375,9 +1507,18 @@ function MonitorServisView({
                   )}
                   {record.status === 'SELESAI' && (
                     record.pickedUp ? (
-                      <span className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-4 py-2 text-[13px] font-medium text-emerald-700">
-                        <Check size={14} /> Sudah Diambil
-                      </span>
+                      <>
+                        <span className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-4 py-2 text-[13px] font-medium text-emerald-700">
+                          <Check size={14} /> Sudah Diambil
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openWarrantyReclaim(record)}
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-[13px] font-semibold text-purple-700 hover:bg-purple-100 transition-colors"
+                        >
+                          <ShieldCheck size={14} /> Klaim Garansi
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={() => handlePickup(record.id)}
@@ -1393,6 +1534,103 @@ function MonitorServisView({
                     </button>
                   )}
                 </div>
+
+                {deleteTarget?.id === record.id && (
+                  <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+                    <p className="text-[13px] font-semibold text-rose-800">Ajukan hapus servis</p>
+                    <p className="mt-1 text-[12px] text-rose-700">
+                      Data tidak langsung hilang. Manager harus menyetujui request ini; sparepart katalog akan dikembalikan saat approval.
+                    </p>
+                    <textarea
+                      value={deleteReason}
+                      onChange={(event) => {
+                        setDeleteReason(event.target.value);
+                        setDeleteError(null);
+                      }}
+                      placeholder="Alasan hapus servis *"
+                      rows={2}
+                      className="mt-3 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-rose-400"
+                    />
+                    {deleteError && <p className="mt-2 text-[12px] text-rose-600">{deleteError}</p>}
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(null)}
+                        disabled={deleteSaving}
+                        className="rounded-lg bg-white px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitDeleteRequest}
+                        disabled={deleteSaving}
+                        className="rounded-lg bg-rose-600 px-3 py-2 text-[12px] font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                      >
+                        {deleteSaving ? 'Mengirim...' : 'Kirim Request Hapus'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {warrantyTarget?.id === record.id && (
+                  <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/70 p-3">
+                    <p className="text-[13px] font-semibold text-purple-800">Klaim Garansi Servis</p>
+                    <p className="mt-1 text-[12px] text-purple-700">
+                      Buat tiket baru untuk unit yang sudah selesai servis tetapi rusak kembali. Biaya awal ditanggung toko.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <textarea
+                        value={warrantyIssue}
+                        onChange={(event) => {
+                          setWarrantyIssue(event.target.value);
+                          setWarrantyError(null);
+                        }}
+                        placeholder="Keluhan baru *"
+                        rows={3}
+                        className="w-full rounded-lg border border-purple-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-purple-400 sm:col-span-2"
+                      />
+                      <select
+                        value={warrantyTechnician}
+                        onChange={(event) => {
+                          setWarrantyTechnician(event.target.value as Technician);
+                          setWarrantyError(null);
+                        }}
+                        className="h-10 rounded-lg border border-purple-200 bg-white px-3 text-[13px] outline-none focus:border-purple-400"
+                      >
+                        <option value="">Pilih teknisi *</option>
+                        {technicians.map((technician) => (
+                          <option key={technician} value={technician}>{technician}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={warrantyNote}
+                        onChange={(event) => setWarrantyNote(event.target.value)}
+                        placeholder="Catatan tambahan (opsional)"
+                        className="h-10 rounded-lg border border-purple-200 bg-white px-3 text-[13px] outline-none focus:border-purple-400"
+                      />
+                    </div>
+                    {warrantyError && <p className="mt-2 text-[12px] text-rose-600">{warrantyError}</p>}
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWarrantyTarget(null)}
+                        disabled={warrantySaving}
+                        className="rounded-lg bg-white px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitWarrantyReclaim}
+                        disabled={warrantySaving}
+                        className="rounded-lg bg-purple-600 px-3 py-2 text-[12px] font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
+                      >
+                        {warrantySaving ? 'Menyimpan...' : 'Buat Klaim Garansi'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
