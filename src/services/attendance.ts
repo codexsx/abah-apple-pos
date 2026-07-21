@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 import { drawImageToCanvas, encodeCanvasImageBlob } from '@/services/mediaCore';
+import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Webp } from '@/services/r2Media';
 import {
   DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
   DEFAULT_ATTENDANCE_LATE_PENALTY,
@@ -408,12 +409,6 @@ function attendancePhotoContentType(blob: Blob): string {
   return ['image/webp', 'image/jpeg', 'image/png'].includes(blob.type) ? blob.type : 'image/webp';
 }
 
-function attendancePhotoExtension(contentType: string): string {
-  if (contentType === 'image/jpeg') return 'jpg';
-  if (contentType === 'image/png') return 'png';
-  return 'webp';
-}
-
 export async function createAttendanceRecord(input: {
   staffId: string;
   settings: AttendanceSettings;
@@ -434,18 +429,10 @@ export async function createAttendanceRecord(input: {
   }
 
   const recordId = crypto.randomUUID();
-  const contentType = attendancePhotoContentType(input.photoBlob);
-  const extension = attendancePhotoExtension(contentType);
-  const path = `${input.staffId}/${attendanceDate}/${recordId}.${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(ATTENDANCE_PHOTOS_BUCKET)
-    .upload(path, input.photoBlob, {
-      contentType,
-      cacheControl: '2678400',
-      upsert: false,
-    });
-  if (uploadError) throw uploadError;
+  if (attendancePhotoContentType(input.photoBlob) !== 'image/webp') {
+    throw new Error('Foto absensi harus dikompres ke WebP.');
+  }
+  const path = await uploadR2Webp('attendance', input.photoBlob);
 
   const { data, error } = await supabase
     .from('attendance_records')
@@ -472,7 +459,7 @@ export async function createAttendanceRecord(input: {
     .single();
 
   if (error) {
-    await supabase.storage.from(ATTENDANCE_PHOTOS_BUCKET).remove([path]);
+    await deleteR2Media('attendance', path).catch(() => undefined);
     if (error.code === '23505') throw new Error('Kamu sudah absen hari ini.');
     throw error;
   }
@@ -547,6 +534,7 @@ export async function getAttendanceRecords(input: {
 
 export async function getAttendancePhotoUrl(photoPath: string): Promise<string | null> {
   if (!photoPath) return null;
+  if (isR2MediaPath(photoPath)) return getR2MediaUrl('attendance', photoPath);
 
   const { data, error } = await supabase.storage
     .from(ATTENDANCE_PHOTOS_BUCKET)

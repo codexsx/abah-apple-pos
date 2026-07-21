@@ -6,6 +6,7 @@ import {
   normalizeStoryCommentBody,
   type StoryGroupCore,
 } from '@/services/storiesCore';
+import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Webp } from '@/services/r2Media';
 
 export const STORE_STORIES_BUCKET = 'store-stories';
 
@@ -102,10 +103,6 @@ function normalizeStoryComment(row: RawStoryCommentRow, author: StoryAuthor): St
   };
 }
 
-function buildStoryPath(userId: string, storyId: string): string {
-  return `${userId}/${storyId}.webp`;
-}
-
 export async function cleanupExpiredStories(): Promise<void> {
   const { error } = await supabase.rpc('cleanup_expired_stories');
   if (error) {
@@ -184,6 +181,7 @@ export async function getActiveStories(currentUserId: string): Promise<StoreStor
 
 export async function getStoreStoryMediaUrl(mediaPath: string): Promise<string | null> {
   if (!mediaPath) return null;
+  if (isR2MediaPath(mediaPath)) return getR2MediaUrl('story', mediaPath);
 
   const { data, error } = await supabase.storage
     .from(STORE_STORIES_BUCKET)
@@ -202,16 +200,7 @@ export async function uploadStoreStory(input: {
   const media = await convertImageFileToWebp(input.file, undefined, undefined, {
     mirror: input.mirror ?? false,
   });
-  const path = buildStoryPath(input.userId, storyId);
-
-  const { error: uploadError } = await supabase.storage
-    .from(STORE_STORIES_BUCKET)
-    .upload(path, media.blob, {
-      contentType: 'image/webp',
-      cacheControl: '86400',
-      upsert: false,
-    });
-  if (uploadError) throw uploadError;
+  const path = await uploadR2Webp('story', media.blob);
 
   const { error: insertError } = await supabase.from('stories').insert({
     id: storyId,
@@ -225,7 +214,7 @@ export async function uploadStoreStory(input: {
   });
 
   if (insertError) {
-    await supabase.storage.from(STORE_STORIES_BUCKET).remove([path]);
+    await deleteR2Media('story', path).catch(() => undefined);
     throw insertError;
   }
 
@@ -301,5 +290,9 @@ export async function deleteStoreStory(story: Pick<StoreStory, 'id' | 'media_pat
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', story.id);
   if (error) throw error;
+  if (isR2MediaPath(story.media_path)) {
+    await deleteR2Media('story', story.media_path).catch(() => undefined);
+    return;
+  }
   await supabase.storage.from(STORE_STORIES_BUCKET).remove([story.media_path]);
 }
