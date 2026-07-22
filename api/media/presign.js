@@ -9,6 +9,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const R2_PATH_PREFIX = 'r2:';
 const EXPIRES_IN_SECONDS = 5 * 60;
 const ALLOWED_KINDS = new Set(['attendance', 'story']);
+const ALLOWED_CONTENT_TYPES = new Map([
+  ['image/webp', 'webp'],
+  ['image/jpeg', 'jpg'],
+]);
 
 function json(res, status, payload) {
   res.statusCode = status;
@@ -82,14 +86,14 @@ async function authenticate(req) {
 function normalizeKey(value, kind) {
   if (typeof value !== 'string' || !value) return null;
   const key = value.startsWith(R2_PATH_PREFIX) ? value.slice(R2_PATH_PREFIX.length) : value;
-  if (!key.startsWith(`${kind}/`) || !key.endsWith('.webp') || key.includes('..')) return null;
+  if (!key.startsWith(`${kind}/`) || !/\.(webp|jpe?g)$/i.test(key) || key.includes('..')) return null;
   return key;
 }
 
-function buildObjectKey(kind, userId) {
+function buildObjectKey(kind, userId, extension) {
   const id = crypto.randomUUID();
-  if (kind === 'attendance') return `attendance/${userId}/${new Date().toISOString().slice(0, 10)}/${id}.webp`;
-  return `story/${userId}/${id}.webp`;
+  if (kind === 'attendance') return `attendance/${userId}/${new Date().toISOString().slice(0, 10)}/${id}.${extension}`;
+  return `story/${userId}/${id}.${extension}`;
 }
 
 async function canReadObject(auth, kind, key) {
@@ -137,10 +141,19 @@ export default async function handler(req, res) {
     }
 
     if (action === 'upload') {
-      const key = buildObjectKey(kind, auth.userId);
+      const contentType = typeof body?.contentType === 'string'
+        ? body.contentType.toLowerCase()
+        : '';
+      const extension = ALLOWED_CONTENT_TYPES.get(contentType);
+      if (!extension) {
+        json(res, 400, { error: 'Format media harus WebP atau JPEG.' });
+        return;
+      }
+
+      const key = buildObjectKey(kind, auth.userId, extension);
       const uploadUrl = await getSignedUrl(
         config.client,
-        new PutObjectCommand({ Bucket: config.bucket, Key: key, ContentType: 'image/webp' }),
+        new PutObjectCommand({ Bucket: config.bucket, Key: key, ContentType: contentType }),
         { expiresIn: EXPIRES_IN_SECONDS },
       );
       json(res, 200, { key: `${R2_PATH_PREFIX}${key}`, uploadUrl, expiresInSeconds: EXPIRES_IN_SECONDS });

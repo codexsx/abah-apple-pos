@@ -1,5 +1,6 @@
 import {
   drawImageToCanvas,
+  encodeCanvasImageBlob,
   isHeicOrHeifImageFile,
   isSupportedWebCaptureImageFile,
 } from '@/services/mediaCore';
@@ -143,10 +144,10 @@ export async function convertImageFileToWebp(
   if (!ctx) throw new Error('Browser tidak mendukung kompresi gambar.');
   drawImageToCanvas(ctx, img, width, height, options.mirror ?? false);
 
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, 'image/webp', quality);
+  const blob = await encodeCanvasImageBlob(canvas, {
+    preferredType: 'image/webp',
+    fallbackType: 'image/jpeg',
+    quality,
   });
-
-  if (!blob) throw new Error('Gambar tidak dapat dikonversi ke WebP.');
   return { blob, width, height };
 }

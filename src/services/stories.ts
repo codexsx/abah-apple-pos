@@ -6,7 +6,7 @@ import {
   normalizeStoryCommentBody,
   type StoryGroupCore,
 } from '@/services/storiesCore';
-import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Webp } from '@/services/r2Media';
+import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Image } from '@/services/r2Media';
 
 export const STORE_STORIES_BUCKET = 'store-stories';
 
@@ -200,7 +200,7 @@ export async function uploadStoreStory(input: {
   const media = await convertImageFileToWebp(input.file, undefined, undefined, {
     mirror: input.mirror ?? false,
   });
-  const path = await uploadR2Webp('story', media.blob);
+  const path = await uploadR2Image('story', media.blob);
 
   const { error: insertError } = await supabase.from('stories').insert({
     id: storyId,

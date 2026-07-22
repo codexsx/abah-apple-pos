@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 export type R2MediaKind = 'attendance' | 'story';
 
 const R2_PATH_PREFIX = 'r2:';
+const R2_IMAGE_CONTENT_TYPES = new Set(['image/webp', 'image/jpeg']);
 const readUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 function isR2Path(value: string): boolean {
@@ -26,17 +27,24 @@ async function requestR2(body: Record<string, string>) {
   return payload;
 }
 
-export async function uploadR2Webp(kind: R2MediaKind, blob: Blob): Promise<string> {
-  if (blob.type !== 'image/webp') throw new Error('Media R2 harus berformat WebP.');
-  const signed = await requestR2({ action: 'upload', kind });
+export async function uploadR2Image(kind: R2MediaKind, blob: Blob): Promise<string> {
+  const contentType = blob.type.toLowerCase();
+  if (!R2_IMAGE_CONTENT_TYPES.has(contentType)) {
+    throw new Error('Media R2 harus berupa WebP atau JPEG terkompresi.');
+  }
+
+  const signed = await requestR2({ action: 'upload', kind, contentType });
   const upload = await fetch(signed.uploadUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': 'image/webp' },
+    headers: { 'Content-Type': contentType },
     body: blob,
   });
   if (!upload.ok) throw new Error('Upload media ke Cloudflare R2 gagal.');
   return signed.key;
 }
+
+// Backward-compatible export for callers that have not been migrated yet.
+export const uploadR2Webp = uploadR2Image;
 
 export async function getR2MediaUrl(kind: R2MediaKind, key: string): Promise<string | null> {
   if (!isR2Path(key)) return null;

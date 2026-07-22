@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
 import { drawImageToCanvas, encodeCanvasImageBlob } from '@/services/mediaCore';
-import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Webp } from '@/services/r2Media';
+import { deleteR2Media, getR2MediaUrl, isR2MediaPath, uploadR2Image } from '@/services/r2Media';
 import {
   DEFAULT_ATTENDANCE_ABSENCE_PENALTY,
   DEFAULT_ATTENDANCE_LATE_PENALTY,
@@ -405,8 +405,10 @@ export async function captureVideoFrameToWebp(
   return blob;
 }
 
-function attendancePhotoContentType(blob: Blob): string {
-  return ['image/webp', 'image/jpeg', 'image/png'].includes(blob.type) ? blob.type : 'image/webp';
+function attendancePhotoContentType(blob: Blob): 'image/webp' | 'image/jpeg' | null {
+  const type = blob.type.toLowerCase();
+  if (type === 'image/webp' || type === 'image/jpeg') return type;
+  return null;
 }
 
 export async function createAttendanceRecord(input: {
@@ -429,10 +431,10 @@ export async function createAttendanceRecord(input: {
   }
 
   const recordId = crypto.randomUUID();
-  if (attendancePhotoContentType(input.photoBlob) !== 'image/webp') {
-    throw new Error('Foto absensi harus dikompres ke WebP.');
+  if (!attendancePhotoContentType(input.photoBlob)) {
+    throw new Error('Foto absensi tidak dapat dikompres ke format yang didukung.');
   }
-  const path = await uploadR2Webp('attendance', input.photoBlob);
+  const path = await uploadR2Image('attendance', input.photoBlob);
 
   const { data, error } = await supabase
     .from('attendance_records')
