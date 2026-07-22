@@ -124,10 +124,21 @@ export async function encodeCanvasImageBlob(
   const timeoutMs = options.timeoutMs ?? 2500;
 
   const preferredBlob = await canvasToBlobWithTimeout(canvas, preferredType, quality, timeoutMs);
-  if (preferredBlob && preferredBlob.size > 0) return preferredBlob;
+  // Safari can return a PNG blob even when asked for WebP. Treat it as an
+  // unsupported encoder result and keep trying the requested JPEG fallback.
+  if (preferredBlob && preferredBlob.size > 0 && preferredBlob.type.toLowerCase() === preferredType.toLowerCase()) {
+    return preferredBlob;
+  }
+
+  const fallbackBlob = await canvasToBlobWithTimeout(canvas, fallbackType, quality, timeoutMs);
+  if (fallbackBlob && fallbackBlob.size > 0 && fallbackBlob.type.toLowerCase() === fallbackType.toLowerCase()) {
+    return fallbackBlob;
+  }
 
   const fallbackDataUrl = canvas.toDataURL(fallbackType, quality);
-  const fallbackBlob = dataUrlToBlob(fallbackDataUrl, fallbackType);
-  if (fallbackBlob.size <= 0) throw new Error('Foto tidak dapat dikompres.');
-  return fallbackBlob;
+  const dataUrlBlob = dataUrlToBlob(fallbackDataUrl, fallbackType);
+  if (dataUrlBlob.size <= 0 || dataUrlBlob.type.toLowerCase() !== fallbackType.toLowerCase()) {
+    throw new Error('Foto tidak dapat dikompres.');
+  }
+  return dataUrlBlob;
 }

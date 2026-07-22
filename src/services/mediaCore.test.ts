@@ -72,4 +72,23 @@ describe('mediaCore', () => {
     expect(blob.type).toBe('image/jpeg');
     expect(await blob.text()).toBe('fallback-null');
   });
+
+  it('falls back to JPEG when Safari returns PNG for an unsupported WebP encoder', async () => {
+    const canvas = {
+      toBlob: (callback: BlobCallback, type?: string) => {
+        callback(new Blob(['image'], { type: type === 'image/webp' ? 'image/png' : 'image/jpeg' }));
+      },
+      toDataURL: () => `data:image/jpeg;base64,${btoa('unused')}`,
+    } as unknown as HTMLCanvasElement;
+
+    const blob = await encodeCanvasImageBlob(canvas, {
+      preferredType: 'image/webp',
+      fallbackType: 'image/jpeg',
+      quality: 0.78,
+      timeoutMs: 1,
+    });
+
+    expect(blob.type).toBe('image/jpeg');
+    expect(await blob.text()).toBe('image');
+  });
 });
