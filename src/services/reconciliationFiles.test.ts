@@ -120,4 +120,29 @@ describe('reconciliation file parsing', () => {
       { direction: 'out', amount: 36_000, accountName: 'myBCA' },
     ]);
   });
+
+  it('finds a myBCA header after account metadata and reads shifted PDF-conversion amounts', async () => {
+    const file = new File(
+      [
+        'ACCOUNT NUMBER 0292517040 - TAHAPAN - IDR,,,,,,DURATION 22 Jul 2026\n',
+        ',Date,Description,,,Amount,\n',
+        ',2026-07-22,"TRSF E-BANKING CR - 2207/FTSCY/WS95271 350000.00 RIDHA",,,"IDR 350,000.00",\n',
+        '"PEND TRSF E-BANKING DB - 2207/FTSCY/WS95051 3600000.00 NUR DEA",,,,,,"IDR 3,600,000.00"',
+      ],
+      'myBCA-pdf-conversion.csv',
+      { type: 'text/csv' },
+    );
+
+    const result = await parseReconciliationFile({
+      file,
+      source: 'bank',
+      defaultDate: '2026-07-22',
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.entries).toMatchObject([
+      { date: '2026-07-22', direction: 'in', amount: 350_000 },
+      { date: '2026-07-22', direction: 'out', amount: 3_600_000 },
+    ]);
+  });
 });

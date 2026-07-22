@@ -39,6 +39,63 @@ function findColumn(headers: string[], candidates: string[]): number {
   );
 }
 
+type ReconciliationIndexes = {
+  dateIndex: number;
+  amountIndex: number;
+  debitIndex: number;
+  creditIndex: number;
+  directionIndex: number;
+  descriptionIndex: number;
+  accountIndex: number;
+  referenceIndex: number;
+  customerIndex: number;
+  itemIndex: number;
+  imeiIndex: number;
+  transferIndex: number;
+  cashIndex: number;
+};
+
+function resolveIndexes(headers: string[]): ReconciliationIndexes {
+  return {
+    dateIndex: findColumn(headers, DATE_HEADERS),
+    amountIndex: findColumn(headers, AMOUNT_HEADERS),
+    debitIndex: findColumn(headers, DEBIT_HEADERS),
+    creditIndex: findColumn(headers, CREDIT_HEADERS),
+    directionIndex: findColumn(headers, DIRECTION_HEADERS),
+    descriptionIndex: findColumn(headers, DESCRIPTION_HEADERS),
+    accountIndex: findColumn(headers, ACCOUNT_HEADERS),
+    referenceIndex: findColumn(headers, REFERENCE_HEADERS),
+    customerIndex: findColumn(headers, CUSTOMER_HEADERS),
+    itemIndex: findColumn(headers, ITEM_HEADERS),
+    imeiIndex: findColumn(headers, IMEI_HEADERS),
+    transferIndex: findColumn(headers, TRANSFER_HEADERS),
+    cashIndex: findColumn(headers, CASH_HEADERS),
+  };
+}
+
+function headerScore(indexes: ReconciliationIndexes): number {
+  let score = 0;
+  if (indexes.dateIndex >= 0) score += 3;
+  if (indexes.amountIndex >= 0 || indexes.debitIndex >= 0 || indexes.creditIndex >= 0) score += 3;
+  if (indexes.descriptionIndex >= 0) score += 2;
+  if (indexes.directionIndex >= 0) score += 1;
+  if (indexes.transferIndex >= 0 || indexes.cashIndex >= 0) score += 2;
+  return score;
+}
+
+function findTableHeader(rows: CellValue[][]): { rowIndex: number; indexes: ReconciliationIndexes } {
+  let best = { rowIndex: 0, indexes: resolveIndexes(rows[0].map(normalizeHeader)), score: -1 };
+
+  // Export bank/PDF frequently prepends account and period metadata before the real table header.
+  rows.slice(0, Math.min(rows.length, 30)).forEach((row, rowIndex) => {
+    const indexes = resolveIndexes(row.map(normalizeHeader));
+    const score = headerScore(indexes);
+    if (score > best.score) best = { rowIndex, indexes, score };
+  });
+
+  return { rowIndex: best.rowIndex, indexes: best.indexes };
+}
+
 function parseCurrency(value: CellValue): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.round(Math.abs(value));
   const raw = String(value ?? '').trim();
@@ -219,17 +276,42 @@ function readCell(row: CellValue[], index: number): CellValue {
   return index >= 0 ? row[index] : '';
 }
 
+function isCurrencyCell(value: CellValue): boolean {
+  if (typeof value === 'number') return Number.isFinite(value) && value !== 0;
+  const raw = String(value ?? '').trim();
+  return /^(?:idr|rp)\s*[\d.,]+(?:\s*(?:cr|db))?$/i.test(raw)
+    || /^-?[\d.,]+$/.test(raw);
+}
+
+function resolveAmountValue(row: CellValue[], preferredIndex: number): CellValue {
+  const preferred = readCell(row, preferredIndex);
+  if (parseCurrency(preferred) > 0) return preferred;
+
+  // Some PDF-to-Excel conversions move the amount into the last visible cell
+  // while preserving the original header position. Only inspect cells that look
+  // like standalone money, never numbers embedded inside transaction text.
+  return row.find((cell) => isCurrencyCell(cell) && parseCurrency(cell) > 0) ?? preferred;
+}
+
+function resolveDescriptionValue(row: CellValue[], preferredIndex: number): CellValue {
+  const preferred = readCell(row, preferredIndex);
+  if (String(preferred ?? '').trim()) return preferred;
+
+  const candidates = row
+    .filter((cell) => !isCurrencyCell(cell))
+    .map((cell) => String(cell ?? '').trim())
+    .filter((cell) => cell.length > 3 && !toIsoDate(cell));
+
+  return candidates.sort((left, right) => right.length - left.length)[0] ?? '';
+}
+
 function fallbackDate(defaultDate: string, value: string): string {
   return value || defaultDate;
 }
 
-function directionFromColumns(row: CellValue[], indexes: {
-  amountIndex: number;
-  debitIndex: number;
-  creditIndex: number;
-  directionIndex: number;
-  descriptionIndex: number;
-}): { direction: MoneyDirection; amount: number } {
+function directionFromColumns(row: CellValue[], indexes: Pick<ReconciliationIndexes,
+  'amountIndex' | 'debitIndex' | 'creditIndex' | 'directionIndex' | 'descriptionIndex'
+>): { direction: MoneyDirection; amount: number } {
   const credit = parseCurrency(readCell(row, indexes.creditIndex));
   const debit = parseCurrency(readCell(row, indexes.debitIndex));
   if (credit > 0 || debit > 0) {
@@ -238,9 +320,10 @@ function directionFromColumns(row: CellValue[], indexes: {
       : { direction: 'out', amount: debit };
   }
 
+  const description = resolveDescriptionValue(row, indexes.descriptionIndex);
   const explicit = parseDirection(readCell(row, indexes.directionIndex))
-    ?? parseDirection(readCell(row, indexes.descriptionIndex));
-  const signed = signedCurrency(readCell(row, indexes.amountIndex));
+    ?? parseDirection(description);
+  const signed = signedCurrency(resolveAmountValue(row, indexes.amountIndex));
   if (signed < 0) return { direction: 'out', amount: Math.abs(signed) };
   return { direction: explicit ?? 'in', amount: Math.abs(signed) };
 }
@@ -323,22 +406,8 @@ export async function parseReconciliationFile(input: {
     };
   }
 
-  const headers = rows[0].map(normalizeHeader);
-  const indexes = {
-    dateIndex: findColumn(headers, DATE_HEADERS),
-    amountIndex: findColumn(headers, AMOUNT_HEADERS),
-    debitIndex: findColumn(headers, DEBIT_HEADERS),
-    creditIndex: findColumn(headers, CREDIT_HEADERS),
-    directionIndex: findColumn(headers, DIRECTION_HEADERS),
-    descriptionIndex: findColumn(headers, DESCRIPTION_HEADERS),
-    accountIndex: findColumn(headers, ACCOUNT_HEADERS),
-    referenceIndex: findColumn(headers, REFERENCE_HEADERS),
-    customerIndex: findColumn(headers, CUSTOMER_HEADERS),
-    itemIndex: findColumn(headers, ITEM_HEADERS),
-    imeiIndex: findColumn(headers, IMEI_HEADERS),
-    transferIndex: findColumn(headers, TRANSFER_HEADERS),
-    cashIndex: findColumn(headers, CASH_HEADERS),
-  };
+  const tableHeader = findTableHeader(rows);
+  const indexes = tableHeader.indexes;
 
   const warnings: string[] = [];
   if (indexes.amountIndex < 0 && indexes.debitIndex < 0 && indexes.creditIndex < 0) {
@@ -349,7 +418,7 @@ export async function parseReconciliationFile(input: {
   }
 
   const entries: ReconciliationEntry[] = [];
-  rows.slice(1).forEach((row, rowIndex) => {
+  rows.slice(tableHeader.rowIndex + 1).forEach((row, rowIndex) => {
     if (isSummaryRow(row)) return;
 
     if (input.source === 'manual') {
@@ -373,17 +442,17 @@ export async function parseReconciliationFile(input: {
     const accountName = String(
       readCell(row, indexes.accountIndex) || (input.source === 'bank' ? 'myBCA' : input.source),
     ).trim();
-    const description = String(readCell(row, indexes.descriptionIndex) || '').trim();
+    const description = String(resolveDescriptionValue(row, indexes.descriptionIndex) || '').trim();
     const reference = String(readCell(row, indexes.referenceIndex) || '').trim();
 
     entries.push({
-      id: `${input.source}:${input.file.name}:${rowIndex + 2}`,
+      id: `${input.source}:${input.file.name}:${tableHeader.rowIndex + rowIndex + 2}`,
       source: input.source,
       date,
       direction,
       amount,
       accountName,
-      description: description || reference || `${input.source} row ${rowIndex + 2}`,
+      description: description || reference || `${input.source} row ${tableHeader.rowIndex + rowIndex + 2}`,
       reference: reference || undefined,
     });
   });
