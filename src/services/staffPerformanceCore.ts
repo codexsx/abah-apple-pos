@@ -22,12 +22,13 @@ const MINIMUM_TARGET_STAFF = 5;
 const BATCHES: Array<{
   batch: StaffBatch;
   minRatio: number;
+  minUnits?: number;
 }> = [
   { batch: 'Bronze', minRatio: 0 },
   { batch: 'Silver', minRatio: 0.5 },
   { batch: 'Gold', minRatio: 0.9 },
   { batch: 'Platinum', minRatio: 1.2 },
-  { batch: 'Lord', minRatio: 1.6 },
+  { batch: 'Lord', minRatio: 1.6, minUnits: 120 },
 ];
 
 export function getPerStaffMonthlyTarget(
@@ -42,6 +43,19 @@ function minUnitsForRatio(targetUnits: number, ratio: number): number {
   return Math.ceil(targetUnits * ratio);
 }
 
+function minimumUnitsForBatch(index: number, targetUnits: number): number {
+  const entry = BATCHES[index];
+  const minimum = entry.minUnits ?? minUnitsForRatio(targetUnits, entry.minRatio);
+  const next = BATCHES[index + 1];
+
+  // Keep each tier reachable if the dynamic target would otherwise overlap
+  // with Lord's fixed 120-unit requirement.
+  if (!next) return minimum;
+
+  const nextMinimum = next.minUnits ?? minUnitsForRatio(targetUnits, next.minRatio);
+  return Math.min(minimum, Math.max(0, nextMinimum - 1));
+}
+
 export function calculateStaffBatch(
   previousMonthUnits: number,
   activeSalesStaff: number,
@@ -51,14 +65,14 @@ export function calculateStaffBatch(
   let batchIndex = 0;
 
   BATCHES.forEach((entry, index) => {
-    if (units >= minUnitsForRatio(targetUnits, entry.minRatio)) {
+    if (units >= minimumUnitsForBatch(index, targetUnits)) {
       batchIndex = index;
     }
   });
 
   const next = BATCHES[batchIndex + 1] ?? null;
-  const nextBatchUnits = next ? minUnitsForRatio(targetUnits, next.minRatio) : null;
-  const progressTarget = nextBatchUnits ?? minUnitsForRatio(targetUnits, BATCHES[batchIndex].minRatio);
+  const nextBatchUnits = next ? minimumUnitsForBatch(batchIndex + 1, targetUnits) : null;
+  const progressTarget = nextBatchUnits ?? minimumUnitsForBatch(batchIndex, targetUnits);
   const progressPercent = progressTarget > 0
     ? Math.min(100, Math.round((units / progressTarget) * 100))
     : 100;

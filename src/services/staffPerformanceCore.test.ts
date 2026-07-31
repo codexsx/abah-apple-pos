@@ -20,8 +20,8 @@ describe('staff performance core', () => {
     expect(calculateStaffBatch(49, activeStaff).batch).toBe('Bronze');
     expect(calculateStaffBatch(50, activeStaff).batch).toBe('Silver');
     expect(calculateStaffBatch(90, activeStaff).batch).toBe('Gold');
-    expect(calculateStaffBatch(120, activeStaff).batch).toBe('Platinum');
-    expect(calculateStaffBatch(160, activeStaff).batch).toBe('Lord');
+    expect(calculateStaffBatch(119, activeStaff).batch).toBe('Platinum');
+    expect(calculateStaffBatch(120, activeStaff).batch).toBe('Lord');
   });
 
   it('keeps level as lifetime progress that does not reset monthly', () => {

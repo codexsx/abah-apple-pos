@@ -14,7 +14,7 @@ const BATCH_CLASS: Record<StaffPerformance['batch'], string> = {
   Silver: 'bg-slate-100 text-slate-700 border-slate-200',
   Gold: 'bg-yellow-50 text-yellow-800 border-yellow-200',
   Platinum: 'bg-cyan-50 text-cyan-800 border-cyan-200',
-  Lord: 'bg-violet-50 text-violet-800 border-violet-200',
+  Lord: 'bg-red-50 text-red-800 border-red-200',
 };
 
 function formatUnit(value: number): string {

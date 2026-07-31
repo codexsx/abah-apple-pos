@@ -6,7 +6,7 @@ const BATCH_STYLE: Record<StaffPerformance['batch'], string> = {
   Silver: 'from-slate-400 to-slate-600 text-white',
   Gold: 'from-yellow-300 to-amber-500 text-slate-950',
   Platinum: 'from-cyan-200 to-blue-500 text-slate-950',
-  Lord: 'from-violet-500 to-slate-950 text-white',
+  Lord: 'from-red-500 to-rose-700 text-white',
 };
 
 interface Props {
