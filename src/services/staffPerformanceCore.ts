@@ -64,7 +64,7 @@ export function calculateStaffBatch(
   const units = Math.max(0, Math.floor(previousMonthUnits));
   let batchIndex = 0;
 
-  BATCHES.forEach((entry, index) => {
+  BATCHES.forEach((_, index) => {
     if (units >= minimumUnitsForBatch(index, targetUnits)) {
       batchIndex = index;
     }
