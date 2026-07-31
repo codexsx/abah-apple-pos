@@ -5,7 +5,7 @@ const BATCH_STYLE: Record<StaffPerformance['batch'], string> = {
   Bronze: 'from-amber-700 to-orange-500 text-white',
   Silver: 'from-slate-400 to-slate-600 text-white',
   Gold: 'from-yellow-300 to-amber-500 text-slate-950',
-  Platinum: 'from-cyan-200 to-blue-500 text-slate-950',
+  Platinum: 'from-slate-100 via-sky-200 to-slate-300 text-slate-800',
   Lord: 'from-red-500 to-rose-700 text-white',
 };
 

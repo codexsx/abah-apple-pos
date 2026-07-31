@@ -13,7 +13,7 @@ const BATCH_CLASS: Record<StaffPerformance['batch'], string> = {
   Bronze: 'bg-amber-50 text-amber-800 border-amber-200',
   Silver: 'bg-slate-100 text-slate-700 border-slate-200',
   Gold: 'bg-yellow-50 text-yellow-800 border-yellow-200',
-  Platinum: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  Platinum: 'bg-slate-100 text-slate-700 border-slate-300',
   Lord: 'bg-red-50 text-red-800 border-red-200',
 };
 
