@@ -51,13 +51,23 @@ describe('staffPerformance service', () => {
     mocks.rpc.mockResolvedValue({
       data: [
         {
-          staff_id: 'staff-2',
-          staff_name: 'Ayu',
+          staff_id: 'staff-1',
+          staff_name: 'Regga',
           role: 'KASIR',
           avatar_url: null,
-          previous_month_units: 160,
-          current_month_units: 20,
-          lifetime_units: 220,
+          previous_month_units: 116,
+          current_month_units: 0,
+          lifetime_units: 116,
+          active_sales_staff: 5,
+        },
+        {
+          staff_id: 'staff-2',
+          staff_name: 'Sella',
+          role: 'KASIR',
+          avatar_url: null,
+          previous_month_units: 124,
+          current_month_units: 0,
+          lifetime_units: 124,
           active_sales_staff: 5,
         },
       ],
@@ -72,5 +82,6 @@ describe('staffPerformance service', () => {
       batch: 'Lord',
       nextBatch: null,
     });
+    expect(rows[1].staff_id).toBe('staff-1');
   });
 });

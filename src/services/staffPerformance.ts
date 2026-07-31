@@ -60,6 +60,18 @@ export function enrichStaffPerformance(row: StaffPerformanceRpcRow): StaffPerfor
   };
 }
 
+/**
+ * The leaderboard is ranked by the previous calendar month. Keep this local
+ * ordering as a safeguard if an older database function is still deployed.
+ */
+export function sortStaffPerformanceLeaderboard(rows: StaffPerformance[]): StaffPerformance[] {
+  return [...rows].sort((left, right) => (
+    right.previous_month_units - left.previous_month_units
+    || right.current_month_units - left.current_month_units
+    || left.staff_name.localeCompare(right.staff_name, 'id')
+  ));
+}
+
 async function callPerformanceRpc(name: string): Promise<StaffPerformance[]> {
   const { data, error } = await supabase.rpc(name);
   if (error) throw error;
@@ -72,5 +84,7 @@ export async function getOwnStaffPerformance(): Promise<StaffPerformance | null>
 }
 
 export async function getStaffPerformanceLeaderboard(): Promise<StaffPerformance[]> {
-  return callPerformanceRpc('get_staff_performance_leaderboard');
+  return sortStaffPerformanceLeaderboard(
+    await callPerformanceRpc('get_staff_performance_leaderboard'),
+  );
 }
