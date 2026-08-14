@@ -95,6 +95,29 @@ export async function getStockItems(): Promise<StockItem[]> {
   return data || [];
 }
 
+/**
+ * Returns only identifiers that are still active in stock. Sold units are
+ * intentionally excluded because the same IMEI may be acquired again through
+ * a buyback or a new purchase.
+ */
+export async function getExistingActiveStockIdentifiers(identifiers: string[]): Promise<Set<string>> {
+  const uniqueIdentifiers = [...new Set(identifiers.filter(Boolean))];
+  if (uniqueIdentifiers.length === 0) return new Set();
+
+  const { data, error } = await supabase
+    .from('stock_items')
+    .select('imei')
+    .in('imei', uniqueIdentifiers)
+    .neq('status', 'TERJUAL');
+  if (error) throw error;
+
+  return new Set(
+    (data || [])
+      .map((item) => item.imei)
+      .filter((identifier): identifier is string => Boolean(identifier)),
+  );
+}
+
 export async function getStockItemById(id: string): Promise<StockItem | null> {
   const { data, error } = await supabase.from('stock_items').select('*').eq('id', id).single();
   if (error) {

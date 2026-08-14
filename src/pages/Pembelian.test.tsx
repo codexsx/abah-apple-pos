@@ -30,9 +30,10 @@ vi.mock('@/services/postings', () => ({
 // set; resolve an empty list so entered IMEIs are considered new.
 vi.mock('@/services/stock', () => ({
   getStockItems: vi.fn(),
+  getExistingActiveStockIdentifiers: vi.fn(),
 }));
 
-import { getStockItems } from '@/services/stock';
+import { getExistingActiveStockIdentifiers, getStockItems } from '@/services/stock';
 
 vi.mock('@/services/accounts', () => ({
   getAccountPickerData: vi.fn().mockResolvedValue([
@@ -148,6 +149,7 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getStockItems).mockResolvedValue([]);
+    vi.mocked(getExistingActiveStockIdentifiers).mockResolvedValue(new Set());
     vi.mocked(getAgents).mockResolvedValue([AGENT_SUPPLIER]);
     recordPurchaseWithPostings.mockResolvedValue('tx-123');
     recordAccessoryPurchaseWithPostings.mockResolvedValue('tx-accessory');
@@ -261,6 +263,22 @@ describe('Pembelian — persistence wiring (Req 6.1, 6.7)', () => {
         price: Number(SELL_PRICE),
       }),
     ]);
+  });
+
+  it('rechecks active IMEIs on save so a stock change after page load is not submitted', async () => {
+    renderPage();
+    fillValidFormWithCashPayment();
+
+    const cashOption = await screen.findByRole('radio', { name: /Kas Toko/ });
+    fireEvent.click(cashOption);
+    vi.mocked(getExistingActiveStockIdentifiers).mockResolvedValue(new Set([FRESH_IMEI]));
+
+    fireEvent.click(screen.getByRole('button', { name: /Simpan Pembelian/ }));
+
+    expect(
+      (await screen.findAllByText(new RegExp(`IMEI ${FRESH_IMEI} sudah ada di stok aktif`))).length,
+    ).toBeGreaterThan(0);
+    expect(recordPurchaseWithPostings).not.toHaveBeenCalled();
   });
 
   it('requires and persists a defect description for minus full-data stock', async () => {

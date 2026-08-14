@@ -33,7 +33,7 @@ import {
   recordAccessoryPurchaseWithPostings,
   recordPurchaseWithPostings,
 } from '@/services/postings';
-import { getStockItems } from '@/services/stock';
+import { getExistingActiveStockIdentifiers, getStockItems } from '@/services/stock';
 import {
   identifierLabel,
   isValidSerialNumber,
@@ -333,6 +333,7 @@ export default function Pembelian() {
     try {
       const items = await getStockItems();
       const imeis = items
+        .filter((item) => item.status !== 'TERJUAL')
         .map((s) => s.imei)
         .filter((i): i is string => !!i);
       setExistingImeis(new Set(imeis));
@@ -351,6 +352,7 @@ export default function Pembelian() {
       .then((items) => {
         if (!active) return;
         const imeis = items
+          .filter((item) => item.status !== 'TERJUAL')
           .map((s) => s.imei)
           .filter((i): i is string => !!i);
         setExistingImeis(new Set(imeis));
@@ -999,6 +1001,32 @@ export default function Pembelian() {
           price: group.sellPrice,
           count: group.quantity,
         }));
+
+    // The initial stock list can become stale while this page is open. Query
+    // only the identifiers being submitted immediately before the RPC so a
+    // duplicate IMEI is stopped with a useful message instead of a rollback.
+    if (usesFullUnitData) {
+      const submittedIdentifiers = items
+        .map((item) => item.imei)
+        .filter((identifier): identifier is string => Boolean(identifier));
+
+      try {
+        const activeIdentifiers = await getExistingActiveStockIdentifiers(submittedIdentifiers);
+        const duplicateIdentifier = submittedIdentifiers.find((identifier) => activeIdentifiers.has(identifier));
+        if (duplicateIdentifier) {
+          setExistingImeis((previous) => new Set([...previous, ...activeIdentifiers]));
+          setSaveError(
+            `${identifierLabel(deviceCategory)} ${duplicateIdentifier} sudah ada di stok aktif. ` +
+            'Gunakan IMEI lain atau cek unit lama di menu Stok.',
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('[Pembelian] active identifier check error:', error);
+        setSaveError(`Tidak dapat memverifikasi ${identifierLabel(deviceCategory)}. Periksa koneksi lalu coba lagi.`);
+        return;
+      }
+    }
 
     setSaving(true);
     try {
