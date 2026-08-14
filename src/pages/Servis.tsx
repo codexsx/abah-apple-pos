@@ -50,6 +50,7 @@ import {
   type Technician as DbTechnician,
 } from '@/services/technicians';
 import {
+  getStockItemByIdentifier,
   getStockItems,
   updateStockStatus,
   type StockItem,
@@ -251,6 +252,21 @@ interface ReadyUnit {
   batteryHealth: number;
   entryDate: string;
   warnings: string[];
+}
+
+function toReadyUnit(item: StockItem): ReadyUnit {
+  return {
+    realId: item.id,
+    stkId: item.id,
+    model: item.model,
+    capacity: item.capacity,
+    condition: item.condition,
+    color: item.color,
+    imei: item.imei ?? '',
+    batteryHealth: 0,
+    entryDate: item.created_at,
+    warnings: [],
+  };
 }
 
 interface WarrantyClaimLookupRecord {
@@ -2866,6 +2882,7 @@ function ServisTokoForm({
   const [unitSearch, setUnitSearch] = useState('');
   const [browseTab, setBrowseTab] = useState<'cari' | 'browse'>('browse');
   const [imeiSearch, setImeiSearch] = useState('');
+  const [imeiSearching, setImeiSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -2881,18 +2898,7 @@ function ServisTokoForm({
         if (!active) return;
         const ready = items
           .filter((it) => it.status === 'READY')
-          .map<ReadyUnit>((it) => ({
-            realId: it.id,
-            stkId: it.id,
-            model: it.model,
-            capacity: it.capacity,
-            condition: it.condition,
-            color: it.color,
-            imei: it.imei ?? '',
-            batteryHealth: 0,
-            entryDate: it.created_at,
-            warnings: [],
-          }));
+          .map(toReadyUnit);
         setReadyUnits(ready);
         setUnitsLoading(false);
       })
@@ -2916,6 +2922,37 @@ function ServisTokoForm({
         u.stkId.toLowerCase().includes(q)
     );
   }, [unitSearch, readyUnits]);
+
+  const handleImeiLookup = useCallback(async () => {
+    const query = imeiSearch.trim();
+    if (!query) return;
+
+    const cachedUnit = readyUnits.find(
+      (unit) => (unit.imei ?? '').toUpperCase() === query.toUpperCase(),
+    );
+    if (cachedUnit) {
+      setSelectedUnit(cachedUnit);
+      return;
+    }
+
+    setImeiSearching(true);
+    try {
+      const directMatch = await getStockItemByIdentifier(query);
+      if (directMatch?.status !== 'READY') return;
+
+      const readyUnit = toReadyUnit(directMatch);
+      setReadyUnits((previous) =>
+        previous.some((unit) => unit.realId === readyUnit.realId)
+          ? previous
+          : [readyUnit, ...previous],
+      );
+      setSelectedUnit(readyUnit);
+    } catch {
+      // Keep the form usable when the direct lookup is unavailable or misses.
+    } finally {
+      setImeiSearching(false);
+    }
+  }, [imeiSearch, readyUnits]);
 
   const handleChange = (field: string, value: string) => {
     setFormData((p) => ({ ...p, [field]: value }));
@@ -3083,16 +3120,11 @@ function ServisTokoForm({
                     className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[14px] font-mono focus:outline-none focus:border-teal-500"
                   />
                   <button
-                    onClick={() => {
-                      const q = imeiSearch.trim();
-                      const found = q.length > 0
-                        ? readyUnits.find((u) => (u.imei ?? '').toUpperCase() === q.toUpperCase())
-                        : undefined;
-                      if (found) setSelectedUnit(found);
-                    }}
-                    className="h-10 rounded-xl bg-teal-500 px-4 text-[13px] font-semibold text-white hover:bg-teal-600"
+                    onClick={handleImeiLookup}
+                    disabled={!imeiSearch.trim() || imeiSearching}
+                    className="h-10 rounded-xl bg-teal-500 px-4 text-[13px] font-semibold text-white hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Cari
+                    {imeiSearching ? 'Mencari...' : 'Cari'}
                   </button>
                 </div>
               </div>

@@ -30,7 +30,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
-import { getStockItems, type StockItem } from '@/services/stock';
+import { getStockItemByIdentifier, getStockItems, type StockItem } from '@/services/stock';
 import AccountPicker from '@/components/AccountPicker';
 import PresetOrCustomSelect from '@/components/PresetOrCustomSelect';
 import {
@@ -679,6 +679,39 @@ export default function TukarTambah() {
       cancelled = true;
     };
   }, [stockReloadKey]);
+
+  useEffect(() => {
+    const identifier = searchQuery.trim().replace(/[\s-]+/g, '');
+    // Only fall back to a direct lookup for a complete IMEI/SN. This avoids
+    // issuing a request for normal model, colour, or capacity searches.
+    const isImei = /^\d{15}$/.test(identifier);
+    const isSerial = /^(?=.*[A-Za-z])[A-Za-z0-9]{8,14}$/.test(identifier);
+    if (!isImei && !isSerial) return;
+
+    const alreadyLoaded = stockRows.some(
+      (row) => row.imei?.replace(/[\s-]+/g, '').toUpperCase() === identifier.toUpperCase(),
+    );
+    if (alreadyLoaded) return;
+
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      getStockItemByIdentifier(identifier)
+        .then((row) => {
+          if (cancelled || row?.status !== 'READY') return;
+          setStockRows((previous) =>
+            previous.some((item) => item.id === row.id) ? previous : [row, ...previous],
+          );
+        })
+        .catch(() => {
+          // The existing empty result remains the non-disruptive fallback.
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [searchQuery, stockRows]);
 
   /* ── reset ── */
   const handleReset = () => {

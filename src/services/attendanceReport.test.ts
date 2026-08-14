@@ -100,12 +100,12 @@ const offItem: AttendanceReportItem = {
 };
 
 describe('attendance report helpers', () => {
-  it('builds a CSV report with attendance rows, absence rows, and photo URLs', () => {
+  it('builds a CSV report with attendance rows, absence rows, and R2 photo paths', () => {
     const csv = buildAttendanceCsv([recordItem, absenceItem, offItem]);
 
     expect(csv).toContain('Nama Staff,Jabatan,Tanggal,Status,Shift');
     expect(csv).toContain('"Ali, Staff",KASIR,2026-07-01,Disetujui,Pagi');
-    expect(csv).toContain('https://signed.test/attendance.webp');
+    expect(csv).toContain('staff-1/2026-07-01/record-1.webp');
     expect(csv).toContain('Bella Staff,KASIR,2026-07-01,Tidak Absen');
     expect(csv).toContain('150000');
     expect(csv).toContain('Bella Staff,KASIR,2026-07-02,Libur / Off');

@@ -23,7 +23,7 @@ import { MemoryRouter } from 'react-router';
 
 import Penjualan from './Penjualan';
 import { recordSaleWithPostings } from '@/services/postings';
-import { getStockItems, type StockItem } from '@/services/stock';
+import { getStockItemByIdentifier, getStockItems, type StockItem } from '@/services/stock';
 import { getAccessories } from '@/services/accessories';
 import { getAccountPickerData, type AccountWithBalance } from '@/services/accounts';
 import {
@@ -49,6 +49,7 @@ vi.mock('@/services/postings', () => ({
 // READY rows to build its browse/IMEI groups. We expose a single READY unit.
 // ---------------------------------------------------------------------------
 vi.mock('@/services/stock', () => ({
+  getStockItemByIdentifier: vi.fn(),
   getStockItems: vi.fn(),
 }));
 
@@ -72,6 +73,7 @@ vi.mock('@/services/accounts', () => ({
 }));
 
 const mockRecord = vi.mocked(recordSaleWithPostings);
+const mockGetStockByIdentifier = vi.mocked(getStockItemByIdentifier);
 const mockGetStock = vi.mocked(getStockItems);
 const mockGetAccounts = vi.mocked(getAccountPickerData);
 const mockGetAccessories = vi.mocked(getAccessories);
@@ -289,6 +291,8 @@ async function assembleValidSale() {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  mockGetStockByIdentifier.mockReset();
+  mockGetStockByIdentifier.mockResolvedValue(null);
   mockGetStock.mockReset();
   mockGetStock.mockResolvedValue([STOCK_ITEM]);
 
@@ -618,6 +622,38 @@ describe('pencarian IMEI / SN (iPad)', () => {
       model: 'iPad Pro 11',
       sellingPrice: IPAD_STOCK_ITEM.price,
     });
+  });
+
+  it('mencari langsung ke database ketika unit READY belum masuk katalog awal', async () => {
+    const directUnit: StockItem = {
+      ...STOCK_ITEM,
+      id: 'stk-direct-imei',
+      model: 'iPhone XR',
+      capacity: '64GB',
+      condition: 'Second Inter Unlock',
+      color: 'Coral',
+      imei: '356447100474884',
+      price: 2_500_000,
+    };
+    mockGetStock.mockResolvedValue([]);
+    mockGetStockByIdentifier.mockResolvedValue(directUnit);
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Cari IMEI / SN' }));
+    const searchInput = await screen.findByPlaceholderText(
+      'Contoh: 352461789012345',
+      undefined,
+      { timeout: 5000 },
+    );
+    fireEvent.change(searchInput, { target: { value: directUnit.imei! } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cari' }));
+
+    expect(await screen.findByText('iPhone XR')).toBeInTheDocument();
+    expect(mockGetStockByIdentifier).toHaveBeenCalledWith(directUnit.imei!);
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Tambah' }));
+    expect(screen.getAllByText('1 unit dipilih').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(directUnit.imei!).length).toBeGreaterThan(0);
   });
 });
 

@@ -22,7 +22,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react';
-import { getStockItems, type StockItem } from '@/services/stock';
+import { getStockItemByIdentifier, getStockItems, type StockItem } from '@/services/stock';
 import { identifierLabel, type DeviceCategory } from '@/services/stockCore';
 import { getAccessories, type Accessory } from '@/services/accessories';
 import {
@@ -90,6 +90,8 @@ interface SelectedUnit {
   deviceCategory?: DeviceCategory;
 }
 
+type IdentifierSearchResult = UnitDetail & Pick<StockGroup, 'model' | 'capacity' | 'condition'>;
+
 interface AddedItem {
   id: string;
   name: string;
@@ -144,19 +146,32 @@ function buildStockGroups(rows: StockItem[]): StockGroup[] {
       };
       map.set(key, group);
     }
-    group.units.push({
-      stockId: row.id,
-      imei: row.imei ?? '',
-      color: row.color,
-      defectDescription: row.defect_description ?? '',
-      batteryHealth: 0,
-      suggestedPrice: row.price,
-      hasImei: row.has_imei,
-      stockCount: Math.max(1, row.count || 1),
-      deviceCategory: row.device_category ?? 'IPHONE',
-    });
+    group.units.push(toUnitDetail(row));
   }
   return Array.from(map.values());
+}
+
+function toUnitDetail(row: StockItem): UnitDetail {
+  return {
+    stockId: row.id,
+    imei: row.imei ?? '',
+    color: row.color,
+    defectDescription: row.defect_description ?? '',
+    batteryHealth: 0,
+    suggestedPrice: row.price,
+    hasImei: row.has_imei,
+    stockCount: Math.max(1, row.count || 1),
+    deviceCategory: row.device_category ?? 'IPHONE',
+  };
+}
+
+function toIdentifierSearchResult(row: StockItem): IdentifierSearchResult {
+  return {
+    ...toUnitDetail(row),
+    model: row.model,
+    capacity: row.capacity,
+    condition: row.condition,
+  };
 }
 
 /**
@@ -857,11 +872,13 @@ export default function Penjualan() {
 
   /* -- IMEI search tab -- */
   const [imeiSearch, setImeiSearch] = useState('');
-  const [imeiResult, setImeiResult] = useState<(UnitDetail & { model: string; capacity: string; condition: string }) | null>(null);
+  const [imeiResult, setImeiResult] = useState<IdentifierSearchResult | null>(null);
+  const [imeiSearching, setImeiSearching] = useState(false);
 
-  const handleImeiSearch = useCallback(() => {
+  const handleImeiSearch = useCallback(async () => {
     const q = imeiSearch.trim();
     if (!isSearchableIdentifier(q)) return;
+
     for (const g of stockGroups) {
       // Skip non-IMEI rows (empty imei) so a query never matches them.
       // 15 digit → IMEI iPhone, exact match; 8–14 karakter → SN iPad,
@@ -883,32 +900,53 @@ export default function Penjualan() {
         return;
       }
     }
+
     setImeiResult(null);
+    setImeiSearching(true);
+    try {
+      // Daftar awal bisa belum memuat stok yang baru masuk dari tukar tambah.
+      // Lookup langsung memastikan IMEI/SN yang READY tetap bisa dijual.
+      const directMatch = await getStockItemByIdentifier(q);
+      if (directMatch?.status === 'READY') {
+        setStockRows((prev) =>
+          prev.some((row) => row.id === directMatch.id) ? prev : [directMatch, ...prev]
+        );
+        setImeiResult(toIdentifierSearchResult(directMatch));
+      }
+    } catch {
+      setImeiResult(null);
+    } finally {
+      setImeiSearching(false);
+    }
   }, [imeiSearch, stockGroups]);
 
   const addImeiResult = useCallback(() => {
     if (!imeiResult) return;
-    const group = stockGroups.find(
-      (g) =>
-        g.model === imeiResult.model &&
-        g.capacity === imeiResult.capacity &&
-        g.condition === imeiResult.condition
-    );
-    if (!group) return;
-    toggleUnit(group, {
-      stockId: imeiResult.stockId,
-      imei: imeiResult.imei,
-      color: imeiResult.color,
-      batteryHealth: imeiResult.batteryHealth,
-      suggestedPrice: imeiResult.suggestedPrice,
-      hasImei: imeiResult.hasImei,
-      stockCount: imeiResult.stockCount,
-      defectDescription: imeiResult.defectDescription,
-      deviceCategory: imeiResult.deviceCategory,
+    setSelectedUnits((prev) => {
+      const exists = prev.some((unit) => unit.stockId === imeiResult.stockId);
+      if (exists) return prev.filter((unit) => unit.stockId !== imeiResult.stockId);
+
+      return [
+        ...prev,
+        {
+          stockId: imeiResult.stockId,
+          groupId: `${imeiResult.model}|${imeiResult.capacity}|${imeiResult.condition}`,
+          imei: imeiResult.imei,
+          model: imeiResult.model,
+          capacity: imeiResult.capacity,
+          condition: imeiResult.condition,
+          color: imeiResult.color,
+          defectDescription: imeiResult.defectDescription,
+          batteryHealth: imeiResult.batteryHealth,
+          sellingPrice: imeiResult.suggestedPrice,
+          stockHasImei: imeiResult.hasImei,
+          deviceCategory: imeiResult.deviceCategory,
+        },
+      ];
     });
     setImeiResult(null);
     setImeiSearch('');
-  }, [imeiResult, toggleUnit, stockGroups]);
+  }, [imeiResult]);
 
   /* -- item/bonus modal handlers -- */
   const addItem = () => {
@@ -1040,7 +1078,10 @@ export default function Penjualan() {
                         // Alfanumerik: IMEI 15 digit (iPhone) atau SN 8–14 karakter (iPad).
                         const v = e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 15);
                         setImeiSearch(v);
-                        if (!isSearchableIdentifier(v)) setImeiResult(null);
+                        if (!isSearchableIdentifier(v)) {
+                          setImeiResult(null);
+                          setImeiSearching(false);
+                        }
                       }}
                       placeholder="Contoh: 352461789012345"
                       className="w-full h-11 rounded-xl border border-slate-300 bg-white px-4 font-mono text-[14px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:ring-[3px] focus:ring-teal-500/10 transition-all"
@@ -1051,12 +1092,12 @@ export default function Penjualan() {
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={handleImeiSearch}
-                    disabled={!isSearchableIdentifier(imeiSearch)}
+                    <button
+                      onClick={handleImeiSearch}
+                    disabled={!isSearchableIdentifier(imeiSearch) || imeiSearching}
                     className="h-11 rounded-xl bg-teal-500 px-5 text-[14px] font-semibold text-white transition-colors hover:bg-teal-600 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Cari
+                    {imeiSearching ? <Loader2 size={17} className="animate-spin" /> : 'Cari'}
                   </button>
                 </div>
                 {imeiSearch.length > 0 && !isSearchableIdentifier(imeiSearch) && (
@@ -1092,7 +1133,7 @@ export default function Penjualan() {
                       </div>
                     </motion.div>
                   )}
-                  {isSearchableIdentifier(imeiSearch) && !imeiResult && (
+                  {isSearchableIdentifier(imeiSearch) && !imeiResult && !imeiSearching && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
