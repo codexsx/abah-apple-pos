@@ -74,6 +74,12 @@ interface ColorStockEntry {
   sellPrice: string;
 }
 
+type SupabaseErrorLike = {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Data                                                               */
 /* ------------------------------------------------------------------ */
@@ -225,6 +231,31 @@ function getSliderTrackColor(val: number): string {
   return 'accent-rose-500';
 }
 
+function getPurchaseSaveErrorMessage(error: unknown, category: DeviceCategory): string {
+  const dbError = (error ?? {}) as SupabaseErrorLike;
+  const code = typeof dbError.code === 'string' ? dbError.code : '';
+  const message = [
+    typeof dbError.message === 'string' ? dbError.message : '',
+    typeof dbError.details === 'string' ? dbError.details : '',
+  ].join(' ').toLowerCase();
+
+  if (
+    code === '23505' &&
+    (message.includes('imei') || message.includes('stock_items_active_imei_unique') || message.includes('stock_items_imei_unique'))
+  ) {
+    const label = identifierLabel(category);
+    return `${label} sudah ada di stok. Gunakan ${label} lain atau cek unit lama di menu Stok.`;
+  }
+
+  if (code === '42501') return 'Akun ini tidak memiliki izin untuk menyimpan pembelian.';
+  if (code === '23503') return 'Akun kas/bank atau data terkait sudah tidak tersedia. Muat ulang halaman lalu coba kembali.';
+  if (message.includes('failed to fetch') || message.includes('network')) {
+    return 'Koneksi ke server terputus. Periksa internet lalu coba kembali.';
+  }
+
+  return 'Transaksi tidak dapat disimpan. Silakan coba lagi.';
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -295,17 +326,27 @@ export default function Pembelian() {
 
   /* -- Live stock IMEIs for the "sudah ada di stok" duplicate check -- */
   const [existingImeis, setExistingImeis] = useState<Set<string>>(new Set());
+  const [imeiCheckState, setImeiCheckState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   const refreshExistingImeis = useCallback(async () => {
-    const items = await getStockItems();
-    const imeis = items
-      .map((s) => s.imei)
-      .filter((i): i is string => !!i);
-    setExistingImeis(new Set(imeis));
+    setImeiCheckState('loading');
+    try {
+      const items = await getStockItems();
+      const imeis = items
+        .map((s) => s.imei)
+        .filter((i): i is string => !!i);
+      setExistingImeis(new Set(imeis));
+      setImeiCheckState('ready');
+    } catch (error) {
+      console.error('[Pembelian] failed to load existing IMEI list:', error);
+      setImeiCheckState('error');
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
     let active = true;
+    setImeiCheckState('loading');
     getStockItems()
       .then((items) => {
         if (!active) return;
@@ -313,10 +354,12 @@ export default function Pembelian() {
           .map((s) => s.imei)
           .filter((i): i is string => !!i);
         setExistingImeis(new Set(imeis));
+        setImeiCheckState('ready');
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
-        setExistingImeis(new Set());
+        console.error('[Pembelian] failed to load existing IMEI list:', error);
+        setImeiCheckState('error');
       });
     return () => {
       active = false;
@@ -491,6 +534,7 @@ export default function Pembelian() {
     if (!selectedModel || !selectedCapacity || !selectedCondition) return false;
     if (!purchasableStockStatuses.includes(initialStockStatus)) return false;
     if (usesFullUnitData) {
+      if (imeiCheckState !== 'ready') return false;
       if (!selectedColor) return false;
       if (unitEntries.length === 0) return false;
       for (const u of unitEntries) {
@@ -526,7 +570,7 @@ export default function Pembelian() {
     // Payment is OPTIONAL: a purchase may be saved unpaid (credit/hutang) — the
     // stock still enters inventory; cash/bank only moves when a payment is entered.
     return true;
-  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, isIpad, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, imeiCheckState, selectedColor, unitEntries, isIpad, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /**
    * First unmet requirement, in the same order as `canSubmit`, surfaced near the
@@ -546,6 +590,8 @@ export default function Pembelian() {
       return 'Lengkapi spesifikasi (tipe, kapasitas, kondisi)';
     if (!purchasableStockStatuses.includes(initialStockStatus)) return 'Pilih status masuk stok';
     if (usesFullUnitData) {
+      if (imeiCheckState === 'loading') return `Memeriksa ${identifierLabel(deviceCategory)} yang sudah ada di stok`;
+      if (imeiCheckState === 'error') return `Daftar ${identifierLabel(deviceCategory)} stok gagal dimuat. Muat ulang halaman lalu coba kembali`;
       if (!selectedColor) return 'Lengkapi warna unit';
       for (const u of unitEntries) {
         const identifier = isIpad ? normalizeSerialNumber(u.imei) : u.imei;
@@ -581,7 +627,7 @@ export default function Pembelian() {
     if (supplierType === 'agen' && paymentTotal < totalCost && !useAgentDebt)
       return 'Centang Hutang ke Agen untuk sisa pembayaran';
     return null;
-  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, selectedColor, unitEntries, isIpad, deviceCategory, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
+  }, [supplierType, supplierName, agentsLoading, agentsError, agents.length, selectedAgentId, selectedAgent, selectedModel, selectedCapacity, selectedCondition, initialStockStatus, usesFullUnitData, imeiCheckState, selectedColor, unitEntries, isIpad, deviceCategory, allImeis, existingImeis, minusBatch, usesQuantityOnlyData, bulkQuantityNum, bulkTotalCostNum, bulkSellPrice, bulkSellPriceNum, usesColorGroupedData, colorStockRows, cashNum, transferNum, cashAccount, transferAccount, paymentTotal, totalCost, useAgentDebt]);
 
   /* -- callbacks -- */
   const handleQuantityChange = useCallback(
@@ -980,11 +1026,7 @@ export default function Pembelian() {
       // Surface the real backend reason so issues are diagnosable (e.g. a
       // duplicate IMEI) instead of a vague message.
       console.error('[Pembelian] save error:', err);
-      const msg =
-        err instanceof Error && err.message
-          ? err.message
-          : 'Transaksi tidak dapat disimpan. Silakan coba lagi.';
-      setSaveError(msg);
+      setSaveError(getPurchaseSaveErrorMessage(err, deviceCategory));
     } finally {
       setSaving(false);
     }
