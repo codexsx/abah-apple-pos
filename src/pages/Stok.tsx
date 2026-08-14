@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import {
   getStockItems,
+  getStockItemByIdentifier,
   updateStockItem,
   updateStockStatus,
   moveStockUnitStatus,
@@ -91,6 +92,18 @@ function formatPrice(n: number): string {
 
 function formatIdrInput(n: number | null | undefined): string {
   return n && n > 0 ? n.toLocaleString('id-ID') : '';
+}
+
+function normalizeSearchText(value: string | null | undefined): string {
+  return String(value ?? '').trim().toLocaleLowerCase('id-ID');
+}
+
+function normalizeStockIdentifier(value: string | null | undefined): string {
+  return String(value ?? '').replace(/[\s-]+/g, '').toLocaleUpperCase('id-ID');
+}
+
+function isIdentifierSearch(value: string): boolean {
+  return /^[A-Z0-9]{8,}$/.test(normalizeStockIdentifier(value));
 }
 
 function stockItemToEditDraft(item: StockItem): StockEditDraft {
@@ -210,6 +223,7 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
   const [editDraft, setEditDraft] = useState<StockEditDraft | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [identifierResult, setIdentifierResult] = useState<StockItem | null>(null);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -228,18 +242,46 @@ function TabStokHP({ searchQuery }: { searchQuery: string }) {
     fetchItems();
   }, [fetchItems]);
 
+  useEffect(() => {
+    const identifier = normalizeStockIdentifier(searchQuery);
+    if (!isIdentifierSearch(searchQuery)) {
+      setIdentifierResult(null);
+      return;
+    }
+
+    let cancelled = false;
+    getStockItemByIdentifier(identifier)
+      .then((item) => {
+        if (!cancelled) setIdentifierResult(item);
+      })
+      .catch(() => {
+        if (!cancelled) setIdentifierResult(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery]);
+
+  const searchableItems = useMemo(() => {
+    if (!identifierResult || items.some((item) => item.id === identifierResult.id)) return items;
+    return [identifierResult, ...items];
+  }, [identifierResult, items]);
+
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(
+    if (!searchQuery.trim()) return searchableItems;
+    const q = normalizeSearchText(searchQuery);
+    const identifier = normalizeStockIdentifier(searchQuery);
+    return searchableItems.filter(
       (item) =>
-        item.model.toLowerCase().includes(q) ||
-        item.capacity.toLowerCase().includes(q) ||
-        item.color.toLowerCase().includes(q) ||
-        item.condition.toLowerCase().includes(q) ||
-        (item.imei ?? '').toLowerCase().includes(q),
+        normalizeSearchText(item.model).includes(q) ||
+        normalizeSearchText(item.capacity).includes(q) ||
+        normalizeSearchText(item.color).includes(q) ||
+        normalizeSearchText(item.condition).includes(q) ||
+        normalizeSearchText(item.imei).includes(q) ||
+        (identifier.length > 0 && normalizeStockIdentifier(item.imei).includes(identifier)),
     );
-  }, [items, searchQuery]);
+  }, [searchQuery, searchableItems]);
 
   const grouped = useMemo(() => {
     const map = new Map<StockStatus, StockItem[]>();

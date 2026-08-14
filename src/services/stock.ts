@@ -127,6 +127,28 @@ export async function getStockItemById(id: string): Promise<StockItem | null> {
   return data;
 }
 
+/**
+ * Looks up a single stock row by its IMEI or iPad serial number. This is used
+ * by the stock search as a fallback so an identifier remains findable even
+ * when the initial catalog response is incomplete or stale.
+ */
+export async function getStockItemByIdentifier(identifier: string): Promise<StockItem | null> {
+  const normalizedIdentifier = identifier.trim().replace(/[\s-]+/g, '').toUpperCase();
+  if (!normalizedIdentifier) return null;
+
+  const { data, error } = await supabase
+    .from('stock_items')
+    .select('*')
+    .eq('imei', normalizedIdentifier)
+    .neq('status', 'TERJUAL')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function createStockItem(item: StockItemInsert): Promise<StockItem> {
   const { data, error } = await supabase.from('stock_items').insert(item).select().single();
   if (error) throw error;

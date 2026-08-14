@@ -22,16 +22,18 @@ import type { StockItem } from '@/services/stock';
 // ---------------------------------------------------------------------------
 vi.mock('@/services/stock', () => ({
   getStockItems: vi.fn(),
+  getStockItemByIdentifier: vi.fn(),
   updateStockStatus: vi.fn(),
   updateStockItem: vi.fn(),
   moveStockUnitStatus: vi.fn(),
   createStockItem: vi.fn(),
 }));
 
-import { getStockItems, updateStockStatus, updateStockItem, moveStockUnitStatus } from '@/services/stock';
+import { getStockItems, getStockItemByIdentifier, updateStockStatus, updateStockItem, moveStockUnitStatus } from '@/services/stock';
 import Stok from './Stok';
 
 const mockGetStockItems = vi.mocked(getStockItems);
+const mockGetStockItemByIdentifier = vi.mocked(getStockItemByIdentifier);
 const mockUpdateStockStatus = vi.mocked(updateStockStatus);
 const mockUpdateStockItem = vi.mocked(updateStockItem);
 const mockMoveStockUnitStatus = vi.mocked(moveStockUnitStatus);
@@ -91,6 +93,7 @@ async function findRowByModel(model: string): Promise<HTMLElement> {
 
 beforeEach(() => {
   mockGetStockItems.mockReset();
+  mockGetStockItemByIdentifier.mockReset();
   mockUpdateStockStatus.mockReset();
   mockUpdateStockItem.mockReset();
   mockMoveStockUnitStatus.mockReset();
@@ -189,6 +192,28 @@ describe('status edit', () => {
     await waitFor(() => expect(mockMoveStockUnitStatus).toHaveBeenCalledTimes(1));
     expect(mockMoveStockUnitStatus).toHaveBeenCalledWith('bulk-1', 'SERVIS');
     expect(mockUpdateStockStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('identifier search fallback', () => {
+  it('shows an IMEI result returned by the direct lookup when it is absent from the initial catalog', async () => {
+    const missingFromCatalog = makeUnit({
+      id: 'trade-in-xr',
+      model: 'iPhone XR',
+      capacity: '64GB',
+      color: 'Coral',
+      imei: '356447100474884',
+    });
+    mockGetStockItems.mockResolvedValueOnce([]);
+    mockGetStockItemByIdentifier.mockResolvedValueOnce(missingFromCatalog);
+
+    renderPage();
+    fireEvent.change(screen.getByPlaceholderText(/cari imei/i), {
+      target: { value: '356447100474884' },
+    });
+
+    expect(await screen.findByText('iPhone XR')).toBeInTheDocument();
+    expect(mockGetStockItemByIdentifier).toHaveBeenCalledWith('356447100474884');
   });
 });
 
