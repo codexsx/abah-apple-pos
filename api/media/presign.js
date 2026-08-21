@@ -8,10 +8,16 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const R2_PATH_PREFIX = 'r2:';
 const EXPIRES_IN_SECONDS = 5 * 60;
-const ALLOWED_KINDS = new Set(['attendance', 'story']);
+const ALLOWED_KINDS = new Set(['attendance', 'story', 'avatar', 'company']);
 const ALLOWED_CONTENT_TYPES = new Map([
   ['image/webp', 'webp'],
   ['image/jpeg', 'jpg'],
+]);
+const COMPANY_LOGO_CONTENT_TYPES = new Map([
+  ['image/gif', 'gif'],
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
 ]);
 
 function json(res, status, payload) {
@@ -86,17 +92,19 @@ async function authenticate(req) {
 function normalizeKey(value, kind) {
   if (typeof value !== 'string' || !value) return null;
   const key = value.startsWith(R2_PATH_PREFIX) ? value.slice(R2_PATH_PREFIX.length) : value;
-  if (!key.startsWith(`${kind}/`) || !/\.(webp|jpe?g)$/i.test(key) || key.includes('..')) return null;
+  if (!key.startsWith(`${kind}/`) || !/\.(webp|jpe?g|png|gif)$/i.test(key) || key.includes('..')) return null;
   return key;
 }
 
 function buildObjectKey(kind, userId, extension) {
   const id = crypto.randomUUID();
   if (kind === 'attendance') return `attendance/${userId}/${new Date().toISOString().slice(0, 10)}/${id}.${extension}`;
-  return `story/${userId}/${id}.${extension}`;
+  if (kind === 'story') return `story/${userId}/${id}.${extension}`;
+  return `${kind}/${userId}/${id}.${extension}`;
 }
 
 async function canReadObject(auth, kind, key) {
+  if (kind !== 'attendance' && kind !== 'story') return false;
   const path = `${R2_PATH_PREFIX}${key}`;
   const table = kind === 'attendance' ? 'attendance_records' : 'stories';
   const column = kind === 'attendance' ? 'photo_path' : 'media_path';
@@ -141,12 +149,23 @@ export default async function handler(req, res) {
     }
 
     if (action === 'upload') {
+      if (kind === 'company' && !auth.isManager) {
+        json(res, 403, { error: 'Hanya manajer yang dapat mengubah logo perusahaan.' });
+        return;
+      }
       const contentType = typeof body?.contentType === 'string'
         ? body.contentType.toLowerCase()
         : '';
-      const extension = ALLOWED_CONTENT_TYPES.get(contentType);
+      const allowedContentTypes = kind === 'company'
+        ? COMPANY_LOGO_CONTENT_TYPES
+        : ALLOWED_CONTENT_TYPES;
+      const extension = allowedContentTypes.get(contentType);
       if (!extension) {
-        json(res, 400, { error: 'Format media harus WebP atau JPEG.' });
+        json(res, 400, {
+          error: kind === 'company'
+            ? 'Format logo harus PNG, GIF, WebP, atau JPEG.'
+            : 'Format media harus WebP atau JPEG.',
+        });
         return;
       }
 
@@ -167,6 +186,10 @@ export default async function handler(req, res) {
     }
 
     if (action === 'read') {
+      if (kind === 'avatar' || kind === 'company') {
+        json(res, 400, { error: 'Media publik harus dibuka melalui URL aplikasi.' });
+        return;
+      }
       if (!(await canReadObject(auth, kind, key))) {
         json(res, 403, { error: 'Kamu tidak memiliki akses ke media ini.' });
         return;
@@ -177,6 +200,11 @@ export default async function handler(req, res) {
         { expiresIn: EXPIRES_IN_SECONDS },
       );
       json(res, 200, { downloadUrl, expiresInSeconds: EXPIRES_IN_SECONDS });
+      return;
+    }
+
+    if (kind === 'company' && !auth.isManager) {
+      json(res, 403, { error: 'Hanya manajer yang dapat menghapus logo perusahaan.' });
       return;
     }
 

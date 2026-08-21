@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { getR2PublicMediaUrl, uploadR2CompanyLogo } from './r2Media';
 import {
   COMPANY_PROFILE_ID,
   normalizeCompanyProfile,
@@ -11,17 +12,6 @@ import {
 } from './companySettingsCore';
 
 const COMPANY_SETTINGS_TABLE = 'company_settings';
-const COMPANY_ASSETS_BUCKET = 'company-assets';
-
-function fileExtension(name: string | undefined, type: string | undefined): string {
-  const fromName = name?.split('.').pop()?.toLowerCase();
-  if (fromName) return fromName;
-  if (type === 'image/gif') return 'gif';
-  if (type === 'image/png') return 'png';
-  if (type === 'image/webp') return 'webp';
-  return 'jpg';
-}
-
 export async function getCompanyProfile(): Promise<CompanyProfile> {
   const { data, error } = await supabase
     .from(COMPANY_SETTINGS_TABLE)
@@ -66,16 +56,6 @@ export async function uploadCompanyLogo(file: File): Promise<string> {
   const validation = validateCompanyLogoFile(file);
   if (!validation.ok) throw new Error(validation.message);
 
-  const ext = fileExtension(file.name, file.type);
-  const path = `logos/${Date.now()}-logo.${ext}`;
-  const { error } = await supabase.storage
-    .from(COMPANY_ASSETS_BUCKET)
-    .upload(path, file, {
-      upsert: true,
-      contentType: file.type || undefined,
-    });
-
-  if (error) throw error;
-  const { data } = supabase.storage.from(COMPANY_ASSETS_BUCKET).getPublicUrl(path);
-  return data.publicUrl;
+  const key = await uploadR2CompanyLogo(file);
+  return getR2PublicMediaUrl(key);
 }

@@ -17,32 +17,32 @@ const mocks = vi.hoisted(() => {
   };
   return {
     chain,
-    upload: vi.fn(),
-    getPublicUrl: vi.fn(),
-    storageFrom: vi.fn(),
+    uploadR2CompanyLogo: vi.fn(),
+    getR2PublicMediaUrl: vi.fn(),
   };
 });
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: mocks.chain.from,
-    storage: {
-      from: mocks.storageFrom,
-    },
   },
 }));
 
+vi.mock('./r2Media', () => ({
+  uploadR2CompanyLogo: mocks.uploadR2CompanyLogo,
+  getR2PublicMediaUrl: mocks.getR2PublicMediaUrl,
+}));
+
 beforeEach(() => {
-  const { chain, upload, getPublicUrl, storageFrom } = mocks;
+  const { chain, uploadR2CompanyLogo, getR2PublicMediaUrl } = mocks;
   chain.from.mockClear().mockReturnValue(chain);
   chain.select.mockClear().mockReturnValue(chain);
   chain.upsert.mockClear().mockReturnValue(chain);
   chain.eq.mockClear().mockReturnValue(chain);
   chain.maybeSingle.mockReset();
   chain.single.mockReset();
-  upload.mockReset();
-  getPublicUrl.mockReset();
-  storageFrom.mockReset().mockReturnValue({ upload, getPublicUrl });
+  uploadR2CompanyLogo.mockReset();
+  getR2PublicMediaUrl.mockReset();
 });
 
 describe('companySettings service', () => {
@@ -104,19 +104,15 @@ describe('companySettings service', () => {
   });
 
   it('uploads the logo with the original mime type so gif/png files are preserved', async () => {
-    const { upload, getPublicUrl, storageFrom } = mocks;
+    const { uploadR2CompanyLogo, getR2PublicMediaUrl } = mocks;
     const file = new File(['gifdata'], 'logo.gif', { type: 'image/gif' });
-    upload.mockResolvedValue({ error: null });
-    getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://logo.test/logo.gif' } });
+    uploadR2CompanyLogo.mockResolvedValue('r2:company/user/logo.gif');
+    getR2PublicMediaUrl.mockReturnValue('/api/media/public?key=r2%3Acompany%2Fuser%2Flogo.gif');
 
     const url = await uploadCompanyLogo(file);
 
-    expect(storageFrom).toHaveBeenCalledWith('company-assets');
-    expect(upload).toHaveBeenCalledWith(
-      expect.stringMatching(/^logos\/\d+-logo\.gif$/),
-      file,
-      expect.objectContaining({ contentType: 'image/gif', upsert: true }),
-    );
-    expect(url).toBe('https://logo.test/logo.gif');
+    expect(uploadR2CompanyLogo).toHaveBeenCalledWith(file);
+    expect(getR2PublicMediaUrl).toHaveBeenCalledWith('r2:company/user/logo.gif');
+    expect(url).toBe('/api/media/public?key=r2%3Acompany%2Fuser%2Flogo.gif');
   });
 });

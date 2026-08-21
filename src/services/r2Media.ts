@@ -1,9 +1,15 @@
 import { supabase } from '@/lib/supabase';
 
-export type R2MediaKind = 'attendance' | 'story';
+export type R2MediaKind = 'attendance' | 'story' | 'avatar' | 'company';
 
 const R2_PATH_PREFIX = 'r2:';
 const R2_IMAGE_CONTENT_TYPES = new Set(['image/webp', 'image/jpeg']);
+const R2_COMPANY_LOGO_CONTENT_TYPES = new Set([
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 const readUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
 function isR2Path(value: string): boolean {
@@ -28,6 +34,9 @@ async function requestR2(body: Record<string, string>) {
 }
 
 export async function uploadR2Image(kind: R2MediaKind, blob: Blob): Promise<string> {
+  if (kind === 'company') {
+    throw new Error('Gunakan upload logo R2 untuk media perusahaan.');
+  }
   const contentType = blob.type.toLowerCase();
   if (!R2_IMAGE_CONTENT_TYPES.has(contentType)) {
     throw new Error('Media R2 harus berupa WebP atau JPEG terkompresi.');
@@ -40,6 +49,22 @@ export async function uploadR2Image(kind: R2MediaKind, blob: Blob): Promise<stri
     body: blob,
   });
   if (!upload.ok) throw new Error('Upload media ke Cloudflare R2 gagal.');
+  return signed.key;
+}
+
+export async function uploadR2CompanyLogo(file: File): Promise<string> {
+  const contentType = file.type.toLowerCase();
+  if (!R2_COMPANY_LOGO_CONTENT_TYPES.has(contentType)) {
+    throw new Error('Logo R2 harus berupa PNG, GIF, WebP, atau JPG.');
+  }
+
+  const signed = await requestR2({ action: 'upload', kind: 'company', contentType });
+  const upload = await fetch(signed.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: file,
+  });
+  if (!upload.ok) throw new Error('Upload logo ke Cloudflare R2 gagal.');
   return signed.key;
 }
 
@@ -65,4 +90,9 @@ export async function deleteR2Media(kind: R2MediaKind, key: string): Promise<voi
 
 export function isR2MediaPath(value: string): boolean {
   return isR2Path(value);
+}
+
+export function getR2PublicMediaUrl(key: string): string {
+  if (!isR2Path(key)) return key;
+  return `/api/media/public?${new URLSearchParams({ key }).toString()}`;
 }

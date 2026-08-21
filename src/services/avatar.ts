@@ -1,20 +1,17 @@
 // Feature: user-management
 import { supabase } from '@/lib/supabase';
 import { normalizeAvatarCrop, type AvatarCrop } from '@/services/avatarCrop';
+import { uploadR2Image, getR2PublicMediaUrl } from '@/services/r2Media';
+import { convertImageFileToWebp } from '@/services/storiesCore';
 
 export async function uploadAvatar(
   userId: string,
   file: File,
   crop?: Partial<AvatarCrop>,
 ): Promise<string> {
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-  const path = `${userId}/${Date.now()}.${ext}`;
-  const { error: upErr } = await supabase.storage
-    .from('avatars')
-    .upload(path, file, { upsert: true, contentType: file.type || undefined });
-  if (upErr) throw upErr;
-  const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
-  const url = pub.publicUrl;
+  const media = await convertImageFileToWebp(file, 512, 0.75);
+  const key = await uploadR2Image('avatar', media.blob);
+  const url = getR2PublicMediaUrl(key);
   const { error: updErr } = await supabase
     .from('profiles')
     .update({
